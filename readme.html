@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Инструкция по работе со starter.py</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        h1 {
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+            margin-top: 30px;
+        }
+        code {
+            background-color: #f5f5f5;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .menu {
+            background-color: #e8f4fc;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .note {
+            background-color: #fffde7;
+            padding: 15px;
+            border-left: 4px solid #ffd600;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Инструкция по работе со starter.py</h1>
+
+    <h2>Основные режимы работы</h2>
+    <p>Скрипт <code>starter.py</code> поддерживает два основных режима работы:</p>
+
+    <h3>1. Интерактивный режим (по умолчанию)</h3>
+    <p>Запускается при обычном выполнении скрипта без аргументов:</p>
+    <pre><code>python starter.py</code></pre>
+
+    <p><strong>Что делает:</strong></p>
+    <ul>
+        <li>Проверяет IP-адреса системы</li>
+        <li>Проверяет наличие обновлений</li>
+        <li>Проверяет установку Docker и Docker Compose</li>
+        <li>Проверяет структуру папок</li>
+        <li>Отображает интерактивное меню с возможностями настройки</li>
+    </ul>
+
+    <div class="menu">
+        <p><strong>Меню интерактивного режима:</strong></p>
+        <pre>=== ГЛАВНОЕ МЕНЮ ===
+1. Собрать образы и отправить в реестр
+2. Обновить образы из реестра
+3. Управление службой
+4. Проверить обновления
+5. Показать справку
+0. Выход</pre>
+    </div>
+
+    <h3>2. Режим службы</h3>
+    <p>Запускается с аргументом <code>--service-run</code>:</p>
+    <pre><code>python starter.py --service-run</code></pre>
+
+    <p><strong>Что делает:</strong></p>
+    <ul>
+        <li>Работает в фоновом режиме</li>
+        <li>Выполняет задачи по расписанию (из SCHEDULER_CONFIG)</li>
+        <li>Проверяет состояние Docker контейнеров</li>
+        <li>Логирует все действия в файлы журналов</li>
+    </ul>
+
+    <h2>Логика работы скрипта</h2>
+    <h3>Проверки при запуске:</h3>
+    <ul>
+        <li>Лимит запусков - не более MAX_RUNS_PER_PERIOD (5) запусков за PERIOD_MINUTES (5 минут)</li>
+        <li>Режим работы - определяется по аргументам командной строки</li>
+        <li>Системная информация - собирается и логируется</li>
+    </ul>
+
+    <h3>Основные функции:</h3>
+    <ul>
+        <li>Проверка Docker (<code>check_docker_installed</code>, <code>check_docker_compose_installed</code>)</li>
+        <li>Управление контейнерами (<code>run_docker_compose</code>)</li>
+        <li>Проверка обновлений (<code>start_updates_projects</code>)</li>
+        <li>Управление службой (<code>manage_service</code>)</li>
+        <li>Логирование (класс <code>ProjectLogger</code>)</li>
+    </ul>
+
+    <h3>Особенности работы:</h3>
+    <ul>
+        <li>При первом запуске создает необходимые папки (docker, laravel)</li>
+        <li>Для работы с Docker автоматически генерирует docker-compose.yml из шаблона</li>
+        <li>Поддерживает отправку образов в реестр и их обновление</li>
+        <li>Имеет встроенную систему защиты от частых перезапусков</li>
+    </ul>
+
+    <h2>Проверка логики скрипта</h2>
+    <p>После анализа кода можно сделать следующие выводы:</p>
+
+    <h3>Архитектура:</h3>
+    <ul>
+        <li>Код хорошо структурирован по модулям</li>
+        <li>Четкое разделение режимов работы</li>
+        <li>Нет явно лишних функций или переменных</li>
+    </ul>
+
+    <h3>Улучшения:</h3>
+    <ul>
+        <li>Можно добавить валидацию конфигурации при старте</li>
+        <li>Реализовать более надежное управление службой (через systemd/supervisor)</li>
+        <li>Добавить обработку сигналов для graceful shutdown службы</li>
+    </ul>
+
+    <h3>Безопасность:</h3>
+    <ul>
+        <li>Все пути нормализуются через Path</li>
+        <li>Есть проверка лимитов запусков</li>
+        <li>Логирование содержит достаточную информацию для диагностики</li>
+    </ul>
+
+    <h3>Стабильность:</h3>
+    <ul>
+        <li>Хорошая обработка ошибок в критических местах</li>
+        <li>Есть резервное копирование перед обновлениями</li>
+        <li>Логирование помогает отслеживать проблемы</li>
+    </ul>
+
+    <div class="note">
+        <p><strong>Рекомендации:</strong> Скрипт готов к использованию в обоих режимах. Для production-использования рекомендуется настроить его как службу через <code>--service-run</code> и управлять через системные инструменты (systemd/supervisor).</p>
+    </div>
+</body>
+</html>
