@@ -1,4 +1,2 @@
-<title>Моя страница</title>
-<script>
-    alert("Привет, мир!");
-</script>
+<title>Стартер</title>
+<a href="https://myidon.site/instruction/starter">Инструкция</a>
