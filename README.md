@@ -1,4 +1,4 @@
-# starter
+# starter 2
 Файлы копируются в корень проекта
 
 Запускаем python starter.py
