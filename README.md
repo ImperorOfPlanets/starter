@@ -6,7 +6,7 @@
   您可以在 <a href="https://myidon.site/instruction/starter">这里</a> 查看说明。<br />
   You can check the instructions <a href="https://myidon.site/instruction/starter">here</a>.<br />
 </div>
-
+<hr />
 <div style="color: red; font-size: large; text-align: center;">
 ЕСЛИ ВЫ НЕ ЯВЛЯЕТЕСЬ АДМИНИСТРАТОРОМ ИЛИ СОТРУДНИКОМ ПРОЕКТА — НЕ УСТАНАВЛИВАЙТЕ ЭТУ ПРОГРАММУ!<br/>
 УСТАНОВКА ЭТОЙ ПРОГРАММЫ ПРИВЕДЕТ К ПОТЕРЕ КОНТРОЛЯ НАД ВАШИМ УСТРОЙСТВОМ.<br/>
