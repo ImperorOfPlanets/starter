@@ -1,10 +1,11 @@
-<H1 style="text-align:center;">Стартер | 启动器 | Starter</H1>
-<hr style="margin-left:auto; margin-right:auto;" width="80%" align="center"/>
-<p style="text-align:center;">
-С инструкцией вы можете ознакомиться тут <a href="https://myidon.site/instruction/starter">Инструкция</a><br />
-您可以在 <a href="https://myidon.site/instruction/starter">这里</a> 查看说明。<br />
-You can check the instructions <a href="https://myidon.site/instruction/starter">here</a>.<br />
-</p>
+<div style="text-align: center;">
+  <H1>Стартер | 启动器 | Starter</H1>
+  <hr />
+
+  С инструкцией вы можете ознакомиться тут <a href="https://myidon.site/instruction/starter">Инструкция</a><br />
+  您可以在 <a href="https://myidon.site/instruction/starter">这里</a> 查看说明。<br />
+  You can check the instructions <a href="https://myidon.site/instruction/starter">here</a>.<br />
+</div>
 
 <div style="color: red; font-size: large; text-align: center;">
 ЕСЛИ ВЫ НЕ ЯВЛЯЕТЕСЬ АДМИНИСТРАТОРОМ ИЛИ СОТРУДНИКОМ ПРОЕКТА — НЕ УСТАНАВЛИВАЙТЕ ЭТУ ПРОГРАММУ!<br/>
