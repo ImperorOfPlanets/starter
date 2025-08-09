@@ -36,8 +36,9 @@ def get_requirements_path():
     system = platform.system().lower()
     release = platform.release()
     
-    base_dir = Path(__file__).parent.parent.parent
-    reqs_dir = base_dir / "requirements"
+    # Изменяем путь к requirements
+    base_dir = Path(__file__).parent  # Текущая директория файла
+    reqs_dir = base_dir / "starter_files" / "requirements"
     
     # Проверяем возможные пути в порядке приоритета
     for path in [
