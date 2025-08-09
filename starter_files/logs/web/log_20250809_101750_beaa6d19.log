@@ -185,3 +185,23 @@
 [2025-08-09 14:30:18] [WARNING] [i18n:109] NOT FOUND TRANSLATE [ru][modules][dashboard][index][install]
 [2025-08-09 14:30:18] [WARNING] [i18n:109] NOT FOUND TRANSLATE [ru][modules][dashboard][index][install]
 [2025-08-09 14:30:18] [INFO] [configurate_app:111] Request: {'method': 'POST', 'path': '/', 'status': 200, 'ip': '192.168.0.185', 'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', 'response_size': 6718, 'form_data': {'module': 'dashboard', 'action': 'index'}}
+[2025-08-09 14:31:05] [WARNING] [i18n:137] NOT FOUND TRANSLATE [ru][unknown][modules.dashboard.basic.title]
+[2025-08-09 14:31:05] [WARNING] [i18n:137] NOT FOUND TRANSLATE [ru][unknown][modules.docker.basic.title]
+[2025-08-09 14:31:05] [WARNING] [i18n:137] NOT FOUND TRANSLATE [ru][unknown][modules.knocking.basic.title]
+[2025-08-09 14:31:05] [WARNING] [i18n:137] NOT FOUND TRANSLATE [ru][unknown][modules.logs.basic.title]
+[2025-08-09 14:31:05] [WARNING] [i18n:137] NOT FOUND TRANSLATE [ru][unknown][modules.network.basic.title]
+[2025-08-09 14:31:05] [WARNING] [i18n:137] NOT FOUND TRANSLATE [ru][unknown][modules.service.basic.title]
+[2025-08-09 14:31:05] [WARNING] [i18n:137] NOT FOUND TRANSLATE [ru][unknown][modules.updates.basic.title]
+[2025-08-09 14:31:05] [WARNING] [i18n:137] NOT FOUND TRANSLATE [ru][unknown][modules.vpn.basic.title]
+[2025-08-09 14:31:05] [INFO] [configurate_app:111] Request: {'method': 'GET', 'path': '/', 'status': 200, 'ip': '192.168.0.185', 'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', 'response_size': 16251}
+[2025-08-09 14:31:07] [WARNING] [i18n:109] NOT FOUND TRANSLATE [ru][modules][dashboard][index][modules.dashboard.basic.title]
+[2025-08-09 14:31:07] [WARNING] [i18n:109] NOT FOUND TRANSLATE [ru][modules][dashboard][index][modules.docker.basic.title]
+[2025-08-09 14:31:07] [WARNING] [i18n:109] NOT FOUND TRANSLATE [ru][modules][dashboard][index][modules.knocking.basic.title]
+[2025-08-09 14:31:07] [WARNING] [i18n:109] NOT FOUND TRANSLATE [ru][modules][dashboard][index][modules.logs.basic.title]
+[2025-08-09 14:31:07] [WARNING] [i18n:109] NOT FOUND TRANSLATE [ru][modules][dashboard][index][modules.network.basic.title]
+[2025-08-09 14:31:07] [WARNING] [i18n:109] NOT FOUND TRANSLATE [ru][modules][dashboard][index][modules.service.basic.title]
+[2025-08-09 14:31:07] [WARNING] [i18n:109] NOT FOUND TRANSLATE [ru][modules][dashboard][index][modules.updates.basic.title]
+[2025-08-09 14:31:07] [WARNING] [i18n:109] NOT FOUND TRANSLATE [ru][modules][dashboard][index][modules.vpn.basic.title]
+[2025-08-09 14:31:07] [WARNING] [i18n:109] NOT FOUND TRANSLATE [ru][modules][dashboard][index][install]
+[2025-08-09 14:31:07] [WARNING] [i18n:109] NOT FOUND TRANSLATE [ru][modules][dashboard][index][install]
+[2025-08-09 14:31:07] [INFO] [configurate_app:111] Request: {'method': 'POST', 'path': '/', 'status': 200, 'ip': '192.168.0.185', 'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', 'response_size': 6718, 'form_data': {'module': 'dashboard', 'action': 'index'}}
