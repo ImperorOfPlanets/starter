@@ -400,8 +400,8 @@ def apply_updates(changes, extracted_dir, config):
         shutil.copy2(src, dst)
 
     # Обработка удаленных файлов (исправлено)
-    for entry in changes['removed']:  # <-- Итерируемся по словарям
-        rel_path = entry['path']       # <-- Извлекаем путь из словаря
+    for entry in changes['removed']:
+        rel_path = entry['path']
         target = base_path / rel_path
         if target.exists():
             target.unlink()

@@ -1,0 +1,102 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('vpn_title') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button class="btn btn-sm btn-outline-secondary" data-action="refreshStatus">
+                <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-shield-lock me-2"></i> {{ t('vpn_status') }}</span>
+                    <a href="#" class="btn btn-sm btn-primary" 
+                       data-action="loadModule" 
+                       data-data='{"module": "vpn", "action": "info"}'>
+                        <i class="bi bi-info-circle"></i> {{ t('details') }}
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td><strong>{{ t('vpn_installed') }}</strong></td>
+                                    <td>
+                                        {% if vpn_status.installed %}
+                                            <span class="badge bg-success">{{ t('yes') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">{{ t('no') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% if vpn_status.installed %}
+                                <tr>
+                                    <td><strong>{{ t('vpn_version') }}</strong></td>
+                                    <td>{{ vpn_status.version }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('vpn_connected') }}</strong></td>
+                                    <td>
+                                        {% if vpn_status.connected %}
+                                            <span class="badge bg-success">{{ t('yes') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ t('no') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-lightning me-2"></i> {{ t('vpn_quick_actions') }}
+                </div>
+                <div class="card-body">
+                    {% if vpn_status.installed %}
+                        <div class="d-grid gap-2">
+                            {% if vpn_status.connected %}
+                                <button class="btn btn-danger" data-action="vpnAction" data-data='{"action": "disconnect"}'>
+                                    <i class="bi bi-plug"></i> {{ t('vpn_disconnect') }}
+                                </button>
+                            {% else %}
+                                <button class="btn btn-success" data-action="vpnAction" data-data='{"action": "connect"}'>
+                                    <i class="bi bi-plug-fill"></i> {{ t('vpn_connect') }}
+                                </button>
+                            {% endif %}
+                            <button class="btn btn-outline-primary" data-action="vpnAction" data-data='{"action": "restart"}'>
+                                <i class="bi bi-arrow-repeat"></i> {{ t('vpn_restart') }}
+                            </button>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            <h5><i class="bi bi-exclamation-triangle"></i> {{ t('vpn_not_installed') }}</h5>
+                            <p>{{ t('vpn_install_instructions') }}</p>
+                            <a href="https://www.softether-download.com/" target="_blank" class="btn btn-primary">
+                                <i class="bi bi-download"></i> {{ t('vpn_download') }}
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Обработчик кнопки обновления статуса
+    $('[data-action="refreshStatus"]').on('click', function() {
+        $('#mainMenu a[data-module="vpn"]').click();
+    });
+});
+</script>

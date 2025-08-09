@@ -1,0 +1,12 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ title or t('layout_default_title') }}{% endblock %}
+{% block header_title %}{{ title or t('layout_default_title') }}{% endblock %}
+
+{% block content %}
+    {% if not logged_in %}
+        {% include 'login.html' %}
+    {% else %}
+        {% include 'controlPanel.html' %}
+    {% endif %}
+{% endblock %}

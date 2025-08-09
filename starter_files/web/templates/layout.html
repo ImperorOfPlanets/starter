@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="{{ current_language }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title or t('layout_default_title') }}</title>
+    <!-- Подключаем CSS файлы -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap-icons.css') }}">
+    <!-- Подключаем JS файлы -->
+    <script src="{{ url_for('static', filename='jquery-3.6.0.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='popper.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='bootstrap.bundle.min.js') }}"></script>
+</head>
+<body class="bg-light">
+    <!-- Шапка -->
+    <header class="bg-dark text-white p-3 mb-4 shadow-sm">
+        <div class="container-fluid">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1 class="mb-0 h4">{% block header_title %}{{ t('layout_system_info') }}{% endblock %}</h1>
+                <div class="d-flex align-items-center gap-3">
+                    {% if logged_in %}
+                    <form id="logoutForm" method="POST" action="/" class="mb-0">
+                        <input type="hidden" name="module" value="auth">
+                        <input type="hidden" name="action" value="logout">
+                        <button type="submit" class="btn btn-outline-light btn-sm">
+                            <i class="bi bi-box-arrow-right me-1"></i> {{ t('layout_logout_button') }}
+                        </button>
+                    </form>
+                    {% endif %}
+                    <!-- Выбор языка -->
+                    {% with languages=languages, current_language=current_language %}
+                        {% include 'changeLanguage.html' %}
+                    {% endwith %}
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Основной контент -->
+    <main class="container-fluid">
+        {% block content %}
+        <!-- Сюда будет вставляться содержимое других шаблонов -->
+        {% endblock %}
+    </main>
+
+    {% include 'footer.html' %}
+    
+    <script>
+    $(document).ready(function() {
+        // Загружаем переводы для JavaScript
+        const translations = {
+            logout_error: "{{ t('layout_logout_error') }}",
+            unauthorized_access: "{{ t('layout_unauthorized_access') }}",
+            network_error: "{{ t('layout_network_error') }}"
+        };
+        
+        // Инициализация Bootstrap компонентов
+        $('[data-bs-toggle="tooltip"]').tooltip();
+        $('[data-bs-toggle="popover"]').popover();
+        
+        // Обработка выхода
+        $('#logoutForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            $.ajax({
+                url: '/',
+                type: 'POST',
+                data: $(this).serialize(),
+                dataType: 'json',
+                headers: {
+                    'Accept': 'application/json'
+                },
+                success: function(result) {
+                    if (result.status === 'success' && result.redirect) {
+                        window.location.href = result.redirect;
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error(translations.logout_error + ':', error);
+                    alert(translations.logout_error);
+                    window.location.reload();
+                }
+            });
+        });
+
+        // Глобальная обработка ошибок AJAX
+        $(document).ajaxError(function(event, xhr) {
+            if(xhr.status === 401) {
+                alert(translations.unauthorized_access);
+                window.location.reload();
+            } else if(xhr.status === 0) {
+                alert(translations.network_error);
+            }
+        });
+    });
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

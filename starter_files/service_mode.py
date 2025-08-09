@@ -18,7 +18,7 @@ class ServiceManager:
         self.system = platform.system()
         self.username = getpass.getuser()
         
-        # Определяем команду для запуска скрипта
+        # Определяем команду для запуска скрипта фывы
         self.exec_cmd = f'"{sys.executable}" "{self.script_path}"'
         
     def is_installed(self) -> bool:

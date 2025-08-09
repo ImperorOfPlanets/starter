@@ -1,0 +1,61 @@
+<form method="POST" action="/" id="authForm">
+    <input type="hidden" name="module" value="auth">
+    <input type="hidden" name="action" value="login">
+    
+    <div class="mb-3">
+        <label class="form-label">{{ t('login_username_label') }}</label>
+        <input type="text" name="username" class="form-control" required>
+    </div>
+    
+    <div class="mb-3">
+        <label class="form-label">{{ t('login_password_label') }}</label>
+        <input type="password" name="password" class="form-control" required>
+    </div>
+    
+    <div id="errorMessage" class="alert alert-danger d-none"></div>
+    
+    <button type="submit" class="btn btn-primary w-100">{{ t('login_submit_button') }}</button>
+</form>
+
+<script>
+$(document).ready(function() {
+    // Предзагружаем переводы для JavaScript
+    const translations = {
+        login_network_error: "{{ t('login_network_error') }}",
+        login_error_occurred: "{{ t('login_error_occurred') }}"
+    };
+    
+    $('#authForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        var $form = $(this);
+        var $errorMessage = $('#errorMessage');
+        
+        $.ajax({
+            url: '/',
+            type: 'POST',
+            data: $form.serialize(),
+            dataType: 'json',
+            headers: {
+                'Accept': 'application/json'
+            },
+            success: function(result) {
+                if (result.status === 'success' && result.redirect) {
+                    window.location.href = result.redirect;
+                } else if (result.message) {
+                    $errorMessage.text(result.message).removeClass('d-none');
+                }
+            },
+            error: function(xhr, status, error) {
+                let errorText = translations.login_network_error;
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    errorText = xhr.responseJSON.message;
+                } else if (error) {
+                    errorText = `${translations.login_error_occurred}: ${error}`;
+                }
+                $errorMessage.text(errorText).removeClass('d-none');
+            }
+        });
+    });
+});
+</script>

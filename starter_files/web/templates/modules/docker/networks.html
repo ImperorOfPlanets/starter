@@ -1,0 +1,50 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('networks') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button class="btn btn-sm btn-outline-secondary" id="refreshNetworksBtn">
+                <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+            </button>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-striped table-sm">
+            <thead>
+                <tr>
+                    <th>{{ t('name') }}</th>
+                    <th>{{ t('driver') }}</th>
+                    <th>{{ t('scope') }}</th>
+                    <th>{{ t('ipv6') }}</th>
+                    <th>{{ t('internal') }}</th>
+                    <th>{{ t('created') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for network in networks %}
+                <tr>
+                    <td>{{ network.name }}</td>
+                    <td>{{ network.driver }}</td>
+                    <td>{{ network.scope }}</td>
+                    <td>{{ network.ipv6 }}</td>
+                    <td>{{ network.internal }}</td>
+                    <td>{{ network.created }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center">{{ t('no_networks_found') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Обновление списка сетей
+    $('#refreshNetworksBtn').click(function() {
+        loadDockerContent('networks');
+    });
+});
+</script>

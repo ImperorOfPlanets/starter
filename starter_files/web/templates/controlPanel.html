@@ -1,0 +1,197 @@
+<div class="row">
+    <!-- Боковое меню -->
+    <div class="col-md-3 col-lg-2 d-md-block sidebar">
+        <div class="position-sticky pt-3">
+            <ul class="nav flex-column" id="mainMenu">
+                {% for module in modules_in_control_panel %}
+                <li class="nav-item">
+                    <a class="nav-link {% if loop.first %}active bg-primary text-white{% endif %}" href="#" data-module="{{ module.module_slug }}">
+                        <i class="bi {{ module.module_icon }} me-2"></i> {{ module.module_name }}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    
+    <!-- Область контента -->
+    <div class="col-md-9 col-lg-10 ms-sm-auto content-area">
+        <div id="loadingSpinner" class="loading-spinner">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">{{ t('controlPanel_loading') }}</span>
+            </div>
+        </div>
+        
+        <div id="contentArea">
+            <!-- Здесь будут модули -->
+            {% for module in modules_in_control_panel %}
+            <div id="{{ module.module_slug }}Module" class="module-content {% if loop.first %}active{% else %}d-none{% endif %}" data-loaded="{% if loop.first %}true{% else %}false{% endif %}">
+                {% if loop.first %}
+                    <!-- Первый модуль загружается сразу -->
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Загружаем переводы для JavaScript
+    const translations = {
+        loading: "{{ t('controlPanel_loading') }}",
+        action_error: "{{ t('controlPanel_action_error') }}",
+        module_error: "{{ t('controlPanel_module_error') }}",
+        parse_error: "{{ t('controlPanel_parse_error') }}"
+    };
+
+    // Initialize menu
+    initMenu();
+    
+    // Load first module on initial load
+    const firstModuleLink = $('#mainMenu a.nav-link.active').first();
+    if (firstModuleLink.length) {
+        loadModule(firstModuleLink.data('module'), true);
+    }
+
+    // Универсальный обработчик действий внутри модулей
+    $(document).on('click', '.module-content [data-action]', function(e) {
+        e.preventDefault();
+        
+        const $this = $(this);
+        const action = $this.data('action');
+        const module = $this.closest('.module-content').attr('id').replace('Module', '');
+        const acceptType = $this.data('accept') || 'html';
+        
+        // Получаем дополнительные данные
+        let additionalData = {};
+        try {
+            const dataAttr = $this.data('data');
+            if (dataAttr) {
+                additionalData = typeof dataAttr === 'string' ? JSON.parse(dataAttr) : dataAttr;
+            }
+        } catch (e) {
+            console.error(translations.parse_error, e);
+        }
+        
+        // Показываем спиннер
+        const $spinner = $('#loadingSpinner').show();
+        const $target = $this.closest('.module-content').find('#dockerContent');
+        
+        // Формируем запрос
+        const requestData = {
+            module: module,
+            action: action,
+            ...additionalData
+        };
+        
+        // Настройки AJAX
+        const ajaxOptions = {
+            url: '/',
+            method: 'POST',
+            data: requestData,
+            headers: {
+                'Accept': acceptType === 'json' ? 'application/json' : 'text/html'
+            },
+            success: function(response) {
+                if (acceptType === 'html' && (typeof response === 'string' || response instanceof String)) {
+                    $target.html(response);
+                } 
+                else if (acceptType === 'json' && typeof response === 'object') {
+                    if (response.redirect) {
+                        window.location.href = response.redirect;
+                    } else if (response.html) {
+                        $target.html(response.html);
+                    } else if (response.message) {
+                        console.log(response.message);
+                    }
+                }
+                
+                $this.closest('ul').find('a.nav-link').removeClass('active bg-primary text-white');
+                $this.addClass('active bg-primary text-white');
+            },
+            error: function(xhr, status, error) {
+                $target.html(`
+                    <div class="alert alert-danger">
+                        <h5>${translations.action_error}</h5>
+                        <p>${translations.control_panel_status}: ${status}</p>
+                        <p>${translations.control_panel_error}: ${error}</p>
+                        ${xhr.responseText ? `<pre>${xhr.responseText}</pre>` : ''}
+                    </div>
+                `);
+            },
+            complete: function() {
+                $spinner.hide();
+            }
+        };
+        
+        ajaxOptions.dataType = acceptType === 'json' ? 'json' : 'html';
+        $.ajax(ajaxOptions);
+    });    
+});
+
+function initMenu() {
+    $('#mainMenu a.nav-link').on('click', function(e) {
+        e.preventDefault();
+        
+        const $this = $(this);
+        const module = $this.data('module');
+        
+        if ($this.hasClass('active')) return;
+        
+        $('#mainMenu a.nav-link').removeClass('active bg-primary text-white');
+        $this.addClass('active bg-primary text-white');
+        switchModule(module);
+    });
+}
+
+function switchModule(module) {
+    $('.module-content').removeClass('active').addClass('d-none');
+    const $moduleElement = $(`#${module}Module`);
+    $moduleElement.removeClass('d-none').addClass('active');
+    
+    if ($moduleElement.data('loaded') !== true) {
+        loadModule(module, false);
+    }
+}
+
+function loadModule(module, isInitialLoad) {
+    const $moduleElement = $(`#${module}Module`);
+    const $spinner = $('#loadingSpinner');
+    
+    $spinner.css({
+        'display': 'flex',
+        'justify-content': 'center',
+        'align-items': 'center',
+        'height': '200px'
+    }).show();
+    
+    $moduleElement.html('').addClass('loading');
+    
+    $.ajax({
+        url: '/',
+        method: 'POST',
+        data: {
+            module: module,
+            action: 'index'
+        },
+        dataType: 'html',
+        success: function(response, status, xhr) {
+            $moduleElement.html(response);
+            $moduleElement.data('loaded', true);
+            $spinner.hide();
+        },
+        error: function(xhr, status, error) {
+            $moduleElement.html(`
+                <div class="alert alert-danger">
+                    <h5>${translations.module_error}</h5>
+                    <p>${translations.control_panel_status}: ${status}</p>
+                    <p>${translations.control_panel_error}: ${error}</p>
+                </div>
+            `);
+            $moduleElement.data('loaded', true);
+            $spinner.hide();
+        }
+    });
+}
+</script>

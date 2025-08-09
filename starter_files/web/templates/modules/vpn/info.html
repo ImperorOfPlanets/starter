@@ -1,0 +1,85 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('vpn_info_title') }}</h1>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-shield-check me-2"></i> {{ t('vpn_technical_info') }}
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td><strong>{{ t('vpn_installed') }}</strong></td>
+                                    <td>
+                                        {% if vpn_status.installed %}
+                                            <span class="badge bg-success">{{ t('yes') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">{{ t('no') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% if vpn_status.installed %}
+                                <tr>
+                                    <td><strong>{{ t('vpn_version') }}</strong></td>
+                                    <td>{{ vpn_status.version }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('vpn_connected') }}</strong></td>
+                                    <td>
+                                        {% if vpn_status.connected %}
+                                            <span class="badge bg-success">{{ t('yes') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ t('no') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('vpn_os') }}</strong></td>
+                                    <td>{{ vpn_status.os|capitalize }}</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h5 class="mt-4">{{ t('vpn_installation_details') }}</h5>
+                    <div class="alert alert-info">
+                        <p>{{ instructions[current_os] }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-gear me-2"></i> {{ t('vpn_management') }}
+                </div>
+                <div class="card-body">
+                    {% if vpn_status.installed %}
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-primary" data-action="vpnAction" data-data='{"action": "configure"}'>
+                                <i class="bi bi-gear"></i> {{ t('vpn_configure') }}
+                            </button>
+                            <button class="btn btn-outline-danger" data-action="vpnAction" data-data='{"action": "uninstall"}'>
+                                <i class="bi bi-trash"></i> {{ t('vpn_uninstall') }}
+                            </button>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            <p>{{ t('vpn_not_installed_instructions') }}</p>
+                            <a href="https://www.softether-download.com/" target="_blank" class="btn btn-primary w-100">
+                                <i class="bi bi-download"></i> {{ t('vpn_download') }}
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

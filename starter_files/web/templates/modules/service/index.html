@@ -1,0 +1,117 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('service_title') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button class="btn btn-sm btn-outline-secondary" data-action="refreshStatus">
+                <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-gear me-2"></i> {{ t('service_status') }}</span>
+                    <a href="#" class="btn btn-sm btn-primary" 
+                       data-action="loadModule" 
+                       data-data='{"module": "service", "action": "info"}'>
+                        <i class="bi bi-info-circle"></i> {{ t('details') }}
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td><strong>{{ t('service_name') }}</strong></td>
+                                    <td>{{ service_name }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('service_installed') }}</strong></td>
+                                    <td>
+                                        {% if service_status.installed %}
+                                            <span class="badge bg-success">{{ t('yes') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">{{ t('no') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('service_running') }}</strong></td>
+                                    <td>
+                                        {% if service_status.running %}
+                                            <span class="badge bg-success">{{ t('yes') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ t('no') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('service_autostart') }}</strong></td>
+                                    <td>
+                                        {% if service_status.enabled %}
+                                            <span class="badge bg-success">{{ t('yes') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ t('no') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-lightning me-2"></i> {{ t('service_actions') }}
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        {% if service_status.installed %}
+                            {% if service_status.running %}
+                                <button class="btn btn-danger" data-action="serviceAction" data-data='{"action": "stop"}'>
+                                    <i class="bi bi-stop-circle"></i> {{ t('service_stop') }}
+                                </button>
+                                <button class="btn btn-warning" data-action="serviceAction" data-data='{"action": "restart"}'>
+                                    <i class="bi bi-arrow-repeat"></i> {{ t('service_restart') }}
+                                </button>
+                            {% else %}
+                                <button class="btn btn-success" data-action="serviceAction" data-data='{"action": "start"}'>
+                                    <i class="bi bi-play-circle"></i> {{ t('service_start') }}
+                                </button>
+                            {% endif %}
+                            
+                            {% if service_status.enabled %}
+                                <button class="btn btn-outline-warning" data-action="serviceAction" data-data='{"action": "disable"}'>
+                                    <i class="bi bi-x-circle"></i> {{ t('service_disable_autostart') }}
+                                </button>
+                            {% else %}
+                                <button class="btn btn-outline-success" data-action="serviceAction" data-data='{"action": "enable"}'>
+                                    <i class="bi bi-check-circle"></i> {{ t('service_enable_autostart') }}
+                                </button>
+                            {% endif %}
+                        {% else %}
+                            <div class="alert alert-warning">
+                                <h5><i class="bi bi-exclamation-triangle"></i> {{ t('service_not_installed') }}</h5>
+                                <p>{{ t('service_install_instructions') }}</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Обработчик кнопки обновления статуса
+    $('[data-action="refreshStatus"]').on('click', function() {
+        $('#mainMenu a[data-module="service"]').click();
+    });
+});
+</script>

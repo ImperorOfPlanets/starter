@@ -15,4 +15,7 @@ service.log
 **/__pycache__/
 
 # Файл логов запуска для предотвращения зацикеливания запуска при обновлении
-/starter_files/execute.log
+/starter_files/logs/execute.log
+
+# Файл настроек стартера
+.env

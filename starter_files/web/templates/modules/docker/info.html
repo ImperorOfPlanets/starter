@@ -1,0 +1,140 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('docker_dashboard') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button class="btn btn-sm btn-outline-secondary" id="refreshDockerBtn">
+                <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+            </button>
+        </div>
+    </div>
+
+    <!-- Карточки с общей информацией -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-box me-2"></i> {{ t('docker_version') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text">{{ docker_info.version }}</p>
+                    <p class="card-text"><small class="text-muted">{{ t('last_updated') }}: {{ current_time }}</small></p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <i class="bi bi-collection me-2"></i> {{ t('containers') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('total') }}:</strong> {{ docker_info.containers.total }}</p>
+                    <p class="card-text"><strong>{{ t('running') }}:</strong> {{ docker_info.containers.running }}</p>
+                    <p class="card-text"><strong>{{ t('stopped') }}:</strong> {{ docker_info.containers.stopped }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <i class="bi bi-images me-2"></i> {{ t('images') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('total_images') }}:</strong> {{ docker_info.images }}</p>
+                    <p class="card-text"><strong>{{ t('disk_usage') }}:</strong> {{ docker_info.system.disk_usage }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <i class="bi bi-diagram-3 me-2"></i> {{ t('resources') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('cpu_usage') }}:</strong> {{ docker_info.system.cpu_usage }}</p>
+                    <p class="card-text"><strong>{{ t('memory_usage') }}:</strong> {{ docker_info.system.memory_usage }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Подробная информация -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card h-100 mb-4">
+                <div class="card-header">
+                    <i class="bi bi-stack me-2"></i> {{ t('docker_compose') }}
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td><strong>{{ t('projects') }}</strong></td>
+                                    <td>{{ docker_info.compose.projects }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('services') }}</strong></td>
+                                    <td>{{ docker_info.compose.services }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card h-100 mb-4">
+                <div class="card-header">
+                    <i class="bi bi-gear me-2"></i> {{ t('quick_actions') }}
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary" id="restartDockerBtn">
+                            <i class="bi bi-arrow-clockwise me-2"></i> {{ t('restart_docker') }}
+                        </button>
+                        <button class="btn btn-outline-secondary" id="pruneSystemBtn">
+                            <i class="bi bi-trash me-2"></i> {{ t('prune_system') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Обработчик кнопки обновления
+    $('#refreshDockerBtn').on('click', function() {
+        $('#mainMenu a[data-module="docker"]').click();
+    });
+
+    // Обработчик кнопки перезапуска Docker
+    $('#restartDockerBtn').on('click', function() {
+        if(confirm('{{ t("confirm_restart_docker") }}')) {
+            $.post('/', {module: 'docker', action: 'restart_docker'}, function(response) {
+                alert(response.message);
+                $('#refreshDockerBtn').click();
+            }).fail(function() {
+                alert('{{ t("request_failed") }}');
+            });
+        }
+    });
+
+    // Обработчик кнопки очистки системы
+    $('#pruneSystemBtn').on('click', function() {
+        if(confirm('{{ t("confirm_prune_system") }}')) {
+            $.post('/', {module: 'docker', action: 'prune_system'}, function(response) {
+                alert(response.message);
+                $('#refreshDockerBtn').click();
+            }).fail(function() {
+                alert('{{ t("request_failed") }}');
+            });
+        }
+    });
+});
+</script>

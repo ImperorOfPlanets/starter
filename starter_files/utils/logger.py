@@ -1,126 +1,201 @@
-# starter_files/logger.py
-import os
-import sys
-import platform
-from pathlib import Path
-from datetime import datetime
-import uuid
-import shutil
-import zipfile
 import getpass
+import logging
+import os
+import platform
 import socket
+import sys
+import uuid
+
+from datetime import datetime, timedelta
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
+def cleanup_previous_logs(logs_dir: Path, current_run_id: str):
+    """Удаляет предыдущие лог-файлы из debug-сессии"""
+    try:
+        # Получаем все файлы логов
+        for log_file in logs_dir.glob('*.log'):
+            # Удаляем все логи, кроме текущего
+            if current_run_id not in log_file.name:
+                try:
+                    # Проверяем, что файл принадлежит текущей debug-сессии
+                    file_time_str = log_file.stem.split('_')[1]  # Получаем timestamp из имени
+                    file_time = datetime.strptime(file_time_str, '%Y%m%d_%H%M%S')
+                    
+                    # Удаляем только свежие логи (созданные в последние 30 минут)
+                    if (datetime.now() - file_time) < timedelta(minutes=30):
+                        os.remove(log_file)
+                        print(f"Удален предыдущий лог-файл: {log_file}")
+                except (IndexError, ValueError) as e:
+                    # Если не удалось разобрать имя файла, пропускаем его
+                    continue
+                except Exception as e:
+                    print(f"Не удалось удалить {log_file}: {e}")
+    except Exception as e:
+        print(f"Ошибка при очистке логов: {e}")
+
+def get_logger():
+    """Фабрика логгеров. Автоматически определяет режим работы."""
+
+    # Проверяем, не создан ли уже логгер
+    existing_logger = logging.getLogger('starter_web')
+    if existing_logger.handlers:
+        return existing_logger
+        
+    is_service = any(arg in sys.argv for arg in ['--service', '--service-run'])
+    mode = 'service' if is_service else 'web'
+    
+    # В debug-режиме Flask создает дочерний процесс, нам нужен только основной
+    # Используем os.environ для проверки debug режима вместо app.debug
+    is_debug = os.environ.get('FLASK_DEBUG') == '1'
+    if mode == 'web' and is_debug and os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        return existing_logger
+        
+    return ProjectLogger(mode)
 
 class ProjectLogger:
-    def __init__(self):
-        self.logs_dir = Path('logs')
-        self.archive_dir = self.logs_dir / 'archive'
-        self.current_log = None
-        self.run_id = str(uuid.uuid4())[:8]  # Короткий UUID
+    def __init__(self, mode='web'):
+        self.mode = mode
+        self.run_id = self._get_run_id()  # Генерируем run_id по-новому
         self.start_time = datetime.now()
         
-        # Создаем директории если их нет
-        self.logs_dir.mkdir(exist_ok=True)
-        self.archive_dir.mkdir(exist_ok=True)
+        self.logs_dir = Path('starter_files/logs')
+        self._setup_directories()
+
+        # Настройка логгера
+        self.logger = logging.getLogger(f'starter_{mode}')
+        self._configure_logger()
         
-        # Инициализируем лог
-        self._init_log_file()
-        self._cleanup_old_logs()
+        # Логирование системной информации (только при первом запуске)
+        if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+            self._log_system_info()
+
+    def _get_run_id(self):
+        """Генерирует run_id, который сохраняется при перезагрузках"""
+        # Если это перезагрузка (debug-режим), берем run_id из переменной окружения
+        if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+            return os.environ.get('FLASK_RUN_ID', str(uuid.uuid4())[:8])
+        return str(uuid.uuid4())[:8]
+
+    def _setup_directories(self):
+        """Создает необходимые директории для логов"""
+        (self.logs_dir / self.mode).mkdir(parents=True, exist_ok=True)
+
+    def _configure_logger(self):
+        """Настраивает логгер (использует один файл при перезагрузках)"""
+        self.logger.handlers.clear()
+        self.logger.setLevel(logging.DEBUG)
         
-    def _init_log_file(self):
-        """Инициализирует файл лога для текущего запуска"""
+        formatter = logging.Formatter(
+            '[%(asctime)s] [%(levelname)s] [%(module)s:%(lineno)d] %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        
+        # Имя файла лога (одинаковое при перезагрузках)
+        log_file = self._get_log_file_path()
+        
+        # Обработчик файла с ротацией
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=5 * 1024 * 1024,  # 5 MB
+            backupCount=10,
+            encoding='utf-8'
+        )
+        file_handler.setFormatter(formatter)
+        self.logger.addHandler(file_handler)
+        
+        # Вывод в консоль (только для web-режима)
+        if self.mode == 'web':
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(formatter)
+            self.logger.addHandler(console_handler)
+
+    def _get_log_file_path(self):
+        """Возвращает путь к файлу лога (один и тот же при перезагрузках)"""
+        # Если это перезагрузка, ищем существующий лог
+        if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+            log_files = list((self.logs_dir / self.mode).glob('*.log'))
+            if log_files:
+                return log_files[0]  # Берем первый найденный лог
+        
+        # Иначе создаем новый
         timestamp = self.start_time.strftime('%Y%m%d_%H%M%S')
-        self.current_log = self.logs_dir / f"log_{timestamp}_{self.run_id}.txt"
-        
-        # Получаем системную информацию
+        filename = f'log_{timestamp}_{self.run_id}.log'
+        return self.logs_dir / self.mode / filename
+
+    def _log_system_info(self):
+        """Логирует системную информацию при старте"""
         system_info = {
+            # Название операционной системы (Linux/Windows/Darwin)
             'OS': platform.system(),
+            
+            # Версия ядра ОС или сборки Windows
             'OS Version': platform.version(),
+            
+            # Сетевое имя компьютера в локальной сети
             'Hostname': socket.gethostname(),
+            
+            # Имя пользователя, под которым запущен процесс
             'Username': getpass.getuser(),
+            
+            # Версия интерпретатора Python в формате X.Y.Z
             'Python Version': platform.python_version(),
+            
+            # Директория, из которой был запущен скрипт
             'Working Directory': os.getcwd(),
+            
+            # Полная командная строка запуска приложения
             'Command Line': ' '.join(sys.argv),
-            'PID': os.getpid()
+            
+            # ID процесса в операционной системе
+            'PID': os.getpid(),
+            
+            # Уникальный идентификатор сеанса работы приложения
+            'Run ID': self.run_id,
+            
+            # Время старта в ISO формате (YYYY-MM-DDTHH:MM:SS)
+            'Start Time': self.start_time.isoformat(),
+            
+            # Режим работы: 'web' или 'service'
+            'Mode': self.mode,
+            
+            # Флаг Werkzeug (None/true/false):
+            # None - обычный запуск без Flask
+            # 'true' - основной процесс Flask
+            # 'false' - процесс-наблюдатель при --debug
+            'WERKZEUG_RUN_MAIN': os.environ.get('WERKZEUG_RUN_MAIN', 'None'),
+            
+            # Режим отладки Flask (1/None):
+            # '1' - debug mode включен
+            # None - production режим
+            'FLASK_DEBUG': os.environ.get('FLASK_DEBUG', 'None'),
+            
+            # Признак основного процесса:
+            # True - это основной рабочий процесс
+            # False - дочерний процесс или перезагрузчик
+            'Is Main Process': str(os.environ.get('WERKZEUG_RUN_MAIN') == 'true')
         }
         
-        # Записываем заголовок лога
-        with open(self.current_log, 'a', encoding='utf-8') as f:
-            f.write(f"=== RUN ID: {self.run_id} ===\n")
-            f.write(f"=== START TIME: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')} ===\n\n")
-            
-            f.write("=== SYSTEM INFO ===\n")
-            for key, value in system_info.items():
-                f.write(f"{key}: {value}\n")
-            
-            f.write("\n=== COMMAND LINE PARAMETERS ===\n")
-            for i, arg in enumerate(sys.argv):
-                f.write(f"Argument {i}: {arg}\n")
-            
-            f.write("\n=== ENVIRONMENT VARIABLES ===\n")
-            for key in sorted(os.environ.keys()):
-                if key.startswith(('DOCKER_', 'PATH', 'PYTHON', 'HOME', 'USER')):
-                    f.write(f"{key}: {os.environ[key]}\n")
-            
-            f.write("\n=== LOG ENTRIES ===\n")
-    
-    def _cleanup_old_logs(self):
-        """Управляет количеством лог-файлов"""
-        # Получаем все лог-файлы, отсортированные по дате
-        log_files = sorted(self.logs_dir.glob('log_*.txt'), key=os.path.getmtime)
-        
-        # Если больше 10 файлов - перемещаем старые в архив
-        if len(log_files) > 10:
-            files_to_move = log_files[:-10]  # Все кроме последних 10
-            
-            # Проверяем архив на количество файлов
-            archived_logs = sorted(self.archive_dir.glob('log_*.txt'), key=os.path.getmtime)
-            if len(archived_logs) >= 100:
-                self._create_archive_bundle(archived_logs)
-            
-            # Перемещаем файлы в архив
-            for file in files_to_move:
-                shutil.move(file, self.archive_dir / file.name)
-    
-    def _create_archive_bundle(self, files):
-        """Создает архивный bundle из старых логов"""
-        oldest_date = files[0].stem.split('_')[1]
-        newest_date = files[-1].stem.split('_')[1]
-        archive_name = f"logs_{oldest_date}_to_{newest_date}.zip"
-        
-        # Создаем zip-архив
-        with zipfile.ZipFile(self.archive_dir / archive_name, 'w') as zipf:
-            for file in files:
-                zipf.write(file, file.name)
-                file.unlink()
-    
-    def log(self, message: str, level: str = "INFO", print_to_console: bool = True):
-        """Основная функция логирования"""
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        log_entry = f"[{timestamp}] [{level}] {message}\n"
-        
-        # Запись в файл (всегда)
-        with open(self.current_log, 'a', encoding='utf-8') as f:
-            f.write(log_entry)
-        
-        # Вывод в консоль
-        if print_to_console:
-            print(log_entry.strip())
-    
-    def log_command(self, command: list, description: str = None):
-        """Специальное логирование для команд"""
-        cmd_str = ' '.join(command)
-        if description:
-            self.log(f"{description}: {cmd_str}", "COMMAND")
-        else:
-            self.log(f"Выполняю команду: {cmd_str}", "COMMAND")
-    
-    def log_system_info(self):
-        """Логирует дополнительную системную информацию"""
-        try:
-            ips = ', '.join(socket.gethostbyname_ex(socket.gethostname())[2])
-            self.log(f"IP Addresses: {ips}", "SYSTEM")
-        except Exception as e:
-            self.log(f"Failed to get IPs: {str(e)}", "WARNING")
+        self.logger.info("=== SYSTEM INFO ===")
+        for key, value in system_info.items():
+            self.logger.info(f"{key}: {value}")
 
-# Глобальный экземпляр логгера
-logger = ProjectLogger()
+    # Стандартные методы логирования
+    def debug(self, message):
+        self.logger.debug(message)
+        
+    def info(self, message):
+        self.logger.info(message)
+        
+    def warning(self, message):
+        self.logger.warning(message)
+        
+    def error(self, message):
+        self.logger.error(message)
+        
+    def critical(self, message):
+        self.logger.critical(message)
+        
+    def exception(self, message):
+        self.logger.exception(message)
+

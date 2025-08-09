@@ -1,0 +1,35 @@
+<div class="card">
+    <div class="card-header">
+        <h5>{{ device.name }}</h5>
+    </div>
+    <div class="card-body">
+        <table class="table">
+            <tr>
+                <th>MAC-адрес:</th>
+                <td>{{ device.mac }}</td>
+            </tr>
+            <tr>
+                <th>Тип:</th>
+                <td>{{ "Физическое" if device.is_physical else "Виртуальное" }}</td>
+            </tr>
+            <tr>
+                <th>Статус:</th>
+                <td><span class="badge bg-{{ 'success' if device.is_up else 'danger' }}">
+                    {{ "Активно" if device.is_up else "Не активно" }}
+                </span></td>
+            </tr>
+        </table>
+        
+        <h5>Подключения</h5>
+        {% for conn in device.connections %}
+        <div class="card mb-2">
+            <div class="card-body">
+                <p><strong>IP:</strong> {{ conn.ip }}/{{ conn.netmask }}</p>
+                <p><strong>Шлюз:</strong> {{ conn.gateway or 'Не указан' }}</p>
+                <p><strong>DNS:</strong> {{ conn.dns_servers|join(', ') if conn.dns_servers else 'Не указаны' }}</p>
+                <p><strong>Статус:</strong> {{ "Активно" if conn.status == 'Up' else "Не активно" }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
