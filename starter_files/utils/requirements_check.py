@@ -40,27 +40,19 @@ def get_requirements_path():
     print(f"Определенная ОС: {system}")
     print(f"Версия ОС: {release}")
     
-    # Изменяем путь к requirements
-    base_dir = Path(__file__).parent  # Текущая директория файла
-    reqs_dir = base_dir / "starter_files" / "requirements"
+    # 1. Определяем корень проекта (где лежит starter.py)
+    starter_path = Path(sys.argv[0]).absolute().parent
+    print(f"\nПуть к starter.py: {starter_path}")
     
-    print(f"\nИщем requirements в директории: {reqs_dir}")
+    # 2. Ищем requirements относительно starter.py
+    reqs_dir = starter_path / "starter_files" / "requirements"
+    print(f"Ищем requirements в: {reqs_dir}")
     
-    # Проверяем существование директории requirements
-    if not reqs_dir.exists():
-        print(f"ОШИБКА: Директория {reqs_dir} не существует!")
-        return None
-    
-    # Получаем список всех файлов в директории requirements для отладки
-    print("\nСодержимое папки requirements:")
-    for item in reqs_dir.glob('**/*'):
-        print(f" - {item.relative_to(reqs_dir.parent)}")
-    
-    # Проверяем возможные пути в порядке приоритета
+    # 3. Проверяем возможные пути
     possible_paths = [
-        reqs_dir / system / f"{release}.txt",  # Для конкретной версии ОС
-        reqs_dir / system / "default.txt",     # Для ОС по умолчанию
-        reqs_dir / "default.txt"               # Общий файл по умолчанию
+        reqs_dir / system / f"{release}.txt",
+        reqs_dir / system / "default.txt",
+        reqs_dir / "default.txt"
     ]
     
     print("\nПроверяемые пути:")
@@ -74,8 +66,11 @@ def get_requirements_path():
             return path
     
     print("\nОШИБКА: Ни один из файлов зависимостей не найден!")
+    print("Попробуйте создать файл по одному из путей:")
+    for path in possible_paths:
+        print(f" - {path}")
+    
     return None
-
 def install_dependencies():
     """Устанавливает зависимости используя правильную команду pip"""
     pip_cmd = get_pip_command()
