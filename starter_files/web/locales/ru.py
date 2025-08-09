@@ -380,6 +380,36 @@ translations = {
             'basic': {
                 'title': 'Подключения и клиенты VPN',
                 'description': 'Управление VPN'
+            },
+
+            "index": {
+                "vpn_title": "VPN (SoftEther)",
+                "refresh": "Обновить",
+                "vpn_status": "Статус VPN",
+                "details": "Подробности",
+                "vpn_installed": "Установлен",
+                "yes": "Да",
+                "no": "Нет",
+                "vpn_version": "Версия",
+                "vpn_connected": "Подключен",
+                "vpn_quick_actions": "Быстрые действия",
+                "vpn_disconnect": "Отключиться",
+                "vpn_connect": "Подключиться",
+                "vpn_restart": "Перезапустить",
+                "vpn_not_installed": "SoftEther VPN не установлен",
+                "vpn_install_instructions": "Для использования VPN необходимо установить SoftEther VPN Client",
+                "vpn_download": "Скачать SoftEther",
+                "vpn_info_title": "Информация о VPN",
+                "vpn_technical_info": "Техническая информация",
+                "vpn_os": "Операционная система",
+                "vpn_installation_details": "Инструкции по установке",
+                "vpn_windows_instructions": "1. Скачайте и установите SoftEther VPN Client для Windows\n2. Запустите программу и настройте подключение",
+                "vpn_linux_instructions": "1. Установите пакет softether-vpnclient через ваш менеджер пакетов\n2. Настройте подключение в терминале",
+                "vpn_mac_instructions": "1. Скачайте и установите SoftEther VPN Client для macOS\n2. Настройте подключение в программе",
+                "vpn_management": "Управление VPN",
+                "vpn_configure": "Настроить",
+                "vpn_uninstall": "Удалить",
+                "vpn_not_installed_instructions": "Для управления VPN необходимо сначала установить клиент"
             }
         },
 

@@ -1,0 +1,15 @@
+[2025-08-09 13:28:48] [INFO] [logger:179] === SYSTEM INFO ===
+[2025-08-09 13:28:48] [INFO] [logger:181] OS: Windows
+[2025-08-09 13:28:48] [INFO] [logger:181] OS Version: 10.0.26100
+[2025-08-09 13:28:48] [INFO] [logger:181] Hostname: HOME-PC
+[2025-08-09 13:28:48] [INFO] [logger:181] Username: Imperor_Of_Planets
+[2025-08-09 13:28:48] [INFO] [logger:181] Python Version: 3.13.1
+[2025-08-09 13:28:48] [INFO] [logger:181] Working Directory: C:\control\starter2
+[2025-08-09 13:28:48] [INFO] [logger:181] Command Line: starter.py
+[2025-08-09 13:28:48] [INFO] [logger:181] PID: 9428
+[2025-08-09 13:28:48] [INFO] [logger:181] Run ID: 1ec94382
+[2025-08-09 13:28:48] [INFO] [logger:181] Start Time: 2025-08-09T13:28:47.914601
+[2025-08-09 13:28:48] [INFO] [logger:181] Mode: web
+[2025-08-09 13:28:48] [INFO] [logger:181] WERKZEUG_RUN_MAIN: None
+[2025-08-09 13:28:48] [INFO] [logger:181] FLASK_DEBUG: None
+[2025-08-09 13:28:48] [INFO] [logger:181] Is Main Process: False

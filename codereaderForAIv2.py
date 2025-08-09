@@ -16,7 +16,7 @@ class CodeReaderConfig:
         'locales',
 
         # Шаблоны
-        'templates'
+        # 'templates'
                    
     ]
     IGNORE_FILES = [
