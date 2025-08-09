@@ -36,19 +36,44 @@ def get_requirements_path():
     system = platform.system().lower()
     release = platform.release()
     
+    print(f"\n=== Отладочная информация ===")
+    print(f"Определенная ОС: {system}")
+    print(f"Версия ОС: {release}")
+    
     # Изменяем путь к requirements
     base_dir = Path(__file__).parent  # Текущая директория файла
     reqs_dir = base_dir / "starter_files" / "requirements"
     
+    print(f"\nИщем requirements в директории: {reqs_dir}")
+    
+    # Проверяем существование директории requirements
+    if not reqs_dir.exists():
+        print(f"ОШИБКА: Директория {reqs_dir} не существует!")
+        return None
+    
+    # Получаем список всех файлов в директории requirements для отладки
+    print("\nСодержимое папки requirements:")
+    for item in reqs_dir.glob('**/*'):
+        print(f" - {item.relative_to(reqs_dir.parent)}")
+    
     # Проверяем возможные пути в порядке приоритета
-    for path in [
+    possible_paths = [
         reqs_dir / system / f"{release}.txt",  # Для конкретной версии ОС
         reqs_dir / system / "default.txt",     # Для ОС по умолчанию
         reqs_dir / "default.txt"               # Общий файл по умолчанию
-    ]:
+    ]
+    
+    print("\nПроверяемые пути:")
+    for path in possible_paths:
+        exists = "НАЙДЕН" if path.exists() else "не найден"
+        print(f" - {path}: {exists}")
+    
+    for path in possible_paths:
         if path.exists():
+            print(f"\nИспользуем файл зависимостей: {path}")
             return path
     
+    print("\nОШИБКА: Ни один из файлов зависимостей не найден!")
     return None
 
 def install_dependencies():
