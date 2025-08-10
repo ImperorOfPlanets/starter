@@ -26,18 +26,12 @@ def is_first_run(env_path: Path = Path('.env')) -> bool:
 
 def generate_credentials() -> Dict[str, str]:
     """Генерирует учетные данные для первого запуска"""
+    password = secrets.token_urlsafe(8)
     return {
         'login': 'admin_' + secrets.token_hex(2),
-        'password': secrets.token_urlsafe(8),
-        'password_hash': hashlib.sha256(secrets.token_urlsafe(8).encode()).hexdigest(),
-        'app_secret_key': secrets.token_hex(32)
-    }
-    
-    return {
-        'login': login,
         'password': password,
-        'password_hash': password_hash,
-        'app_secret_key': app_secret_key
+        'password_hash': hashlib.sha256(password.encode()).hexdigest(),
+        'app_secret_key': secrets.token_hex(32)
     }
 
 def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, str]]]:

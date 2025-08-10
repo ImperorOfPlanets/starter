@@ -10,10 +10,22 @@ def hash_password(password: str) -> str:
 
 def login(data, session):
     """Обработчик входа"""
+    # Логирование входящих данных
+    print(f"\n=== DEBUG AUTH ===")
+    print(f"Input data: {data}")
+    print(f"Session: {dict(session)}")
+    print(f"ENV: ADMIN_LOGIN={os.getenv('ADMIN_LOGIN')}")
+    print(f"ENV: ADMIN_PASSWORD_HASH={os.getenv('ADMIN_PASSWORD_HASH')}")
+
     username = data.get('username')
     password = data.get('password')
     admin_login = os.getenv('ADMIN_LOGIN')
     admin_pass_hash = os.getenv('ADMIN_PASSWORD_HASH')
+
+    # Хэширование входящего пароля для сравнения
+    input_hash = hashlib.sha256(password.encode('utf-8')).hexdigest() if password else None
+    print(f"Input hash: {input_hash}")
+    print(f"Stored hash: {admin_pass_hash}")
     
     # Проверка наличия данных
     if not all([username, password]):

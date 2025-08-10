@@ -49,7 +49,7 @@ def generate_self_signed_cert(force_regenerate=False):
     subject.ST = "Moscow"
     subject.L = "Moscow"
     subject.O = "MyIDon"
-    subject.CN = gethostname()[:64]
+    subject.CN = "localhost"
     
     cert.set_serial_number(1000)
     cert.gmtime_adj_notBefore(0)
