@@ -38,8 +38,7 @@ def configure_app() -> Flask:
     app.secret_key = env_vars.get('APP_SECRET_KEY', secrets.token_hex(32))
 
     # Настройка папки сессий
-    script_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-    session_dir = script_dir / "starter_files" / "web" / "sessions"
+    session_dir = base_dir / "starter_files" / "web" / "sessions"
     
     # Создаем папку (если не существует)
     session_dir.mkdir(parents=True, exist_ok=True)

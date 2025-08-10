@@ -14,7 +14,7 @@ _AVAILABLE_LANGUAGES = None
 
 # Функция получения языков
 def get_current_language():
-    env_path = Path('.env')
+    env_path = Path(sys.argv[0]).absolute().parent / '.env'
     if env_path.exists():
         with open(env_path, 'r', encoding='utf-8') as f:
             for line in f:
@@ -35,7 +35,6 @@ def get_available_languages(force_reload=False) -> dict:
     
     base_dir = Path(sys.argv[0]).absolute().parent
     locales_dir = base_dir / 'starter_files' / 'web' / 'locales'
-    print(locales_dir)
     logger.debug(f"Ищем переводы в директории: {locales_dir}")
     
     languages = {}

@@ -1,4 +1,5 @@
 import os
+import sys
 
 from flask import Blueprint, current_app, g, jsonify, render_template, request, session
 from importlib import import_module
@@ -12,7 +13,8 @@ routes = Blueprint('routes', __name__)
 # Функция получения модулей для панель управления
 def get_current_modules_in_panel():
     modules_in_control_panel = []
-    modules_dir = Path(__file__).parent / 'modules'
+    starter_path = Path(sys.argv[0]).absolute().parent
+    modules_dir = starter_path / 'starter_files' / 'web' / 'modules'
     
     for module_file in modules_dir.glob('*.py'):
         if module_file.stem == '__init__':
