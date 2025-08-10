@@ -1,13 +1,26 @@
+import os
+import sys
+
 from OpenSSL import crypto
 from pathlib import Path
 from socket import gethostname
-import os
 
 def setup_ssl_folder():
     """Создает папку для SSL если ее нет"""
-    ssl_dir = Path("starter_files/web/ssl")
-    ssl_dir.mkdir(parents=True, exist_ok=True)
-    return ssl_dir
+    try:
+        # Получаем абсолютный путь к директории скрипта
+        script_dir = Path(sys.argv[0]).absolute().parent
+        ssl_dir = script_dir / "starter_files" / "web" / "ssl"
+        
+        # Создаем папку (если не существует)
+        ssl_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Устанавливаем правильные права
+        ssl_dir.chmod(0o755)
+        return ssl_dir
+    except Exception as e:
+        print(f"Ошибка создания SSL папки: {e}")
+        raise
 
 def check_existing_certificates():
     """Проверяет наличие существующих сертификатов"""

@@ -59,7 +59,8 @@ class ProjectLogger:
         self.run_id = self._get_run_id()  # Генерируем run_id по-новому
         self.start_time = datetime.now()
         
-        self.logs_dir = Path('starter_files/logs')
+        self.base_dir = Path(os.path.dirname(os.path.abspath(__file__))).parent.parent
+        self.logs_dir = self.base_dir / "starter_files" / "logs"
         self._setup_directories()
 
         # Настройка логгера
@@ -77,9 +78,16 @@ class ProjectLogger:
             return os.environ.get('FLASK_RUN_ID', str(uuid.uuid4())[:8])
         return str(uuid.uuid4())[:8]
 
+    # Добавлена обработка ошибок и установка прав:
     def _setup_directories(self):
-        """Создает необходимые директории для логов"""
-        (self.logs_dir / self.mode).mkdir(parents=True, exist_ok=True)
+        try:
+            (self.logs_dir / self.mode).mkdir(parents=True, exist_ok=True)
+            if hasattr(os, 'chmod'):
+                os.chmod(self.logs_dir, 0o755)
+                os.chmod(self.logs_dir / self.mode, 0o755)
+        except Exception as e:
+            print(f"Ошибка создания директории логов: {e}")
+            raise
 
     def _configure_logger(self):
         """Настраивает логгер (использует один файл при перезагрузках)"""
@@ -111,17 +119,28 @@ class ProjectLogger:
             self.logger.addHandler(console_handler)
 
     def _get_log_file_path(self):
-        """Возвращает путь к файлу лога (один и тот же при перезагрузках)"""
-        # Если это перезагрузка, ищем существующий лог
-        if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-            log_files = list((self.logs_dir / self.mode).glob('*.log'))
-            if log_files:
-                return log_files[0]  # Берем первый найденный лог
-        
-        # Иначе создаем новый
-        timestamp = self.start_time.strftime('%Y%m%d_%H%M%S')
-        filename = f'log_{timestamp}_{self.run_id}.log'
-        return self.logs_dir / self.mode / filename
+        """Возвращает абсолютный путь к файлу лога"""
+        try:
+            # Если это перезагрузка, ищем существующий лог
+            if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+                existing_logs = list((self.logs_dir / self.mode).glob('*.log'))
+                if existing_logs:
+                    return existing_logs[0].absolute()  # Возвращаем абсолютный путь
+
+            # Создаем новый файл лога
+            timestamp = self.start_time.strftime('%Y%m%d_%H%M%S')
+            filename = f'log_{timestamp}_{self.run_id}.log'
+            log_path = (self.logs_dir / self.mode / filename).absolute()
+            
+            # Проверяем, что путь валидный
+            if not log_path.parent.exists():
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                
+            return log_path
+            
+        except Exception as e:
+            print(f"Ошибка при определении пути к лог-файлу: {e}")
+            raise
 
     def _log_system_info(self):
         """Логирует системную информацию при старте"""

@@ -383,7 +383,7 @@ translations = {
             },
 
             "index": {
-                "vpn_title": "VPN (SoftEther)",
+                "vpn_title": "VPN",
                 "refresh": "Обновить",
                 "vpn_status": "Статус VPN",
                 "details": "Подробности",

@@ -1,5 +1,6 @@
 import inspect
 import os
+import sys
 
 from importlib import import_module
 from pathlib import Path
@@ -32,8 +33,10 @@ def get_available_languages(force_reload=False) -> dict:
     if _AVAILABLE_LANGUAGES is not None and not force_reload:
         return _AVAILABLE_LANGUAGES
     
-    base_dir = Path(__file__).absolute().parent.parent.parent
+    base_dir = Path(sys.argv[0]).absolute().parent
     locales_dir = base_dir / 'starter_files' / 'web' / 'locales'
+    print(locales_dir)
+    logger.debug(f"Ищем переводы в директории: {locales_dir}")
     
     languages = {}
     

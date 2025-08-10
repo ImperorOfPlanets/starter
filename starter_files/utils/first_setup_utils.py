@@ -1,6 +1,7 @@
 import hashlib
 import os
 import secrets
+import sys
 import webbrowser
 
 from pathlib import Path
@@ -44,14 +45,28 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
     Returns:
         Tuple: (is_first_run: bool, credentials: Optional[dict])
     """
+    # Проверяем только в основном процессе
     if not is_first_run():
         return False, None
 
-    env_path = Path('.env')
-    env_example_path = Path('.env.example')
-    
+    # Получаем путь относительно запускаемого скрипта
+    base_dir = Path(sys.argv[0]).absolute().parent
+    env_path = base_dir / '.env'
+    env_example_path = base_dir / '.env.example'
+
+    # Выводим информацию о создании файла
+    print(f"\n{'='*50}")
+    print("ВЫПОЛНЕНИЕ ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ")
+    print(f"Создаем файл конфигурации: {env_path}")
+    print(f"Используем шаблон: {env_example_path}")
+    print(f"{'='*50}\n")
+
     if not env_example_path.exists():
+        print(f"Файл шаблона .env.example не найден в {base_dir}")
         return False, None
+
+    # Выводим информацию о создании файла
+    print(f"\nСоздаем файл конфигурации: {env_path}")
 
     with open(env_example_path, 'r', encoding='utf-8') as f:
         example_content = f.read()

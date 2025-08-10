@@ -1,6 +1,7 @@
 import logging
 import os
 import secrets
+import sys
 
 from datetime import timedelta
 from flask import Flask, render_template, request
@@ -9,6 +10,8 @@ from pathlib import Path
 from starter_files.utils.env_utils import read_env_file
 from starter_files.utils.logger import get_logger
 
+from starter_files.web.routes import routes
+
 def configure_app() -> Flask:
     """
     Создает и настраивает экземпляр Flask приложения
@@ -16,7 +19,7 @@ def configure_app() -> Flask:
         Flask: настроенное Flask приложение
     """
     # Получаем абсолютный путь к директории с шаблонами
-    base_dir = Path(__file__).absolute().parent.parent.parent
+    base_dir = Path(sys.argv[0]).absolute().parent
     templates_path = str(base_dir / 'starter_files' / 'web' / 'templates')
     static_path = str(base_dir / 'starter_files' / 'web' / 'public')
 
@@ -35,8 +38,14 @@ def configure_app() -> Flask:
     app.secret_key = env_vars.get('APP_SECRET_KEY', secrets.token_hex(32))
 
     # Настройка папки сессий
-    session_dir = Path("starter_files/web/sessions")
+    script_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+    session_dir = script_dir / "starter_files" / "web" / "sessions"
+    
+    # Создаем папку (если не существует)
     session_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Устанавливаем правильные права (755 для папок)
+    session_dir.chmod(0o755)
 
     # Настройки сессии
     app.config.update({
@@ -121,6 +130,8 @@ def configure_app() -> Flask:
         except Exception as template_error:
             logger.error(f"Не удалось отрендерить error.html: {template_error}")
             return f"500 Internal Server Error: {str(error)}", 500
+
+    app.register_blueprint(routes)
 
     return app
 
