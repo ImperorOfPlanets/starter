@@ -3,7 +3,6 @@ import os
 import sys
 
 from pathlib import Path
-from dotenv import load_dotenv
 
 def parse_args():
     """Парсит аргументы командной строки"""
@@ -18,9 +17,9 @@ def start_service_mode():
 def start_interactive_mode():
     # Обычный режим
     from starter_files.utils.configurate_app import configure_app
-
     from starter_files.web.utils.ssl import get_ssl_context
     from starter_files.utils.first_setup_utils import open_browser
+    from dotenv import load_dotenv
 
     # Проверка .env
     script_dir = Path(sys.argv[0]).absolute().parent
@@ -43,15 +42,15 @@ def start_interactive_mode():
 if __name__ == '__main__':
     args = parse_args()
 
+    try:
+        import flask
+        import dotenv
+    except ImportError:
+        from starter_files.utils.requirements_check import install_and_restart
+        install_and_restart()
+
     # Проверка только в основном процессе
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
-        # Первичная проверка зависимостей
-        try:
-            import flask
-        except ImportError:
-            from starter_files.utils.requirements_check import install_and_restart
-            install_and_restart()
-
         # Проверка .env
         script_dir = Path(sys.argv[0]).absolute().parent
         env_path = script_dir / '.env'
