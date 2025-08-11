@@ -51,9 +51,16 @@ if __name__ == '__main__':
         from starter_files.utils.requirements_check import install_and_restart
         install_and_restart()
 
-    # Импортируем модуль глобальных переменных
-    from starter_files.utils.global_vars import set_global, get_global, del_global    
+    # Получаем инфомрацию о системе и зхаписываем в глоабльыне переменные
+    from starter_files.utils.sysinfo import collect_basic_system_info
+    collect_basic_system_info()
 
+    # Устанавливаем глобальный обработчик исключений
+    from starter_files.utils.exception_handler import ExceptionHandler
+    handler = ExceptionHandler()
+    sys.excepthook = handler.handle_unhandled_exception
+
+    # Проверка и установка всех нужных утилит в зависимсости от ОС
 
     # Проверка только в основном процессе
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
