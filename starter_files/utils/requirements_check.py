@@ -71,6 +71,7 @@ def get_requirements_path():
         print(f" - {path}")
     
     return None
+
 def install_dependencies():
     """Устанавливает зависимости используя правильную команду pip"""
     pip_cmd = get_pip_command()

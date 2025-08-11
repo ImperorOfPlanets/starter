@@ -1,7 +1,8 @@
 import argparse
 import os
+import platform
+import subprocess
 import sys
-
 from pathlib import Path
 
 def parse_args():
@@ -42,12 +43,17 @@ def start_interactive_mode():
 if __name__ == '__main__':
     args = parse_args()
 
+    # Проверка установки зависимостей
     try:
         import flask
         import dotenv
     except ImportError:
         from starter_files.utils.requirements_check import install_and_restart
         install_and_restart()
+
+    # Импортируем модуль глобальных переменных
+    from starter_files.utils.global_vars import set_global, get_global, del_global    
+
 
     # Проверка только в основном процессе
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
