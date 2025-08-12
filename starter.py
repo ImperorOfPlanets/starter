@@ -5,6 +5,7 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
+from starter_files.utils import venv_utils
 
 def parse_args():
     """Парсит аргументы командной строки"""
@@ -140,13 +141,20 @@ def get_os_info():
     return f"{platform.system().lower()}-{platform.release()}"
 
 if __name__ == '__main__':
+    
+    # Первым делом проверяем/создаем venv
+    if venv_utils.ensure_venv():
+        # Если произошел перезапуск в venv, этот код не выполнится
+        # После перезапуска мы продолжим с начала скрипта уже в venv
+        sys.exit(0)
+
     args = parse_args()
 
     # Первым делом проверяем версию Python
     if not check_python_version():
         # Если версия не соответствует, завершаем работу
         print("\nУстановка прервана: требуется корректировка конфигурации.")
-        sys.exit(1)
+        # sys.exit(1)
 
     # Проверка установки зависимостей
     try:
