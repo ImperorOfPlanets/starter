@@ -3,6 +3,7 @@ import os
 import platform
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 def parse_args():
@@ -40,8 +41,112 @@ def start_interactive_mode():
         debug=True
     )
 
+def print_bordered_message(message, title=None, width=70):
+    """Печатает сообщение в рамке"""
+    print()
+    print('=' * width)
+    
+    if title:
+        print(f" {title} ".center(width, '='))
+        print('-' * width)
+    
+    # Разбиваем сообщение на строки с переносом слов
+    wrapped_lines = []
+    for line in message.split('\n'):
+        wrapped_lines.extend(textwrap.wrap(line, width=width-4))
+    
+    # Печатаем строки с отступами
+    for line in wrapped_lines:
+        print(f"| {line.ljust(width-4)} |")
+    
+    print('=' * width)
+    print()
+
+def check_python_version():
+    """Проверяет версию Python и выводит сообщения"""
+    current_version = sys.version.split()[0]
+    version_info = sys.version_info
+    
+    print(f"Current Python version: {current_version}")
+    print(f"Python executable: {sys.executable}")
+    
+    if version_info < (3, 8):
+        # Формируем информационное сообщение для первого программиста
+        message = f"""
+        ТРЕБУЕТСЯ ВМЕШАТЕЛЬСТВО ПЕРВОГО ПРОГРАММИСТА!
+        
+        Обнаружена устаревшая версия Python: {current_version}
+        Для корректной работы требуется Python 3.8 или выше.
+        
+        Причина:
+        Установщик не смог автоматически установить Python 3.8+ 
+        для вашей системы.
+        
+        Решение:
+        1. Откройте файл конфигурации variables.sh
+        2. Найдите секцию для вашей ОС: {get_os_info()}
+        3. Добавьте команды для установки Python 3.8+
+        4. Протестируйте установку на чистой системе
+        
+        После исправления скрипт будет работать корректно.
+        """
+        
+        print_bordered_message(
+            message, 
+            title="ТРЕБОВАНИЕ К ПЕРВОМУ ПРОГРАММИСТУ", 
+            width=80
+        )
+        return False
+    
+    # Сообщение для второго программиста
+    message = f"""
+    ВЕРСИЯ PYTHON СООТВЕТСТВУЕТ ТРЕБОВАНИЯМ ({current_version})
+    
+    Дальнейшая работа скрипта выполняется в зоне ответственности
+    второго программиста.
+    
+    Вы можете продолжать разработку функционала приложения,
+    не беспокоясь о совместимости версий Python.
+    """
+    
+    print_bordered_message(
+        message, 
+        title="РАБОТА ВТОРОГО ПРОГРАММИСТА", 
+        width=80
+    )
+    return True
+
+def get_os_info():
+    """Возвращает информацию об ОС в формате (дистрибутив, версия)"""
+    try:
+        if os.path.exists('/etc/os-release'):
+            with open('/etc/os-release') as f:
+                data = f.read()
+            
+            os_info = {}
+            for line in data.splitlines():
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    os_info[key] = value.strip().strip('"')
+            
+            distro = os_info.get('ID', '').lower()
+            version = os_info.get('VERSION_ID', '')
+            
+            return f"{distro}-{version}"
+    
+    except Exception:
+        pass
+    
+    return f"{platform.system().lower()}-{platform.release()}"
+
 if __name__ == '__main__':
     args = parse_args()
+
+    # Первым делом проверяем версию Python
+    if not check_python_version():
+        # Если версия не соответствует, завершаем работу
+        print("\nУстановка прервана: требуется корректировка конфигурации.")
+        sys.exit(1)
 
     # Проверка установки зависимостей
     try:
