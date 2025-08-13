@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Tuple
 from dataclasses import dataclass
 
 from starter_files.utils.i18n_utils import t
-from starter_files.utils.logger import get_logger
+from starter_files.utils.log_utils import get_logger
 from starter_files.utils.ips import (
     get_basic_devices_info,
     get_network_devices,

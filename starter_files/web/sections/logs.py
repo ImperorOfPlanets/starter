@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from flask import render_template, send_from_directory
 from starter_files.utils.i18n_utils import t
-from starter_files.utils.logger import get_logger
+from starter_files.utils.log_utils import get_logger
 
 logger = get_logger()
 

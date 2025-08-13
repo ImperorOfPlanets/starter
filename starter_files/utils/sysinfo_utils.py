@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 from starter_files.utils.globalVars_utils import GlobalVars, set_global, get_global
-from starter_files.utils.logger import get_logger
+from starter_files.utils.log_utils import get_logger
 
 logger = get_logger()
 

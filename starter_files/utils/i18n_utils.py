@@ -6,7 +6,7 @@ from importlib import import_module
 from pathlib import Path
 from flask import g
 
-from starter_files.utils.logger import get_logger
+from starter_files.utils.log_utils import get_logger
 from starter_files.utils.globalVars_utils import GlobalVars, set_global, get_global
 
 logger = get_logger()
@@ -52,14 +52,14 @@ def get_available_languages(force_reload=False) -> dict:
         lang_code = locale_file.stem
         
         try:
-            module_path = f'starter_files.web.locales.{lang_code}'
-            module = import_module(module_path)
+            section_path = f'starter_files.web.locales.{lang_code}'
+            section = import_module(section_path)
             
             # Создаем запись языка с обязательными полями
             languages[lang_code] = {
-                'this_language': module.translations.get('common', {}).get('this_language', lang_code),
-                'this_language_code': module.translations.get('common', {}).get('this_language_code', lang_code),
-                'translations': module.translations  # Полные данные переводов
+                'this_language': section.translations.get('common', {}).get('this_language', lang_code),
+                'this_language_code': section.translations.get('common', {}).get('this_language_code', lang_code),
+                'translations': section.translations  # Полные данные переводов
             }
         except ImportError as e:
             print(f"Ошибка импорта {lang_code}: {str(e)}")
@@ -68,7 +68,7 @@ def get_available_languages(force_reload=False) -> dict:
     _AVAILABLE_LANGUAGES = languages
     return _AVAILABLE_LANGUAGES
 
-def t(key: str, _module=None, _file=None, **kwargs) -> str:
+def t(key: str, _section=None, _file=None, **kwargs) -> str:
     current_lang = os.getenv('LANGUAGE', 'en').lower()
     lang_data = get_available_languages().get(current_lang, {}).get('translations', {})
 
@@ -76,8 +76,8 @@ def t(key: str, _module=None, _file=None, **kwargs) -> str:
     global logger
     
     # Если явно не переданы, пытаемся получить из глобального контекста Flask
-    if _module is None:
-        _module = getattr(g, 'current_module', None)
+    if _section is None:
+        _section = getattr(g, 'current_section', None)
     if _file is None:
         _file = getattr(g, 'current_function', None)
 
@@ -101,23 +101,23 @@ def t(key: str, _module=None, _file=None, **kwargs) -> str:
         if 'common' in lang_data and key in lang_data['common']:
             return lang_data['common'][key].format(**kwargs)
 
-        # modules
-        if _module and _file:
-            modules = lang_data.get('modules', {})
-            if _module in modules:
-                if _file in modules[_module]:
-                    if key in modules[_module][_file]:
-                        return modules[_module][_file][key].format(**kwargs)
+        # sections
+        if _section and _file:
+            sections = lang_data.get('sections', {})
+            if _section in sections:
+                if _file in sections[_section]:
+                    if key in sections[_section][_file]:
+                        return sections[_section][_file][key].format(**kwargs)
                     else:
-                        error_msg = f"NOT FOUND TRANSLATE [{current_lang}][modules][{_module}][{_file}][{key}]"
+                        error_msg = f"NOT FOUND TRANSLATE [{current_lang}][sections][{_section}][{_file}][{key}]"
                         logger.warning(error_msg)
                         return error_msg
                 else:
-                    error_msg = f"NOT FOUND TRANSLATE [{current_lang}][modules][{_module}][{_file}]"
+                    error_msg = f"NOT FOUND TRANSLATE [{current_lang}][sections][{_section}][{_file}]"
                     logger.warning(error_msg)
                     return error_msg
             else:
-                error_msg = f"NOT FOUND TRANSLATE [{current_lang}][modules][{_module}]"
+                error_msg = f"NOT FOUND TRANSLATE [{current_lang}][sections][{_section}]"
                 logger.warning(error_msg)
                 return error_msg
 
@@ -145,11 +145,11 @@ def t(key: str, _module=None, _file=None, **kwargs) -> str:
         if frame:
             del frame
 
-def return_basic(module_slug: str, field: str, default: str = None) -> str:
+def return_basic(section_slug: str, field: str, default: str = None) -> str:
     """
-    Получает базовую информацию о модуле из translations['modules'][module_slug]['basic']
+    Получает базовую информацию о модуле из translations['sections'][section_slug]['basic']
     
-    :param module_slug: техническое имя модуля (имя файла)
+    :param section_slug: техническое имя модуля (имя файла)
     :param field: поле для получения (title, description и т.д.)
     :param default: значение по умолчанию, если поле не найдено
     :return: значение поля или default
@@ -157,8 +157,8 @@ def return_basic(module_slug: str, field: str, default: str = None) -> str:
     current_lang = os.getenv('LANGUAGE', 'en').lower()
     lang_data = get_available_languages().get(current_lang, {}).get('translations', {})
     
-    # Прямой доступ к translations['modules'][module_slug]['basic'][field]
-    value = lang_data.get('modules', {}).get(module_slug, {}).get('basic', {}).get(field)
+    # Прямой доступ к translations['sections'][section_slug]['basic'][field]
+    value = lang_data.get('sections', {}).get(section_slug, {}).get('basic', {}).get(field)
     
     if value is not None:
         return value

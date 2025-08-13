@@ -20,7 +20,8 @@
                 <div class="card-body">
                     <p class="card-text"><strong>{{ t('hostname') }}:</strong> {{ hostname }}</p>
                     <p class="card-text"><strong>{{ t('username') }}:</strong> {{ username }}</p>
-                    <p class="card-text"><strong>{{ t('os') }}:</strong> {{ sys_info.os }} {{ sys_info.os_version }}</p>
+                    <p class="card-text"><strong>{{ t('os') }}:</strong> {{ sys_info.os }} {{ sys_info.os_release }} ({{ sys_info.architecture }})</p>
+                    <p class="card-text"><strong>{{ t('version') }}:</strong> {{ sys_info.os_version }}</p>
                 </div>
             </div>
         </div>
@@ -87,13 +88,14 @@
                 <div class="card-body">
                     <p class="card-text"><strong>{{ t('version') }}:</strong> {{ python_info.version }}</p>
                     <p class="card-text"><strong>{{ t('implementation') }}:</strong> {{ python_info.implementation }}</p>
+                    <p class="card-text"><strong>{{ t('compiler') }}:</strong> {{ python_info.compiler }}</p>
                 </div>
             </div>
         </div>
 
         <div class="col-md-3 mt-2">
             <div class="card h-100">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-dark text-white">
                     <i class="bi bi-docker me-2"></i> Docker
                 </div>
                 <div class="card-body">
@@ -121,45 +123,7 @@
 $(document).ready(function() {
     // Обработчик кнопки обновления
     $('#refreshDashboardBtn').on('click', function() {
-        $('#mainMenu a[data-section="dashboard"]').click();
-    });
-
-        // Обработчик кнопки установки
-        $('[data-action="installKnocking"]').on('click', function() {
-        const $btn = $(this);
-        $btn.prop('disabled', true).html(
-            '<span class="spinner-border spinner-border-sm" role="status"></span> Installing...'
-        );
-        
-        $.ajax({
-            url: '/',
-            type: 'POST',
-            data: {
-                section: 'knocking',
-                action: 'installKnocking'
-            },
-            dataType: 'json',
-            success: function(response) {
-                if (response.status === 'success') {
-                    toastr.success(response.message);
-                    // Обновляем интерфейс после установки
-                    setTimeout(() => {
-                        $('#mainMenu a[data-section="knocking"]').click();
-                    }, 2000);
-                } else {
-                    toastr.error(response.message);
-                    $btn.prop('disabled', false).html(
-                        '<i class="bi bi-download"></i> {{ t("install") }}'
-                    );
-                }
-            },
-            error: function(xhr, status, error) {
-                toastr.error('Installation request failed: ' + error);
-                $btn.prop('disabled', false).html(
-                    '<i class="bi bi-download"></i> {{ t("install") }}'
-                );
-            }
-        });
+        location.reload();
     });
 });
 </script>

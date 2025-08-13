@@ -2,7 +2,7 @@ import platform
 import subprocess
 from flask import render_template
 from starter_files.utils.i18n_utils import t
-from starter_files.utils.logger import get_logger
+from starter_files.utils.log_utils import get_logger
 
 logger = get_logger()
 

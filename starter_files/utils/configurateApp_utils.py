@@ -8,7 +8,7 @@ from flask import Flask, render_template, request
 from pathlib import Path
 
 from starter_files.utils.envStarter_utils import read_env_file
-from starter_files.utils.logger import get_logger
+from starter_files.utils.log_utils import get_logger
 from starter_files.utils.globalVars_utils import GlobalVars, set_global, get_global
 
 from starter_files.web.routes import routes

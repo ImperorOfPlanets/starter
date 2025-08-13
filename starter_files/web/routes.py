@@ -7,7 +7,7 @@ from pathlib import Path
 
 from starter_files.utils.i18n_utils import get_available_languages, t, set_language, get_current_language, return_basic
 from starter_files.utils.globalVars_utils import get_global
-from starter_files.utils.logger import get_logger
+from starter_files.utils.log_utils import get_logger
 
 routes = Blueprint('routes', __name__)
 
@@ -17,7 +17,7 @@ def get_current_sections_in_panel():
     
     starter_path = get_global('script_path')
 
-    sections_dir = starter_path / 'starter_files' / 'web' / 'section'
+    sections_dir = starter_path / 'starter_files' / 'web' / 'sections'
     
     for section_file in sections_dir.glob('*.py'):
         if section_file.stem == '__init__':
