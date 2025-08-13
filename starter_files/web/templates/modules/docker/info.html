@@ -110,13 +110,13 @@
 $(document).ready(function() {
     // Обработчик кнопки обновления
     $('#refreshDockerBtn').on('click', function() {
-        $('#mainMenu a[data-module="docker"]').click();
+        $('#mainMenu a[data-section="docker"]').click();
     });
 
     // Обработчик кнопки перезапуска Docker
     $('#restartDockerBtn').on('click', function() {
         if(confirm('{{ t("confirm_restart_docker") }}')) {
-            $.post('/', {module: 'docker', action: 'restart_docker'}, function(response) {
+            $.post('/', {section: 'docker', action: 'restart_docker'}, function(response) {
                 alert(response.message);
                 $('#refreshDockerBtn').click();
             }).fail(function() {
@@ -128,7 +128,7 @@ $(document).ready(function() {
     // Обработчик кнопки очистки системы
     $('#pruneSystemBtn').on('click', function() {
         if(confirm('{{ t("confirm_prune_system") }}')) {
-            $.post('/', {module: 'docker', action: 'prune_system'}, function(response) {
+            $.post('/', {section: 'docker', action: 'prune_system'}, function(response) {
                 alert(response.message);
                 $('#refreshDockerBtn').click();
             }).fail(function() {

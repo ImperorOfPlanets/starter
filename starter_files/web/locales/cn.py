@@ -67,7 +67,7 @@ translations = {
     # ==================== 控制面板 ====================
     "dashboard": "仪表盘",
     "control_panel": "控制面板",
-    "modules": "模块",
+    "sections": "模块",
 
     # ==================== PORT KNOCKING ====================
     "port_knocking": "端口敲门",
@@ -108,7 +108,7 @@ translations = {
     "filter": "筛选",
 
     # ==================== 错误消息 ====================
-    "error_loading_module": "模块加载错误",
+    "error_loading_section": "模块加载错误",
     "network_error_occurred": "发生网络错误",
     "action_failed": "操作失败",
     "permission_denied": "权限不足",

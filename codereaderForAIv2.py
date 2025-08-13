@@ -16,8 +16,16 @@ class CodeReaderConfig:
         'locales',
 
         # Шаблоны
-        # 'templates'
-                   
+        'templates',
+
+        # Зависимости
+        'requirements',
+
+        # Исключения
+        'exceptions',
+
+        # web
+        'web'          
     ]
     IGNORE_FILES = [
         # Дефолтный мусор

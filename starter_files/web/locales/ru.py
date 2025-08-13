@@ -8,11 +8,11 @@ translations = {
 
         # Текста выводимы при ошибка или отсутствии переводов
         "this_error_missing_common": "[{lang}] Отсутствует перевод: common['{key}']",
-        "this_error_missing_module": "[{lang}] Отсутствует перевод: modules['{module}']['?']['{key}']",
-        "this_error_invalid_module": "[{lang}] Некорректный модуль: modules['{module}'] не является словарём",
+        "this_error_missing_section": "[{lang}] Отсутствует перевод: sections['{section}']['?']['{key}']",
+        "this_error_invalid_section": "[{lang}] Некорректный модуль: sections['{section}'] не является словарём",
         "this_error_missing_main": "[{lang}] Отсутствует перевод: main['{section}']['{key}']",
         "this_error_missing_section": "[{lang}] Отсутствует раздел: main['{section}'] не существует",
-        "this_error_invalid_key": "[{lang}] Некорректный ключ: '{key}' (ожидается section_key или module_file_key)"
+        "this_error_invalid_key": "[{lang}] Некорректный ключ: '{key}' (ожидается section_key или section_file_key)"
     },
 
     # ==================== ПЕРЕМЕННЫЕ ОСНОВНОГО ШАБЛОНА (Файлы находящиеся в папке templates) ====================
@@ -61,16 +61,16 @@ translations = {
         "controlPanel":{
             "loading": "Загрузка...",
             "action_error": "Ошибка выполнения действия",
-            "module_error": "Ошибка загрузки модуля",
+            "section_error": "Ошибка загрузки модуля",
             "parse_error": "Ошибка разбора данных",
             "status": "Статус",
             "error": "Ошибка",
         }
     },
 
-    # ==================== ПЕРЕМЕННЫЕ МОДУЛЕЙ (Файлы находящиеся в папке templates/modules) ====================
+    # ==================== ПЕРЕМЕННЫЕ МОДУЛЕЙ (Файлы находящиеся в папке templates/sections) ====================
 
-    "modules":{
+    "sections":{
 
         # ==================== DASHBOARD ====================
         'dashboard': {

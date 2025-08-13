@@ -58,7 +58,7 @@ $(document).ready(function() {
         if(confirm('{{ t("confirm_remove_image") }}')) {
             const imageId = $(this).data('id');
             $.post('/', {
-                module: 'docker',
+                section: 'docker',
                 action: 'image_action',
                 image_id: imageId,
                 action_type: 'remove'

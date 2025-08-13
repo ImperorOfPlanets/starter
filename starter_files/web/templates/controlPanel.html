@@ -3,10 +3,10 @@
     <div class="col-md-3 col-lg-2 d-md-block sidebar">
         <div class="position-sticky pt-3">
             <ul class="nav flex-column" id="mainMenu">
-                {% for module in modules_in_control_panel %}
+                {% for section in sections_in_control_panel %}
                 <li class="nav-item">
-                    <a class="nav-link {% if loop.first %}active bg-primary text-white{% endif %}" href="#" data-module="{{ module.module_slug }}">
-                        <i class="bi {{ module.module_icon }} me-2"></i> {{ module.module_name }}
+                    <a class="nav-link {% if loop.first %}active bg-primary text-white{% endif %}" href="#" data-section="{{ section.section_slug }}">
+                        <i class="bi {{ section.section_icon }} me-2"></i> {{ section.section_name }}
                     </a>
                 </li>
                 {% endfor %}
@@ -24,8 +24,8 @@
         
         <div id="contentArea">
             <!-- Здесь будут модули -->
-            {% for module in modules_in_control_panel %}
-            <div id="{{ module.module_slug }}Module" class="module-content {% if loop.first %}active{% else %}d-none{% endif %}" data-loaded="{% if loop.first %}true{% else %}false{% endif %}">
+            {% for section in sections_in_control_panel %}
+            <div id="{{ section.section_slug }}Section" class="section-content {% if loop.first %}active{% else %}d-none{% endif %}" data-loaded="{% if loop.first %}true{% else %}false{% endif %}">
                 {% if loop.first %}
                     <!-- Первый модуль загружается сразу -->
                 {% endif %}
@@ -41,26 +41,26 @@ $(document).ready(function() {
     const translations = {
         loading: "{{ t('controlPanel_loading') }}",
         action_error: "{{ t('controlPanel_action_error') }}",
-        module_error: "{{ t('controlPanel_module_error') }}",
+        section_error: "{{ t('controlPanel_section_error') }}",
         parse_error: "{{ t('controlPanel_parse_error') }}"
     };
 
     // Initialize menu
     initMenu();
     
-    // Load first module on initial load
-    const firstModuleLink = $('#mainMenu a.nav-link.active').first();
-    if (firstModuleLink.length) {
-        loadModule(firstModuleLink.data('module'), true);
+    // Load first section on initial load
+    const firstSectionLink = $('#mainMenu a.nav-link.active').first();
+    if (firstSectionLink.length) {
+        loadSection(firstSectionLink.data('section'), true);
     }
 
     // Универсальный обработчик действий внутри модулей
-    $(document).on('click', '.module-content [data-action]', function(e) {
+    $(document).on('click', '.section-content [data-action]', function(e) {
         e.preventDefault();
         
         const $this = $(this);
         const action = $this.data('action');
-        const module = $this.closest('.module-content').attr('id').replace('Module', '');
+        const section = $this.closest('.section-content').attr('id').replace('Section', '');
         const acceptType = $this.data('accept') || 'html';
         
         // Получаем дополнительные данные
@@ -76,11 +76,11 @@ $(document).ready(function() {
         
         // Показываем спиннер
         const $spinner = $('#loadingSpinner').show();
-        const $target = $this.closest('.module-content').find('#dockerContent');
+        const $target = $this.closest('.section-content').find('#dockerContent');
         
         // Формируем запрос
         const requestData = {
-            module: module,
+            section: section,
             action: action,
             ...additionalData
         };
@@ -135,28 +135,28 @@ function initMenu() {
         e.preventDefault();
         
         const $this = $(this);
-        const module = $this.data('module');
+        const section = $this.data('section');
         
         if ($this.hasClass('active')) return;
         
         $('#mainMenu a.nav-link').removeClass('active bg-primary text-white');
         $this.addClass('active bg-primary text-white');
-        switchModule(module);
+        switcSection(section);
     });
 }
 
-function switchModule(module) {
-    $('.module-content').removeClass('active').addClass('d-none');
-    const $moduleElement = $(`#${module}Module`);
-    $moduleElement.removeClass('d-none').addClass('active');
+function switchSection(section) {
+    $('.section-content').removeClass('active').addClass('d-none');
+    const $sectionElement = $(`#${section}Section`);
+    $sectionElement.removeClass('d-none').addClass('active');
     
-    if ($moduleElement.data('loaded') !== true) {
-        loadModule(module, false);
+    if ($sectionElement.data('loaded') !== true) {
+        loadSection(section, false);
     }
 }
 
-function loadModule(module, isInitialLoad) {
-    const $moduleElement = $(`#${module}Module`);
+function loadSection(section, isInitialLoad) {
+    const $sectionElement = $(`#${section}Section`);
     const $spinner = $('#loadingSpinner');
     
     $spinner.css({
@@ -166,30 +166,30 @@ function loadModule(module, isInitialLoad) {
         'height': '200px'
     }).show();
     
-    $moduleElement.html('').addClass('loading');
+    $sectionElement.html('').addClass('loading');
     
     $.ajax({
         url: '/',
         method: 'POST',
         data: {
-            module: module,
+            section: section,
             action: 'index'
         },
         dataType: 'html',
         success: function(response, status, xhr) {
-            $moduleElement.html(response);
-            $moduleElement.data('loaded', true);
+            $sectionElement.html(response);
+            $sectionElement.data('loaded', true);
             $spinner.hide();
         },
         error: function(xhr, status, error) {
-            $moduleElement.html(`
+            $sectionElement.html(`
                 <div class="alert alert-danger">
-                    <h5>${translations.module_error}</h5>
+                    <h5>${translations.section_error}</h5>
                     <p>${translations.control_panel_status}: ${status}</p>
                     <p>${translations.control_panel_error}: ${error}</p>
                 </div>
             `);
-            $moduleElement.data('loaded', true);
+            $sectionElement.data('loaded', true);
             $spinner.hide();
         }
     });

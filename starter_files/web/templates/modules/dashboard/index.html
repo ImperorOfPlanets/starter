@@ -121,7 +121,7 @@
 $(document).ready(function() {
     // Обработчик кнопки обновления
     $('#refreshDashboardBtn').on('click', function() {
-        $('#mainMenu a[data-module="dashboard"]').click();
+        $('#mainMenu a[data-section="dashboard"]').click();
     });
 
         // Обработчик кнопки установки
@@ -135,7 +135,7 @@ $(document).ready(function() {
             url: '/',
             type: 'POST',
             data: {
-                module: 'knocking',
+                section: 'knocking',
                 action: 'installKnocking'
             },
             dataType: 'json',
@@ -144,7 +144,7 @@ $(document).ready(function() {
                     toastr.success(response.message);
                     // Обновляем интерфейс после установки
                     setTimeout(() => {
-                        $('#mainMenu a[data-module="knocking"]').click();
+                        $('#mainMenu a[data-section="knocking"]').click();
                     }, 2000);
                 } else {
                     toastr.error(response.message);

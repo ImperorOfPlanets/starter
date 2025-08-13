@@ -5,7 +5,9 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
+
 from starter_files.utils import venv_utils
+from starter_files.utils.globalVars_utils import GlobalVars, set_global, get_global
 
 def parse_args():
     """Парсит аргументы командной строки"""
@@ -19,13 +21,13 @@ def start_service_mode():
 
 def start_interactive_mode():
     # Обычный режим
-    from starter_files.utils.configurate_app import configure_app
-    from starter_files.web.utils.ssl import get_ssl_context
-    from starter_files.utils.first_setup_utils import open_browser
+    from starter_files.utils.configurateApp_utils import configure_app
+    from starter_files.utils.ssl_utils import get_ssl_context
+    from starter_files.utils.firstSetup_utils import open_browser
     from dotenv import load_dotenv
 
     # Проверка .env
-    script_dir = Path(sys.argv[0]).absolute().parent
+    script_dir = get_global('script_path')
     env_path = script_dir / '.env'
     print("Путь до файла файла .env ...")
     print(env_path)
@@ -161,28 +163,26 @@ if __name__ == '__main__':
         import flask
         import dotenv
     except ImportError:
-        from starter_files.utils.requirements_check import install_and_restart
+        from starter_files.utils.requirements_utils import install_and_restart
         install_and_restart()
 
     # Получаем инфомрацию о системе и зхаписываем в глоабльыне переменные
-    from starter_files.utils.sysinfo import collect_basic_system_info
+    from starter_files.utils.sysinfo_utils import collect_basic_system_info
     collect_basic_system_info()
 
     # Устанавливаем глобальный обработчик исключений
-    from starter_files.utils.exception_handler import ExceptionHandler
+    from starter_files.utils.exceptionHandler_utils import ExceptionHandler
     handler = ExceptionHandler()
     sys.excepthook = handler.handle_unhandled_exception
-
-    # Проверка и установка всех нужных утилит в зависимсости от ОС
 
     # Проверка только в основном процессе
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
         # Проверка .env
-        script_dir = Path(sys.argv[0]).absolute().parent
+        script_dir = get_global('script_path')
         env_path = script_dir / '.env'
         if not env_path.exists():
             print("Файл .env не найден! Создаем базовую конфигурацию...")
-            from starter_files.utils.first_setup_utils import first_run_setup
+            from starter_files.utils.firstSetup_utils import first_run_setup
             is_first_run, credentials = first_run_setup()
             
             if is_first_run and credentials:                

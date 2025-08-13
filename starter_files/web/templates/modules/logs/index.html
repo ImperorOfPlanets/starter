@@ -3,14 +3,14 @@
         <div class="col-md-3">
             <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-list-ul me-2"></i> {{ t('modules.logs.index.logs_types') }}
+                    <i class="bi bi-list-ul me-2"></i> {{ t('sections.logs.index.logs_types') }}
                 </div>
                 <div class="list-group list-group-flush">
                     {% for type_key, type_name in log_types.items() %}
                     <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center 
                                       {% if loop.first %}active{% endif %}"
-                       data-action="loadModule" 
-                       data-data='{"module": "logs", "action": "view", "type": "{{ type_key }}"}'>
+                       data-action="loadSection" 
+                       data-data='{"section": "logs", "action": "view", "type": "{{ type_key }}"}'>
                         {{ type_name }}
                         <span class="badge bg-primary rounded-pill">
                             {{ get_log_files(type_key)|length }}
@@ -24,18 +24,18 @@
         <div class="col-md-9">
             <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-info-circle me-2"></i> {{ t('modules.logs.index.logs_info') }}
+                    <i class="bi bi-info-circle me-2"></i> {{ t('sections.logs.index.logs_info') }}
                 </div>
                 <div class="card-body">
-                    <h5>{{ t('modules.logs.index.logs_about') }}</h5>
-                    <p>{{ t('modules.logs.index.logs_description') }}</p>
+                    <h5>{{ t('sections.logs.index.logs_about') }}</h5>
+                    <p>{{ t('sections.logs.index.logs_description') }}</p>
                     
                     <div class="alert alert-info mt-3">
-                        <h5><i class="bi bi-lightbulb"></i> {{ t('modules.logs.index.logs_how_to_use') }}</h5>
+                        <h5><i class="bi bi-lightbulb"></i> {{ t('sections.logs.index.logs_how_to_use') }}</h5>
                         <ol>
-                            <li>{{ t('modules.logs.index.logs_step1') }}</li>
-                            <li>{{ t('modules.logs.index.logs_step2') }}</li>
-                            <li>{{ t('modules.logs.index.logs_step3') }}</li>
+                            <li>{{ t('sections.logs.index.logs_step1') }}</li>
+                            <li>{{ t('sections.logs.index.logs_step2') }}</li>
+                            <li>{{ t('sections.logs.index.logs_step3') }}</li>
                         </ol>
                     </div>
                 </div>
@@ -47,7 +47,7 @@
 $(document).ready(function() {
     // Обработчик кнопки обновления
     $('[data-action="refreshLogs"]').on('click', function() {
-        $('#mainMenu a[data-module="logs"]').click();
+        $('#mainMenu a[data-section="logs"]').click();
     });
 });
 </script>
