@@ -49,8 +49,6 @@ if __name__ == '__main__':
     if venv_utils.ensure_venv():
         sys.exit(0)
 
-    args = parse_args()
-
     # Проверка установки зависимостей
     try:
         import flask
@@ -63,6 +61,18 @@ if __name__ == '__main__':
     from starter_files.utils.exceptionHandler_utils import ExceptionHandler
     handler = ExceptionHandler()
     sys.excepthook = handler.handle_unhandled_exception
+
+    # Выполняем первичную настройку если нужно
+    from starter_files.utils.firstSetup_utils import first_run_setup
+    is_first_run, credentials = first_run_setup()
+    if is_first_run and credentials:
+        print("\n=== Первичная настройка завершена ===")
+        print(f"Логин: {credentials['login']}")
+        print(f"Пароль: {credentials['password']}")
+        print("Сохраните эти данные!")
+        print("="*50 + "\n")
+
+    args = parse_args()
 
     # Сервисный режим
     if args.service:

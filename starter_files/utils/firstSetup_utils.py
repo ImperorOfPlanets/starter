@@ -9,7 +9,7 @@ from typing import Dict, Optional, Tuple
 from starter_files.utils.envStarter_utils import read_env_file, parse_env_content, generate_env_content
 from starter_files.utils.i18n_utils import get_available_languages
 from starter_files.utils.molule_utils import get
-from starter_files.utils.globalVars_utils import GlobalVars, set_global, get_global
+from starter_files.utils.globalVars_utils import get_global
 
 # Обязательные переменные для первоначальной настройки asd sa
 REQUIRED_ENV_VARS = [
