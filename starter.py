@@ -12,8 +12,6 @@ from starter_files.utils.oss.default.system import SystemModule
 
 # Устанавливает глобальные переменные
 SystemModule.collect_basic_system_info()
-print(get_global('os'))
-print(get_global('script_path'))
 
 def parse_args():
     """Парсит аргументы командной строки"""
@@ -63,25 +61,22 @@ if __name__ == '__main__':
     handler = ExceptionHandler()
     sys.excepthook = handler.handle_unhandled_exception
 
-    if os.environ.get('WERKZEUG_RUN_MAIN') is None:
-        # Это watcher, можно пропустить setup
-        print("[DEBUG] Первый процесс Flask reloader — пропускаем первичную настройку")
-    else:
-        # Основной процесс — делаем setup
-        from starter_files.utils.firstSetup_utils import first_run_setup
-        is_first_run, credentials = first_run_setup()
-        if is_first_run and credentials:
-            print("\n=== Первичная настройка завершена ===")
-            print(f"Логин: {credentials['login']}")
-            print(f"Пароль: {credentials['password']}")
-            print("Сохраните эти данные!")
-            print("="*50 + "\n")
+    from starter_files.utils.firstSetup_utils import first_run_setup
+    is_first_run, credentials = first_run_setup()
+    if is_first_run and credentials:
+        print("\n=== Первичная настройка завершена ===")
+        print(f"Логин: {credentials['login']}")
+        print(f"Пароль: {credentials['password']}")
+        print("Сохраните эти данные!")
+        print("="*50 + "\n")
 
-    # Считываем заново переменные из .env
-    from dotenv import load_dotenv
-    env_file = Path(get_global('script_path')) / '.env'
-    load_dotenv(env_file)
-    print(f"[DEBUG] Переменные окружения загружены из {env_file}")
+    if os.environ.get('WERKZEUG_RUN_MAIN') is None:
+        # Основной процесс FLASK - ПЕРЕЗАПУСКАЕТЬСЯ КОТОРЫЙ
+        from dotenv import load_dotenv
+        env_file = Path(get_global('script_path')) / '.env'
+        load_dotenv(env_file)
+        print(f"[DEBUG] Переменные окружения загружены из {env_file}")
+
 
     args = parse_args()
 

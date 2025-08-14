@@ -42,31 +42,22 @@ def load_module_from_path(path: Path, module_name: str) -> object:
     
     return None
 
-
 def load_module(module_name: str) -> object:
     """
     Загружает модуль по приоритету:
     1. Конкретная версия ОС
     2. Default для ОС
     3. Общий default
+    При первой загрузке выводит список всех найденных файлов модулей.
     """
     os_name = get_global('os')
-    logger.debug(f"[DEBUG VAR] os_name = {os_name}")
-
     os_version = get_global('os_version')
-    logger.debug(f"[DEBUG VAR] os_version = {os_version}")
 
     if os_name not in _loaded_modules_cache:
         _loaded_modules_cache[os_name] = {}
 
     if module_name in _loaded_modules_cache[os_name]:
-        cached = _loaded_modules_cache[os_name][module_name]
-        logger.debug(f"[DEBUG VAR] cached = {cached}")
-        if cached is None:
-            logger.warning(f"[CACHE] Модуль {module_name} в кеше = None!")
-        else:
-            logger.debug(f"[CACHE] Модуль {module_name} загружен из кеша для ОС {os_name}")
-        return cached
+        return _loaded_modules_cache[os_name][module_name]
 
     script_path = Path(get_global('script_path'))
     search_paths = [
@@ -74,41 +65,59 @@ def load_module(module_name: str) -> object:
         script_path / 'starter_files' / 'utils' / 'oss' / os_name / 'default' / f"{module_name}.py",
         script_path / 'starter_files' / 'utils' / 'oss' / 'default' / f"{module_name}.py"
     ]
-    logger.debug(f"[DEBUG VAR] search_paths = {search_paths}")
 
-    logger.info(f"[SEARCH] Ищем модуль '{module_name}' для ОС '{os_name}'")
-    found = False
+    # === Логируем все найденные пути ===
+    logger.info(f"[INFO] Проверка путей для модуля '{module_name}':")
+    found_paths = []
     for path in search_paths:
-        logger.debug(f"[DEBUG VAR] path check = {path}")
         if path.exists():
-            found = True
-            logger.info(f"[FOUND] Найден файл модуля: {path}")
-            module_class = load_module_from_path(path, module_name)
-            logger.debug(f"[DEBUG VAR] module_class = {module_class}")
-
-            if module_class:
-                check_result = getattr(module_class, 'check', lambda: False)()
-                logger.debug(f"[DEBUG VAR] check_result = {check_result}")
-                logger.info(f"[CHECK] check() -> {check_result} для {module_name}")
-
-                if check_result:
-                    _loaded_modules_cache[os_name][module_name] = module_class
-                    logger.info(f"[LOAD] Загружен модуль: {path}")
-                    return module_class
-                else:
-                    logger.warning(f"[CHECK FAILED] check() вернул False для {module_name}")
+            logger.info(f"  [FOUND FILE] {path}")
+            found_paths.append(path)
         else:
-            logger.debug(f"[NOT FOUND] Путь не найден: {path}")
+            logger.info(f"  [NOT FOUND] {path}")
 
-    if not found:
-        logger.warning(f"[WARN] Модуль {module_name} не найден ни в одном пути, будет создан stub.")
+    # Перебор для загрузки первого рабочего модуля
+    for path in search_paths:
+        logger.debug(f"[DEBUG] Проверяем путь: {path}")
 
+        if not path.exists():
+            logger.debug(f"[DEBUG] Файл не найден: {path}")
+            continue
+
+        logger.info(f"[FOUND] Файл модуля найден: {path}")
+
+        module_class = load_module_from_path(path, module_name)
+        if module_class is None:
+            logger.warning(f"[WARNING] Не удалось загрузить класс из {path}")
+            continue
+
+        logger.debug(f"[DEBUG] Загруженный класс: {module_class}")
+
+        check_method = getattr(module_class, 'check', None)
+        if check_method is None:
+            logger.warning(f"[WARNING] В классе {module_class} отсутствует метод check()")
+            continue
+
+        logger.debug(f"[DEBUG] Вызываем check() для {module_class}")
+        try:
+            check_result = check_method()
+        except Exception as e:
+            logger.error(f"[ERROR] Ошибка при вызове check() для {module_class}: {e}", exc_info=True)
+            continue
+
+        logger.info(f"[CHECK] check() -> {check_result} для {module_name}")
+
+        if check_result:
+            _loaded_modules_cache[os_name][module_name] = module_class
+            logger.info(f"[LOAD] Модуль {module_name} успешно загружен из {path}")
+            return module_class
+        else:
+            logger.warning(f"[CHECK FAILED] check() вернул False для {module_name} в {path}")
+    
+    # Если модуль не найден — создаем stub
     default_stub_dir = script_path / 'starter_files' / 'utils' / 'oss' / os_name / 'default'
-    logger.debug(f"[DEBUG VAR] default_stub_dir = {default_stub_dir}")
-
     default_stub_dir.mkdir(parents=True, exist_ok=True)
     stub_path = default_stub_dir / f"{module_name}.py"
-    logger.debug(f"[DEBUG VAR] stub_path = {stub_path}")
 
     if not stub_path.exists():
         with open(stub_path, 'w', encoding='utf-8') as f:
@@ -124,8 +133,6 @@ class {module_name.capitalize()}Module:
         logger.info(f"[STUB] Создан stub: {stub_path}")
 
     module_class = load_module_from_path(stub_path, module_name)
-    logger.debug(f"[DEBUG VAR] stub module_class = {module_class}")
-
     _loaded_modules_cache[os_name][module_name] = module_class
     logger.error(f"[ERROR] Module {module_name} not found! Stub используется: {stub_path}")
     return module_class

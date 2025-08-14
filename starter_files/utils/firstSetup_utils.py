@@ -19,11 +19,10 @@ REQUIRED_ENV_VARS = [
     'APP_SECRET_KEY'
 ]
 
-def is_first_run(env_path: Path = Path('.env')) -> bool:
+def is_first_run() -> bool:
     """Проверяет, является ли этот запуск первым"""
-    if env_path is None:
-        base_dir = get_global('script_path')
-        env_path = base_dir / '.env'
+    base_dir = get_global('script_path')
+    env_path = base_dir / '.env'
 
     print(f"[DEBUG] Проверка .env файла: {env_path.resolve()}")
 

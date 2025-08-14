@@ -44,7 +44,7 @@ class NetworkModule:
     @staticmethod
     def check() -> bool:
         """Всегда возвращает False, так как модуль не реализован"""
-        return False
+        return True
     
     @staticmethod
     def get_ips() -> list:
@@ -80,23 +80,38 @@ class NetworkModule:
 
         ips = set()
         system = platform.system()
-
-        if system == "Windows":
-            hostname = socket.gethostname()
-            ips.add(socket.gethostbyname(hostname))
-        else:
-            try:
-                output = subprocess.check_output("ip -4 addr", shell=True, text=True)
-                for line in output.splitlines():
-                    line = line.strip()
-                    if line.startswith("inet "):
-                        ip = line.split()[1].split("/")[0]
-                        ips.add(ip)
-            except Exception:
-                # fallback
-                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                    s.connect(("8.8.8.8", 80))
-                    ips.add(s.getsockname()[0])
+        
+        try:
+            if system == "Windows":
+                hostname = socket.gethostname()
+                ips.add(socket.gethostbyname(hostname))
+            else:  # POSIX
+                # Пытаемся через 'ip'
+                try:
+                    output = subprocess.check_output("ip -4 addr", shell=True, text=True, stderr=subprocess.DEVNULL)
+                    for line in output.splitlines():
+                        line = line.strip()
+                        if line.startswith("inet "):
+                            ip = line.split()[1].split("/")[0]
+                            if not ip.startswith("127."):
+                                ips.add(ip)
+                except Exception:
+                    # fallback через ifconfig
+                    try:
+                        output = subprocess.check_output("ifconfig", shell=True, text=True, stderr=subprocess.DEVNULL)
+                        for line in output.splitlines():
+                            line = line.strip()
+                            if "inet " in line and not line.startswith("127."):
+                                ip = line.split()[1]
+                                ips.add(ip)
+                    except Exception:
+                        # fallback через сокет
+                        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                            s.connect(("8.8.8.8", 80))
+                            ips.add(s.getsockname()[0])
+        except Exception as e:
+            # На всякий случай, чтобы функция не падала
+            print(f"[WARN] Не удалось получить локальные IP: {e}")
 
         ips_list = list(ips)
         set_global('local_ips', ips_list)
