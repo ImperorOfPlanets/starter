@@ -1,4 +1,5 @@
 import json
+import str
 import sys
 import traceback
 
@@ -7,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from starter_files.utils.globalVars_utils import GlobalVars, set_global, get_global
+from starter_files.utils.globalVars_utils import get_global
 
 class ExceptionHandler:
     """Класс для обработки и логирования необработанных исключений"""

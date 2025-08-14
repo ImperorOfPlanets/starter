@@ -1,7 +1,7 @@
 import os
 import sys
 
-from flask import Blueprint, current_app, g, jsonify, render_template, request, session
+from flask import Blueprint, current_app, g, jsonify, render_template, request, session, Response
 from importlib import import_module
 from pathlib import Path
 
@@ -85,7 +85,11 @@ def handle_sections():
         
         data = {k: v for k, v in request.form.items() if k not in ['section', 'action']}
         result = getattr(section, action_name)(data, session)
-        
+
+        # Добавленная проверка типа результата
+        if isinstance(result, Response):
+            return result  # Возвращаем Response как есть
+
         # Обработка результата с учётом Accept заголовка
         if 'text/html' in request.accept_mimetypes:
             if isinstance(result, str):

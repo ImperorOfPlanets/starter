@@ -2,10 +2,10 @@ import abc
 import logging
 
 class BaseModule(abc.ABC):
-    @classmethod
+
+    @staticmethod
     @abc.abstractmethod
-    def check(cls) -> bool:
-        """Проверяет доступность модуля в системе"""
+    def check() -> bool:
         return True
     
     @classmethod

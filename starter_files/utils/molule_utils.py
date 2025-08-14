@@ -1,7 +1,6 @@
 import logging
 from pathlib import Path
-from starter_files.utils.oss.module_loader import load_module
-from starter_files.utils.oss.module_loader import _create_default_stub  # приватная, но используем
+from starter_files.utils.oss.module_loader import load_module, _create_default_stub
 
 logger = logging.getLogger('oss_utils')
 

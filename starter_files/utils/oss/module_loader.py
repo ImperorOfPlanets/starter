@@ -7,6 +7,29 @@ from pathlib import Path
 
 logger = logging.getLogger('module_loader')
 
+def load_module_from_path(path: Path, module_name: str) -> object:
+    """Загружает модуль из указанного пути"""
+    try:
+        module_spec = importlib.util.spec_from_file_location(
+            f"oss.{module_name}", 
+            path
+        )
+        module = importlib.util.module_from_spec(module_spec)
+        sys.modules[module_spec.name] = module
+        module_spec.loader.exec_module(module)
+        
+        class_name = f"{module_name.capitalize()}Module"
+        module_class = getattr(module, class_name)
+        
+        if module_class.check():
+            logger.info(f"Loaded module: {path}")
+            return module_class
+            
+    except Exception as e:
+        logger.error(f"Error loading module from {path}: {str(e)}", exc_info=True)
+    
+    return None
+
 def load_module(module_name: str) -> object:
     """
     Загружает модуль по приоритету:
@@ -16,16 +39,26 @@ def load_module(module_name: str) -> object:
     """
     os_name = platform.system().lower()
     os_version = _get_os_version(os_name)
-    
+
     # Пути для поиска
     search_paths = [
         Path(__file__).parent / 'oss' / os_name / os_version / f"{module_name}.py",
         Path(__file__).parent / 'oss' / os_name / 'default' / f"{module_name}.py",
         Path(__file__).parent / 'oss' / 'default' / f"{module_name}.py"
     ]
-    
+
+    # Убираем дубликаты и несуществующие пути
+    valid_paths = []
     for path in search_paths:
+        if path not in valid_paths and path.exists():
+            valid_paths.append(path)
+    
+    logger.info(f"Searching for {module_name} module in paths: {valid_paths}")
+
+    for path in search_paths:
+        logger.info(f"Checking path: {path}")
         if not path.exists():
+            logger.info(f"Path not found: {path}")
             continue
             
         try:
@@ -48,17 +81,16 @@ def load_module(module_name: str) -> object:
                 
         except Exception as e:
             logger.error(f"Ошибка загрузки модуля {path}: {str(e)}")
-    
-    # Создаем заглушку в default для ОС
+
+    # Создаем заглушку только в default для ОС
     default_path = _create_default_stub(module_name, os_name)
-    logger.error(f"Модуль {module_name} не найден! Создана заглушка: {default_path}")
+    logger.error(f"Module {module_name} not found! Created stub: {default_path}")
     
     # Пытаемся загрузить заглушку
     try:
-        from starter_files.utils.oss.oss.default import network
-        return network.NetworkModule
-    except ImportError:
-        logger.critical("Не удалось загрузить даже заглушку!")
+        return load_module_from_path(default_path, module_name)
+    except Exception as e:
+        logger.critical(f"Failed to load stub module: {str(e)}")
         return None
 
 def _get_os_version(os_name: str) -> str:
@@ -86,25 +118,18 @@ def _create_default_stub(module_name: str, os_name: str) -> Path:
     stub_path = default_dir / f"{module_name}.py"
     
     if not stub_path.exists():
-        with open(stub_path, 'w') as f:
-            stub_content = f'''"""
+        with open(stub_path, 'w', encoding='utf-8') as f:  # Явно указываем кодировку
+            stub_content = f'''# -*- coding: utf-8 -*-
+"""
 ЗАГЛУШКА ДЛЯ МОДУЛЯ {module_name.upper()}
 Требуется реализация для ОС: {os_name}
 """
 
-from starter_files.utils.oss.base_module import BaseModule
-
-class {module_name.capitalize()}Module(BaseModule):
-    @classmethod
-    def check(cls) -> bool:
+class {module_name.capitalize()}Module:
+    @staticmethod
+    def check() -> bool:
         """Всегда возвращает False, так как модуль не реализован"""
         return False
-    
-    @staticmethod
-    def get_ips() -> list:
-        """Заглушка для получения IP-адресов"""
-        from starter_files.utils.oss.oss.default.network import NetworkModule
-        return NetworkModule.get_ips()
 '''
             f.write(stub_content)
     

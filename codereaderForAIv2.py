@@ -19,7 +19,7 @@ class CodeReaderConfig:
         'templates',
 
         # Зависимости
-        'requirements',
+        # 'requirements',
 
         # Исключения
         'exceptions',

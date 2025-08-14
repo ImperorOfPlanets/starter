@@ -1,0 +1,40 @@
+{
+  "timestamp": "2025-08-13T13:20:40.365533",
+  "type": "SyntaxError",
+  "message": "invalid syntax (molule_utils.py, line 4)",
+  "traceback": [
+    "Traceback (most recent call last):\n",
+    "  File \"/app/starter/starter.py\", line 198, in <module>\n    start_interactive_mode()\n",
+    "  File \"/app/starter/starter.py\", line 26, in start_interactive_mode\n    from starter_files.utils.firstSetup_utils import open_browser\n",
+    "  File \"/app/starter/starter_files/utils/firstSetup_utils.py\", line 11, in <module>\n    from starter_files.utils.molule_utils import get\n",
+    "  File \"/app/starter/starter_files/utils/molule_utils.py\", line 4\n",
+    "    from starter_files.utils.oss.module_loader import \n",
+    "                                                      ^\n",
+    "SyntaxError: invalid syntax\n"
+  ],
+  "system_info": {
+    "os": "Linux",
+    "os_version": "#1 SMP Tue Nov 5 00:21:55 UTC 2024",
+    "os_release": "5.15.167.4-microsoft-standard-WSL2",
+    "architecture": "x86_64",
+    "hostname": "20d064d58cdd",
+    "username": "N/A",
+    "current_time": "2025-08-13 13:20:40",
+    "is_service": false,
+    "python_info": {
+      "version": "3.12.3",
+      "implementation": "CPython",
+      "compiler": "GCC 13.3.0",
+      "executable": "/app/starter/venv/bin/python"
+    },
+    "environment_vars": {
+      "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "LANG": null,
+      "HOME": "/root"
+    }
+  },
+  "app_state": {
+    "global_vars": {},
+    "last_operation": null
+  }
+}

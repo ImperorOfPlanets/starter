@@ -179,7 +179,19 @@ translations = {
                 "prune_system": "Очистить систему",
                 "confirm_restart_docker": "Вы уверены, что хотите перезапустить Docker? Это может остановить все работающие контейнеры.",
                 "confirm_prune_system": "Вы уверены, что хотите очистить систему Docker? Это удалит все неиспользуемые контейнеры, сети, образы и тома.",
-                "request_failed": "Не удалось выполнить запрос"
+                "request_failed": "Не удалось выполнить запрос",
+                "install_docker": "Установить Docker",
+                "confirm_install_docker": "Это установит Docker на вашу систему. Продолжить?",
+                "installing": "Установка...",
+                "docker_installed_success": "Docker успешно установлен! Перезапустите сессию.",
+                "docker_install_failed": "Ошибка установки Docker. Смотрите логи для деталей.",
+                "download_logs": "Скачать логи",
+                "log_request_failed": "Ошибка получения логов",
+                "start_install_failed": "Ошибка запуска установки",
+                "close": "Закрыть",
+                "refresh": "Обновить",
+                "installation_started": "Установка начата",
+                "docker_installation": "Установка Docker"
             },
 
             'containers': {

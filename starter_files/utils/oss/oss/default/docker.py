@@ -2,18 +2,30 @@ import json
 import logging
 import platform
 import subprocess
-
+import re
+from pathlib import Path
+import os
+import time
 from typing import Dict, List, Optional
+from starter_files.utils.molule_utils import get
+from datetime import datetime
 
-from starter_files.utils.i18n_utils import t
+logger = logging.getLogger('docker_oss')
 
 class DockerModule:
-    """Базовая реализация Docker утилит для неподдерживаемых ОС"""
-    
+    """Реализация Docker утилит"""
+
+    @classmethod
+    def check(cls) -> bool:
+        """
+        Проверяет, может ли этот модуль использоваться в текущей системе.
+        Для Docker всегда возвращаем True, так как это реализация по умолчанию.
+        """
+        return True
+
     @staticmethod
     def check_installed() -> bool:
         """Проверяет установлен ли Docker и возвращает статус"""
-        import subprocess
         try:
             result = subprocess.run(
                 ['docker', '--version'],
@@ -25,11 +37,9 @@ class DockerModule:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
 
-    
     @staticmethod
     def check_docker_compose_installed() -> bool:
         """Проверяет установлен ли Docker Compose и возвращает статус"""
-        import subprocess
         try:
             subprocess.run(
                 ['docker-compose', '--version'],
@@ -41,13 +51,184 @@ class DockerModule:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
 
-    
+    @staticmethod
+    def install_docker(log_file_path: str) -> Dict[str, str]:
+        """Устанавливает Docker и записывает логи в указанный файл"""
+        os_name = platform.system()
+        result = {'status': 'success', 'message': '', 'logs': []}
+        
+        try:
+            # Создаем директорию для логов, если нужно
+            log_dir = Path(log_file_path).parent
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Открываем файл для записи логов один раз на весь процесс установки
+            with open(log_file_path, 'w') as log_file:
+                def log(message):
+                    """Вспомогательная функция для записи в лог и в результат"""
+                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    log_entry = f"[{timestamp}] {message}"
+                    log_file.write(log_entry + '\n')
+                    log_file.flush()  # Обеспечиваем немедленную запись
+                    result['logs'].append(log_entry)
+                    logger.info(log_entry)
+                
+                log("Starting Docker installation...")
+                
+                commands = DockerModule.return_commands_install()
+                
+                # Выполняем команды установки
+                for cmd in commands:
+                    log(f"Executing: {cmd}")
+                    process = subprocess.Popen(
+                        cmd,
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,  # Объединяем stdout и stderr
+                        text=True,
+                        bufsize=1,  # Построчный буфер
+                        universal_newlines=True
+                    )
+                    
+                    # Читаем вывод в реальном времени
+                    for line in iter(process.stdout.readline, ''):
+                        if line:
+                            log(line.strip())
+                    
+                    # Проверяем статус завершения
+                    return_code = process.wait()
+                    if return_code != 0:
+                        log(f"Command failed with exit code {return_code}")
+                        result['status'] = 'error'
+                        result['message'] = f"Command failed: {cmd}"
+                        return result
+                
+                # Проверяем успешность установки
+                time.sleep(2)
+                if DockerModule.check_installed():
+                    log("Docker installed successfully! Please restart your session.")
+                    result['message'] = "Docker installed successfully! Please restart your session."
+                else:
+                    log("Installation completed but Docker not detected. Try restarting your system.")
+                    result['status'] = 'warning'
+                    result['message'] = "Installation completed but Docker not detected. Try restarting your system."
+        
+        except Exception as e:
+            # Записываем ошибку в лог
+            error_msg = f"Installation failed: {str(e)}"
+            try:
+                with open(log_file_path, 'a') as f:
+                    f.write(error_msg + '\n')
+            except:
+                logger.exception("Failed to write error to log file")
+            
+            result['status'] = 'error'
+            result['message'] = error_msg
+            logger.exception("Docker installation error")
+        
+        return result
+
+    @staticmethod
+    def return_commands_install() -> List[str]:
+        """Возвращает список команд для установки Docker в зависимости от ОС"""
+        os_name = platform.system()
+        commands = []
+        
+        try:
+            if os_name == 'Linux':
+                # Попробуем определить дистрибутив
+                distro_id = ""
+                version_id = ""
+                try:
+                    with open('/etc/os-release') as f:
+                        for line in f:
+                            if line.startswith('ID='):
+                                distro_id = line.split('=')[1].strip().strip('"')
+                            elif line.startswith('VERSION_ID='):
+                                version_id = line.split('=')[1].strip().strip('"')
+                except Exception:
+                    pass
+                
+                # Команды для Ubuntu/Debian
+                if distro_id in ['ubuntu', 'debian']:
+                    commands = [
+                        "sudo apt-get update -y",
+                        "sudo apt-get install -y ca-certificates curl gnupg lsb-release",
+                        "sudo mkdir -p /etc/apt/keyrings",
+                        "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg",
+                        "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] "
+                        f"https://download.docker.com/linux/ubuntu {version_id if version_id else 'jammy'} stable\" | "
+                        "sudo tee /etc/apt/sources.list.d/docker.list > /dev/null",
+                        "sudo apt-get update -y",
+                        "sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin",
+                        "sudo usermod -aG docker $USER"
+                    ]
+                # Команды для CentOS/RHEL
+                elif distro_id in ['centos', 'rhel']:
+                    commands = [
+                        "sudo yum install -y yum-utils",
+                        "sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo",
+                        "sudo yum install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin",
+                        "sudo systemctl start docker",
+                        "sudo systemctl enable docker",
+                        "sudo usermod -aG docker $USER"
+                    ]
+                # Команды для Fedora
+                elif distro_id == 'fedora':
+                    commands = [
+                        "sudo dnf -y install dnf-plugins-core",
+                        "sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo",
+                        "sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin",
+                        "sudo systemctl start docker",
+                        "sudo systemctl enable docker",
+                        "sudo usermod -aG docker $USER"
+                    ]
+                # Команды для Arch Linux
+                elif distro_id in ['arch', 'manjaro']:
+                    commands = [
+                        "sudo pacman -Sy --noconfirm docker docker-compose",
+                        "sudo systemctl start docker.service",
+                        "sudo systemctl enable docker.service",
+                        "sudo usermod -aG docker $USER"
+                    ]
+                else:
+                    commands = [
+                        "echo 'Unsupported Linux distribution detected'",
+                        "echo 'Please install Docker manually: https://docs.docker.com/engine/install/'"
+                    ]
+            
+            elif os_name == 'Darwin':  # macOS
+                commands = [
+                    # Проверяем установлен ли Homebrew
+                    "command -v brew >/dev/null || "
+                    "/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"",
+                    "brew install docker docker-compose"
+                ]
+            
+            elif os_name == 'Windows':
+                commands = [
+                    "echo 'Automatic Docker installation not supported on Windows'",
+                    "echo 'Please install Docker Desktop manually: https://docs.docker.com/desktop/install/windows-install/'"
+                ]
+            
+            else:
+                commands = [
+                    f"echo 'Unsupported operating system: {os_name}'",
+                    "echo 'Please install Docker manually: https://docs.docker.com/engine/install/'"
+                ]
+        
+        except Exception as e:
+            logger.error(f"Error generating Docker install commands: {str(e)}")
+            commands = [
+                "echo 'Error generating installation commands'",
+                "echo 'Please install Docker manually: https://docs.docker.com/engine/install/'"
+            ]
+        
+        return commands
+
     @staticmethod
     def check_dockerfiles(docker_dir: str) -> bool:
         """Проверка наличия необходимых Dockerfile"""
-        from pathlib import Path
-        import os
-
         required = [
             os.path.join("dockerfiles", "Dockerfile_other"),
             os.path.join("dockerfiles", "Dockerfile_php")
@@ -60,8 +241,6 @@ class DockerModule:
     @staticmethod
     def replace_env_variables(content: str, env_vars: Dict[str, str]) -> str:
         """Заменяет ${PROJECTNAME} на значение из env_vars"""
-        import re
-
         def replace_match(match):
             return env_vars.get("PROJECTNAME", match.group(0))
         
@@ -74,8 +253,6 @@ class DockerModule:
     @staticmethod
     def process_service_blocks(content: str, enabled_services: List[str], env_vars: Dict[str, str]) -> str:
         """Обрабатывает блоки сервисов, оставляя только разрешенные"""
-        import re
-
         pattern = re.compile(
             r'### START (.+?) ###(.*?)### END \1 ###',
             re.DOTALL
@@ -89,15 +266,12 @@ class DockerModule:
                 replaced_content = DockerModule.replace_env_variables(block_content, env_vars)
                 return f"### START {service_name} ###{replaced_content}### END {service_name} ###"
             return ''
+        
         return pattern.sub(replace_block, content)
 
-    
     @staticmethod
     def generate_compose(docker_dir: str, env_vars: Dict[str, str], pull_from_registry: bool = False) -> bool:
         """Генерирует docker-compose.yml на основе примера"""
-        from pathlib import Path
-        import re
-
         docker_dir = Path(docker_dir)
         compose_example = docker_dir / "docker-compose.example"
         compose_output = docker_dir / "docker-compose.yml"
@@ -120,23 +294,40 @@ class DockerModule:
             content = DockerModule.replace_env_variables(content, env_vars)
             compose_output.write_text(content, encoding='utf-8')
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error generating compose: {str(e)}")
             return False
 
-    
-        @staticmethod
-        def get_container_status(container_name: str) -> Optional[Dict]:
-            """Получение статуса контейнера"""
-            logging.warning("Получение статуса контейнера не поддерживается")
+    @staticmethod
+    def get_container_status(container_name: str) -> Optional[Dict]:
+        """Получение статуса контейнера"""
+        try:
+            result = subprocess.run(
+                ['docker', 'inspect', '--format', '{{json .}}', container_name],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return json.loads(result.stdout)
+        except Exception as e:
+            logger.error(f"Error getting container status: {str(e)}")
             return None
         
-        @staticmethod
-        def manage_container(container_name: str, action: str) -> bool:
-            """Управление контейнером (start/stop/restart)"""
-            logging.warning(f"Управление контейнером ({action}) не поддерживается")
+    @staticmethod
+    def manage_container(container_name: str, action: str) -> bool:
+        """Управление контейнером (start/stop/restart)"""
+        try:
+            subprocess.run(
+                ['docker', action, container_name],
+                check=True
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error managing container: {str(e)}")
             return False
 
-    def get_docker_info():
+    @staticmethod
+    def get_docker_info() -> Dict:
         """Собирает информацию о Docker"""
         info = {
             'version': 'N/A',
@@ -159,12 +350,12 @@ class DockerModule:
         }
 
         try:
-            # Получаем версию Docker
+            # Версия Docker
             result = subprocess.run(['docker', '--version'], capture_output=True, text=True)
             if result.returncode == 0:
                 info['version'] = result.stdout.strip()
 
-            # Получаем статистику контейнеров
+            # Статистика контейнеров
             result = subprocess.run(['docker', 'ps', '-a', '--format', '{{.State}}'], capture_output=True, text=True)
             if result.returncode == 0:
                 states = result.stdout.splitlines()
@@ -173,12 +364,12 @@ class DockerModule:
                 info['containers']['paused'] = states.count('paused')
                 info['containers']['stopped'] = states.count('exited') + states.count('created')
 
-            # Получаем количество образов
+            # Количество образов
             result = subprocess.run(['docker', 'images', '-q'], capture_output=True, text=True)
             if result.returncode == 0:
                 info['images'] = len(result.stdout.splitlines())
 
-            # Получаем статистику системы Docker
+            # Статистика системы Docker
             result = subprocess.run(['docker', 'system', 'df', '--format', '{{json .}}'], capture_output=True, text=True)
             if result.returncode == 0:
                 try:
@@ -187,7 +378,7 @@ class DockerModule:
                 except json.JSONDecodeError:
                     pass
 
-            # Получаем статистику использования ресурсов
+            # Статистика использования ресурсов
             result = subprocess.run(['docker', 'stats', '--no-stream', '--format', '{{json .}}'], capture_output=True, text=True)
             if result.returncode == 0 and result.stdout.strip():
                 cpu_total = 0.0
@@ -205,22 +396,23 @@ class DockerModule:
                     info['system']['cpu_usage'] = f"{cpu_total/count:.1f}%"
                     info['system']['memory_usage'] = f"{mem_total/count:.1f}%"
 
-            # Получаем информацию о Docker Compose
+            # Информация о Docker Compose
             try:
                 result = subprocess.run(['docker-compose', 'ls', '--format', 'json'], capture_output=True, text=True)
                 if result.returncode == 0 and result.stdout.strip():
                     projects = json.loads(result.stdout)
                     info['compose']['projects'] = len(projects)
                     info['compose']['services'] = sum(len(p.get('Services', [])) for p in projects)
-            except:
+            except Exception:
                 pass
 
         except Exception as e:
-            print(f"Error collecting Docker info: {str(e)}")
+            logger.error(f"Error collecting Docker info: {str(e)}")
 
         return info
 
-    def get_containers(all=False):
+    @staticmethod
+    def get_containers(all: bool = False) -> List[Dict]:
         """Получает список контейнеров"""
         containers = []
         try:
@@ -243,10 +435,11 @@ class DockerModule:
                             'size': parts[6]
                         })
         except Exception as e:
-            print(f"Error getting containers: {str(e)}")
+            logger.error(f"Error getting containers: {str(e)}")
         return containers
 
-    def get_images():
+    @staticmethod
+    def get_images() -> List[Dict]:
         """Получает список образов"""
         images = []
         try:
@@ -266,10 +459,11 @@ class DockerModule:
                             'size': parts[5]
                         })
         except Exception as e:
-            print(f"Error getting images: {str(e)}")
+            logger.error(f"Error getting images: {str(e)}")
         return images
 
-    def get_logs(container_id, tail=100):
+    @staticmethod
+    def get_logs(container_id: str, tail: int = 100) -> str:
         """Получает логи контейнера"""
         try:
             result = subprocess.run(['docker', 'logs', '--tail', str(tail), container_id], 
@@ -277,10 +471,11 @@ class DockerModule:
             if result.returncode == 0:
                 return result.stdout
         except Exception as e:
-            print(f"Error getting logs: {str(e)}")
+            logger.error(f"Error getting logs: {str(e)}")
         return ""
 
-    def get_networks():
+    @staticmethod
+    def get_networks() -> List[Dict]:
         """Получает список сетей"""
         networks = []
         try:
@@ -301,10 +496,11 @@ class DockerModule:
                             'created': parts[6]
                         })
         except Exception as e:
-            print(f"Error getting networks: {str(e)}")
+            logger.error(f"Error getting networks: {str(e)}")
         return networks
 
-    def get_volumes():
+    @staticmethod
+    def get_volumes() -> List[Dict]:
         """Получает список томов"""
         volumes = []
         try:
@@ -324,53 +520,58 @@ class DockerModule:
                             'created_at': parts[5]
                         })
         except Exception as e:
-            print(f"Error getting volumes: {str(e)}")
+            logger.error(f"Error getting volumes: {str(e)}")
         return volumes
 
-    def container_action(data, session):
+    @staticmethod
+    def container_action(data: Dict) -> Dict:
         """Выполняет действие с контейнером (старт/стоп и т.д.)"""
         action = data.get('action')
         container_id = data.get('container_id')
         
         if not action or not container_id:
-            return {'status': 'error', 'message': t('invalid_parameters')}
+            return {'status': 'error', 'message': 'Invalid parameters'}
         
         try:
             if action == 'start':
                 subprocess.run(['docker', 'start', container_id], check=True)
-                return {'status': 'success', 'message': t('container_started')}
+                return {'status': 'success', 'message': 'Container started'}
             elif action == 'stop':
                 subprocess.run(['docker', 'stop', container_id], check=True)
-                return {'status': 'success', 'message': t('container_stopped')}
+                return {'status': 'success', 'message': 'Container stopped'}
             elif action == 'restart':
                 subprocess.run(['docker', 'restart', container_id], check=True)
-                return {'status': 'success', 'message': t('container_restarted')}
+                return {'status': 'success', 'message': 'Container restarted'}
             elif action == 'remove':
                 subprocess.run(['docker', 'rm', container_id], check=True)
-                return {'status': 'success', 'message': t('container_removed')}
+                return {'status': 'success', 'message': 'Container removed'}
             else:
-                return {'status': 'error', 'message': t('invalid_action')}
+                return {'status': 'error', 'message': 'Invalid action'}
         except subprocess.CalledProcessError as e:
-            return {'status': 'error', 'message': f"{t('action_failed')}: {str(e)}"}
+            logger.error(f"Container action failed: {str(e)}")
+            return {'status': 'error', 'message': f"Action failed: {str(e)}"}
 
-    def image_action(data, session):
+    @staticmethod
+    def image_action(data: Dict) -> Dict:
         """Выполняет действие с образом (удаление и т.д.)"""
         action = data.get('action')
         image_id = data.get('image_id')
         
         if not action or not image_id:
-            return {'status': 'error', 'message': t('invalid_parameters')}
+            return {'status': 'error', 'message': 'Invalid parameters'}
         
         try:
             if action == 'remove':
                 subprocess.run(['docker', 'rmi', image_id], check=True)
-                return {'status': 'success', 'message': t('image_removed')}
+                return {'status': 'success', 'message': 'Image removed'}
             else:
-                return {'status': 'error', 'message': t('invalid_action')}
+                return {'status': 'error', 'message': 'Invalid action'}
         except subprocess.CalledProcessError as e:
-            return {'status': 'error', 'message': f"{t('action_failed')}: {str(e)}"}
+            logger.error(f"Image action failed: {str(e)}")
+            return {'status': 'error', 'message': f"Action failed: {str(e)}"}
 
-    def restart_docker(data, session):
+    @staticmethod
+    def restart_docker() -> Dict:
         """Перезапускает Docker сервис"""
         try:
             if platform.system() == 'Windows':
@@ -378,14 +579,17 @@ class DockerModule:
                 subprocess.run(['net', 'start', 'docker'], check=True)
             else:
                 subprocess.run(['sudo', 'systemctl', 'restart', 'docker'], check=True)
-            return {'status': 'success', 'message': t('docker_restarted_successfully')}
+            return {'status': 'success', 'message': 'Docker restarted successfully'}
         except subprocess.CalledProcessError as e:
-            return {'status': 'error', 'message': t('failed_to_restart_docker') + f": {str(e)}"}
+            logger.error(f"Failed to restart Docker: {str(e)}")
+            return {'status': 'error', 'message': f"Failed to restart Docker: {str(e)}"}
 
-    def prune_system(data, session):
+    @staticmethod
+    def prune_system() -> Dict:
         """Очищает неиспользуемые объекты Docker"""
         try:
             subprocess.run(['docker', 'system', 'prune', '-f'], check=True)
-            return {'status': 'success', 'message': t('system_pruned_successfully')}
+            return {'status': 'success', 'message': 'System pruned successfully'}
         except subprocess.CalledProcessError as e:
-            return {'status': 'error', 'message': t('failed_to_prune_system') + f": {str(e)}"}
+            logger.error(f"Failed to prune system: {str(e)}")
+            return {'status': 'error', 'message': f"Failed to prune system: {str(e)}"}
