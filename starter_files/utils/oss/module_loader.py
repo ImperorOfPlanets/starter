@@ -103,7 +103,7 @@ def load_module(module_name: str) -> object:
     if not found:
         logger.warning(f"[WARN] Модуль {module_name} не найден ни в одном пути, будет создан stub.")
 
-    default_stub_dir = Path(__file__).parent / 'oss' / os_name / 'default'
+    default_stub_dir = script_path / 'starter_files' / 'utils' / 'oss' / os_name / 'default'
     logger.debug(f"[DEBUG VAR] default_stub_dir = {default_stub_dir}")
 
     default_stub_dir.mkdir(parents=True, exist_ok=True)

@@ -186,7 +186,7 @@ class SystemModule:
         Определяет ОС и версию ОС из /etc/os-release.
         Возвращает кортеж (os, os_version):
             os: первое слово в нижнем регистре
-            os_version: всё, что идёт после первого пробела
+            os_version: версия до первого пробела
         """
         name = "unknown"
         version = "unknown"
@@ -199,7 +199,7 @@ class SystemModule:
             
             parts = pretty_name.split(" ", 1)
             name = parts[0].lower()
-            version = parts[1] if len(parts) > 1 else "unknown"
+            version = parts[1].split(" ")[0] if len(parts) > 1 else "unknown"
         except Exception:
             pass
         
