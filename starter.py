@@ -62,15 +62,19 @@ if __name__ == '__main__':
     handler = ExceptionHandler()
     sys.excepthook = handler.handle_unhandled_exception
 
-    # Выполняем первичную настройку если нужно
-    from starter_files.utils.firstSetup_utils import first_run_setup
-    is_first_run, credentials = first_run_setup()
-    if is_first_run and credentials:
-        print("\n=== Первичная настройка завершена ===")
-        print(f"Логин: {credentials['login']}")
-        print(f"Пароль: {credentials['password']}")
-        print("Сохраните эти данные!")
-        print("="*50 + "\n")
+    if os.environ.get('WERKZEUG_RUN_MAIN') is None:
+        # Это процесс watcher — можно пропустить setup
+        print("[DEBUG] Первый процесс Flask reloader — пропускаем первичную настройку")
+    else:
+        # Основной процесс — делаем setup
+        from starter_files.utils.firstSetup_utils import first_run_setup
+        is_first_run, credentials = first_run_setup()
+        if is_first_run and credentials:
+            print("\n=== Первичная настройка завершена ===")
+            print(f"Логин: {credentials['login']}")
+            print(f"Пароль: {credentials['password']}")
+            print("Сохраните эти данные!")
+            print("="*50 + "\n")
 
     args = parse_args()
 

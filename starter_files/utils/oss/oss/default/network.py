@@ -5,8 +5,11 @@ import json
 import platform
 import subprocess
 import re
+
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
+
+from starter_files.utils.globalVars_utils import get_global, set_global
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +52,14 @@ class NetworkModule(BaseModule):
         hostname = socket.gethostname()
         ip_address = socket.gethostbyname(hostname)
         return [ip_address] if ip_address else []
-    
+
+    @staticmethod
+    def get_local_ip_fallback() -> str:
+        """Простейший способ получить один локальный IP"""
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+
     @staticmethod
     def get_public_ip() -> str:
         """Получение публичного IP-адреса (default реализация)"""
@@ -60,6 +70,29 @@ class NetworkModule(BaseModule):
     def get_basic_devices_info() -> Tuple[List[BasicDeviceInfo], List[BasicDeviceInfo]]:
         """Базовая реализация для неподдерживаемых ОС"""
         return [], []
+
+    @staticmethod
+    def get_all_local_ips() -> list:
+        """Получаем все локальные IP и кешируем их"""
+        cached_ips = get_global('local_ips')
+        if cached_ips:
+            return cached_ips
+
+        # Получаем устройства
+        network_mod = get_network_module()
+        physical, virtual = network_mod.get_network_devices()
+
+        ips = []
+        for dev in physical + virtual:
+            for conn in dev.connections:
+                if conn.status.lower() == 'up' and conn.ip:
+                    ips.append(conn.ip)
+
+        # Если ничего не нашли — хотя бы один способ по-умолчанию
+        if not ips:
+            ips.append(NetworkModule.get_local_ip_fallback())
+
+        set_global('local_ips', ips)
 
     @staticmethod
     def get_network_devices() -> Tuple[List[NetworkDevice], List[NetworkDevice]]:
