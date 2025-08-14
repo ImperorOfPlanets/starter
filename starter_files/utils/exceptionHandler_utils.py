@@ -1,5 +1,5 @@
 import json
-import str
+import string
 import sys
 import traceback
 
