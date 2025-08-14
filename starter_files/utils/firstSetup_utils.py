@@ -129,11 +129,12 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
 
 def get_server_url() -> list:
     """Возвращает список всех URL сервера с учетом порта"""
-    from starter_files.utils.globalVars_utils import get_global
     from starter_files.utils.molule_utils import get
 
     docker_port = os.environ.get('dockerPort', '8000')
     ips = get('network','get_all_local_ips')
+    # Выводим в консоль
+    print("Список локальных IP из кеша:", ips)
 
     return [f"https://{ip}:{docker_port}" for ip in ips]
 

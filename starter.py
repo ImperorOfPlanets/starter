@@ -7,12 +7,13 @@ import textwrap
 from pathlib import Path
 
 from starter_files.utils import venv_utils
-from starter_files.utils.globalVars_utils import GlobalVars, get_global
-from starter_files.utils.molule_utils import get
+from starter_files.utils.globalVars_utils import get_global
+from starter_files.utils.oss.default.system import SystemModule
 
-# Получаем информацию о системе и записываем в глобальне переменные
-# Но для этого считываем модуль СИСТЕМА и выполняем collect_basic_system_info
-get('system','collect_basic_system_info')
+# Устанавливает глобальные переменные
+SystemModule.collect_basic_system_info()
+print(get_global('os'))
+print(get_global('script_path'))
 
 def parse_args():
     """Парсит аргументы командной строки"""
@@ -63,7 +64,7 @@ if __name__ == '__main__':
     sys.excepthook = handler.handle_unhandled_exception
 
     if os.environ.get('WERKZEUG_RUN_MAIN') is None:
-        # Это процесс watcher — можно пропустить setup
+        # Это watcher, можно пропустить setup
         print("[DEBUG] Первый процесс Flask reloader — пропускаем первичную настройку")
     else:
         # Основной процесс — делаем setup
@@ -75,6 +76,12 @@ if __name__ == '__main__':
             print(f"Пароль: {credentials['password']}")
             print("Сохраните эти данные!")
             print("="*50 + "\n")
+
+    # Считываем заново переменные из .env
+    from dotenv import load_dotenv
+    env_file = Path(get_global('script_path')) / '.env'
+    load_dotenv(env_file)
+    print(f"[DEBUG] Переменные окружения загружены из {env_file}")
 
     args = parse_args()
 

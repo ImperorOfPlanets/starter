@@ -6,8 +6,8 @@ import sys
 import ctypes
 
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, Any, Tuple
+from pathlib import Path
 
 from starter_files.utils.globalVars_utils import set_global, get_global
 from starter_files.utils.log_utils import get_logger
@@ -22,13 +22,18 @@ class SystemModule:
     @staticmethod
     def collect_basic_system_info() -> Dict[str, Any]:
         """Собирает базовую информацию о системе (без зависимостей от внешних утилит)"""
-        # Получаем информацию о привилегиях
         privilege_info = SystemModule.get_privilege_info()
-        
+        os_name, os_version = SystemModule.detect_os_name_version()
         sys_info = {
-            'os': platform.system(),
-            'os_version': platform.version(),
-            'os_release': platform.release(),
+            # Ядро
+            'core': platform.system(),
+            'core_version': platform.version(),
+            'core_release': platform.release(),
+
+            # ОС
+            'os': os_name,
+            'os_version': os_version,
+
             'architecture': platform.machine(),
             'hostname': socket.gethostname(),
             'username': os.getenv('USER') or os.getenv('USERNAME') or 'N/A',
@@ -46,18 +51,24 @@ class SystemModule:
                 'HOME': os.getenv('HOME')
             },
             'script_path': Path(sys.argv[0]).absolute().parent,
-            'privilege_info': privilege_info  # Добавляем информацию о привилегиях
+            'privilege_info': privilege_info
         }
 
-        # Записываем все ключи из sys_info в глобальные переменные
+        print("[SystemModule] Записываем глобальные переменные:")
         for key, value in sys_info.items():
             set_global(key, value)
+            print(f"  {key}: {value}")
         
-        # Устанавливаем плоские ключи для удобства
         set_global('is_root', privilege_info['is_root'])
         set_global('has_sudo', privilege_info['has_sudo'])
         set_global('use_sudo', privilege_info['use_sudo'])
 
+        print(f"  is_root: {privilege_info['is_root']}")
+        print(f"  has_sudo: {privilege_info['has_sudo']}")
+        print(f"  use_sudo: {privilege_info['use_sudo']}")
+        print("[SystemModule] Все глобальные переменные установлены.")
+
+        # 💡 Теперь возвращаем для использования в других функциях
         return sys_info
 
     @staticmethod
@@ -159,3 +170,37 @@ class SystemModule:
         if version_info < (3, 8):
             return False
         return True
+
+    @staticmethod
+    def detect_os_name():
+        try:
+            with open("/etc/os-release") as f:
+                data = dict(line.strip().split("=", 1) for line in f if "=" in line)
+            return data.get("PRETTY_NAME") or data.get("NAME")
+        except Exception:
+            return "Unknown"
+
+    @staticmethod
+    def detect_os_name_version():
+        """
+        Определяет ОС и версию ОС из /etc/os-release.
+        Возвращает кортеж (os, os_version):
+            os: первое слово в нижнем регистре
+            os_version: всё, что идёт после первого пробела
+        """
+        name = "unknown"
+        version = "unknown"
+        
+        try:
+            with open("/etc/os-release") as f:
+                data = dict(line.strip().split("=", 1) for line in f if "=" in line)
+            pretty_name = data.get("PRETTY_NAME") or data.get("NAME") or "unknown"
+            pretty_name = pretty_name.strip().strip('"')
+            
+            parts = pretty_name.split(" ", 1)
+            name = parts[0].lower()
+            version = parts[1] if len(parts) > 1 else "unknown"
+        except Exception:
+            pass
+        
+        return name, version
