@@ -14,7 +14,7 @@ from starter_files.utils.log_utils import get_logger
 
 logger = get_logger()
 
-class SystemModule:
+class SystemModule: 
     @staticmethod
     def check() -> bool:
         return True
