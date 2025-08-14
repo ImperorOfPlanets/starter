@@ -27,53 +27,6 @@ def start_service_mode():
     logger.info("Запуск в сервисном режиме...")
     sys.exit(0)
 
-def print_bordered_message(message, title=None, width=70):
-    """Печатает сообщение в рамке"""
-    print()
-    print('=' * width)
-    
-    if title:
-        print(f" {title} ".center(width, '='))
-        print('-' * width)
-    
-    wrapped_lines = []
-    for line in message.split('\n'):
-        wrapped_lines.extend(textwrap.wrap(line, width=width-4))
-    
-    for line in wrapped_lines:
-        print(f"| {line.ljust(width-4)} |")
-    
-    print('=' * width)
-    print()
-
-def verify_environment():
-    """Проверяет окружение перед запуском"""
-    # Проверка версии Python
-    if not get('system', 'check_python_version'):
-        current_version = '.'.join(map(str, sys.version_info[:3]))
-        message = f"""
-        ТРЕБУЕТСЯ ВМЕШАТЕЛЬСТВО ПЕРВОГО ПРОГРАММИСТА!
-        
-        Обнаружена устаревшая версия Python: {current_version}
-        Для корректной работы требуется Python 3.8 или выше.
-        """
-        print_bordered_message(message, title="ТРЕБОВАНИЕ К ПЕРВОМУ ПРОГРАММИСТУ", width=80)
-        return False
-    
-    # Проверка .env файла (только в основном процессе)
-    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
-        env_path = get_global('script_path') / '.env'
-        if not env_path.exists():
-            print("Файл .env не найден! Создаем базовую конфигурацию...")
-            from starter_files.utils.firstSetup_utils import first_run_setup
-            is_first_run, credentials = first_run_setup()
-            
-            if is_first_run and credentials:                
-                from dotenv import load_dotenv
-                load_dotenv(env_path)
-    
-    return True
-
 def start_interactive_mode():
     # Обычный режим
     from starter_files.utils.configurateApp_utils import configure_app
@@ -97,10 +50,6 @@ if __name__ == '__main__':
         sys.exit(0)
 
     args = parse_args()
-    
-    # Проверяем окружение
-    if not verify_environment():
-        sys.exit(1)
 
     # Проверка установки зависимостей
     try:
