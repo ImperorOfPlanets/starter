@@ -12,8 +12,6 @@ from pathlib import Path
 from starter_files.utils.globalVars_utils import set_global, get_global
 from starter_files.utils.log_utils import get_logger
 
-logger = get_logger()
-
 class SystemModule: 
     @staticmethod
     def check() -> bool:
@@ -54,69 +52,22 @@ class SystemModule:
             'privilege_info': privilege_info
         }
 
-        print("[SystemModule] Записываем глобальные переменные:")
+        #print("[SystemModule] Записываем глобальные переменные:")
         for key, value in sys_info.items():
             set_global(key, value)
-            print(f"  {key}: {value}")
+            # print(f"  {key}: {value}")
         
         set_global('is_root', privilege_info['is_root'])
         set_global('has_sudo', privilege_info['has_sudo'])
         set_global('use_sudo', privilege_info['use_sudo'])
 
-        print(f"  is_root: {privilege_info['is_root']}")
-        print(f"  has_sudo: {privilege_info['has_sudo']}")
-        print(f"  use_sudo: {privilege_info['use_sudo']}")
-        print("[SystemModule] Все глобальные переменные установлены.")
+        #print(f"  is_root: {privilege_info['is_root']}")
+        #print(f"  has_sudo: {privilege_info['has_sudo']}")
+        #print(f"  use_sudo: {privilege_info['use_sudo']}")
+        #print("[SystemModule] Все глобальные переменные установлены.")
 
         # 💡 Теперь возвращаем для использования в других функциях
         return sys_info
-
-    @staticmethod
-    def log_basic_system_info() -> None:
-        """Логирует полную базовую системную информацию"""
-        sys_info = get_global('system_info', {})
-        
-        if not sys_info:
-            sys_info = SystemModule.collect_basic_system_info()  # Исправлено: вызов через класс
-        
-        logger.info("=== FULL BASIC SYSTEM INFORMATION ===")
-        
-        # Основные поля
-        logger.info(f"Operating System: {sys_info['os']} {sys_info['os_release']} (Version: {sys_info['os_version']})")
-        logger.info(f"Architecture: {sys_info['architecture']}")
-        logger.info(f"Hostname: {sys_info['hostname']}")
-        logger.info(f"Username: {sys_info['username']}")
-        logger.info(f"Current Time: {sys_info['current_time']}")
-        logger.info(f"Service Mode: {'Yes' if sys_info['is_service'] else 'No'}")
-        logger.info(f"Script Path: {sys_info['script_path']}")
-        
-        # Python информация
-        logger.info("\nPython Information:")
-        py_info = sys_info['python_info']
-        logger.info(f"  Version: {py_info['version']}")
-        logger.info(f"  Implementation: {py_info['implementation']}")
-        logger.info(f"  Compiler: {py_info['compiler']}")
-        logger.info(f"  Executable: {py_info['executable']}")
-        
-        # Переменные окружения
-        logger.info("\nEnvironment Variables:")
-        env_vars = sys_info['environment_vars']
-        for var, value in env_vars.items():
-            if value:  # Логируем только если значение не None/пустое
-                logger.info(f"  {var}: {value}")
-        
-        # Информация о привилегиях
-        logger.info("\nPrivilege Information:")
-        priv_info = sys_info.get('privilege_info', {})
-        logger.info(f"  Is root: {priv_info.get('is_root', 'N/A')}")
-        logger.info(f"  Has sudo: {priv_info.get('has_sudo', 'N/A')}")
-        logger.info(f"  Use sudo: {priv_info.get('use_sudo', 'N/A')}")
-        
-        # Дополнительно можно добавить логирование всех глобальных переменных
-        logger.info("\nGlobal Variables Summary:")
-        for key in sys_info.keys():
-            if key not in ['python_info', 'environment_vars', 'privilege_info']:
-                logger.info(f"  {key}: {sys_info[key]}")
 
     @staticmethod
     def get_privilege_info() -> Dict[str, bool]:

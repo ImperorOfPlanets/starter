@@ -137,23 +137,56 @@ def get_server_url() -> list:
 
     return [f"https://{ip}:{docker_port}" for ip in ips]
 
-def open_browser(logger=None):
-    """Открывает браузер только при первом запуске"""
+def open_browser(logger=None) -> None:
+    """
+    Открывает браузер только при первом запуске вне Docker.
+    В Docker-контейнере выводит специальный URL для доступа с хоста.
+    """
+    is_docker = is_docker_container()
+    docker_port = os.environ.get('dockerPort', '8000')
     urls = get_server_url()
 
-    print("Сервер запущен. Доступен по адресам:")
-    for url in urls:
-        print(url)
+    print("\nСервер запущен. Доступен по адресам:")
+    
+    # Основной URL для вывода/открытия
+    primary_url = None
 
-    if logger:
+    if is_docker:
+        # В Docker - показываем специальный URL для доступа с хоста
+        docker_url = f"https://localhost:{docker_port}"
+        print(docker_url)
+        print("(Это Docker-контейнер. Используйте этот URL на хост-машине)")
+        if logger:
+            logger.info(f"Docker-контейнер: доступ через {docker_url}")
+        primary_url = docker_url
+    else:
+        # Не в Docker - показываем все IP
         for url in urls:
-            logger.info(f"Сервер запущен: {url}")
-
-    if os.environ.get('WERKZEUG_RUN_MAIN') is None:
-        try:
-            webbrowser.open(urls[0])  # Открываем первый
-        except Exception as e:
+            print(url)
             if logger:
-                logger.error(f"Не удалось открыть браузер: {e}")
-            print(f"Не удалось открыть браузер: {e}")
+                logger.info(f"Сервер запущен: {url}")
+        primary_url = urls[0] if urls else None
+    '''
+    # Открываем браузер только если не в Docker и это основной процесс
+    if not is_docker and primary_url and os.environ.get('WERKZEUG_RUN_MAIN') is None:
+        try:
+            webbrowser.open(primary_url)
+        except Exception as e:
+            error_msg = f"Не удалось открыть браузер: {e}"
+            if logger:
+                logger.error(error_msg)
+            print(error_msg)'''
 
+def is_docker_container():
+    """Объединяет проверку файла и cgroup для надёжности."""
+    if os.path.exists('/.dockerenv'):
+        return True
+        
+    try:
+        with open('/proc/self/cgroup', 'r') as file:
+            if any('docker' in line or 'containerd' in line for line in file):
+                return True
+    except FileNotFoundError:
+        pass
+    
+    return False

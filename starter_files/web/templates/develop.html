@@ -1,123 +1,149 @@
+<!-- include: dev-side-menu.html -->
 <style>
-    /* Контейнер для стрелки справа по центру */
-    #toggleMenuBtn {
-      position: fixed;
-      top: 50%;
-      right: 0;
-      transform: translateY(-50%);
-      background-color: #007bff;
-      color: white;
-      border-radius: 4px 0 0 4px;
-      cursor: pointer;
-      user-select: none;
-      font-size: 24px;
-      width: 36px;
-      height: 60px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1050; /* выше контента */
-    }
-  
-    /* Сам блок меню */
-    #sideMenu {
-      position: fixed;
-      top: 50%;
-      right: 36px; /* слева от кнопки */
-      transform: translateY(-50%);
-      background: white;
-      border: 1px solid #ddd;
-      box-shadow: 0 0 10px rgba(0,0,0,0.2);
-      width: 180px;
-      display: none;
-      z-index: 1049;
-      border-radius: 4px 0 0 4px;
-      padding: 10px 0;
-    }
-  
-    #sideMenu button {
-      width: 100%;
-      border: none;
-      background: none;
-      padding: 10px 20px;
-      text-align: left;
-      font-weight: 500;
-      cursor: pointer;
-    }
-  
-    #sideMenu button:hover {
-      background-color: #007bff;
-      color: white;
-    }
-  </style>
-  
-  <!-- Кнопка стрелка -->
-  <div id="toggleMenuBtn" title="Toggle menu"><span id="arrowIcon">&lt;</span></div>
-  
-  <!-- Меню -->
-  <div id="sideMenu" class="shadow-sm">
-    <button class="menu-item" data-action="globalVariables">Глобальные переменные</button>
-    <button class="menu-item" data-action="modules">Модули</button>
-  </div>
-  
-  <script>
-    $(document).ready(function() {
-      const arrowIcon = $('#arrowIcon');
-      const sideMenu = $('#sideMenu');
-      const toggleBtn = $('#toggleMenuBtn');
-      
-      // Флаг состояния меню: скрыто или показано
-      let isMenuVisible = false;
-      
-      // Переключение меню и стрелки
-      toggleBtn.click(function() {
-        if (isMenuVisible) {
-          sideMenu.hide();
-          arrowIcon.text('<');
-        } else {
-          sideMenu.show();
-          arrowIcon.text('>');
-        }
-        isMenuVisible = !isMenuVisible;
+  #toggleMenuBtn{position:fixed;top:50%;right:0;transform:translateY(-50%);background-color:#1d4ed8;color:#fff;border-radius:4px 0 0 4px;cursor:pointer;user-select:none;font-size:24px;width:36px;height:60px;display:flex;align-items:center;justify-content:center;z-index:1050}
+  #sideMenu{position:fixed;top:50%;right:36px;transform:translateY(-50%);background:#fff;border:1px solid #e5e7eb;box-shadow:0 0 10px rgba(0,0,0,0.2);width:220px;display:none;z-index:1049;border-radius:8px 0 0 8px;padding:8px}
+  #sideMenu button{width:100%;border:none;background:none;padding:10px 14px;text-align:left;font-weight:500;cursor:pointer;border-radius:6px}
+  #sideMenu button:hover{background-color:#1d4ed8;color:#fff}
+</style>
+
+<div id="toggleMenuBtn" title="Toggle menu"><span id="arrowIcon">&lt;</span></div>
+
+<div id="sideMenu" class="shadow-sm">
+  <button class="menu-item" data-action="globalVariables">Глобальные переменные</button>
+  <button class="menu-item" data-action="modules">Модули</button>
+</div>
+
+<!-- Контейнер для данных -->
+<div id="devContent" class="p-4 space-y-4"></div>
+
+<script>
+  $(function () {
+    const $arrow = $('#arrowIcon');
+    const $menu  = $('#sideMenu');
+    const $btn   = $('#toggleMenuBtn');
+    const $out   = $('#devContent');
+    let open = false;
+
+    function postForm(section, action, extra) {
+      const fd = new FormData();
+      fd.append('section', section);
+      fd.append('action', action);
+      if (extra && typeof extra === 'object') {
+        for (const [k,v] of Object.entries(extra)) fd.append(k, v);
+      }
+      return $.ajax({
+        url: '/',               // один URL
+        method: 'POST',
+        data: fd,
+        processData: false,     // обязательно для FormData
+        contentType: false,     // обязательно для FormData
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        dataType: 'json'
       });
-  
-      // Обработчик клика по пунктам меню
-      $('.menu-item').click(function() {
-        const action = $(this).data('action');
-        
-        // Формируем FormData
-        var formData = new FormData();
-        formData.append('section', 'develop');
-        formData.append('action', action);
-        
-        // Заголовок для JSON, если нужно
-        var headers = new Headers();
-        headers.append('Accept', 'application/json');
-        
-        fetch('/', {
-          method: 'POST',
-          body: formData,
-          headers: headers
-        })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error('Network error');
-          }
-          return response.json();
-        })
-        .then(result => {
-          if (result.status === 'success') {
-            alert('Данные отправлены успешно!');
-            // можно добавить какое-то действие
-          } else {
-            alert('Ошибка: ' + (result.message || ''));
-          }
-        })
-        .catch(error => {
-          console.error('AJAX Error:', error);
-          alert('Ошибка сети или сервера');
-        });
-      });
+    }
+
+    function renderGlobals(data){
+      // data: объект ключ->значение
+      const rows = Object.entries(data || {}).map(([k,v]) => `
+        <tr class="border-b">
+          <td class="px-3 py-2 font-medium">${k}</td>
+          <td class="px-3 py-2 break-all">${String(v)}</td>
+        </tr>`).join('');
+      return `
+        <div class="rounded-2xl shadow p-4 bg-white">
+          <div class="text-lg font-semibold mb-3">Глобальные переменные</div>
+          <table class="min-w-full text-sm">
+            <thead><tr class="text-left text-gray-500">
+              <th class="px-3 py-2">Ключ</th><th class="px-3 py-2">Значение</th>
+            </tr></thead>
+            <tbody>${rows || '<tr><td class="px-3 py-2" colspan="2">Пусто</td></tr>'}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderModules(list){
+      // list: [{module_name,class_name,path,functions:[{name,kind,doc,comment}]}]
+      const cards = (list || []).map(m => {
+        const funcs = (m.functions || []).map(f => `
+          <div class="border rounded-xl p-3">
+            <div class="flex items-center justify-between">
+              <div class="font-medium">${f.name}</div>
+              <span class="text-xs px-2 py-0.5 rounded bg-gray-100">${f.kind}</span>
+            </div>
+            ${f.doc ? `<div class="text-sm text-gray-700 mt-1 whitespace-pre-line">${f.doc}</div>` : ''}
+            ${f.comment ? `<div class="text-xs text-gray-500 mt-2 whitespace-pre-line">${f.comment}</div>` : ''}
+          </div>
+        `).join('');
+        return `
+          <div class="rounded-2xl shadow p-4 bg-white">
+            <div class="flex items-center justify-between">
+              <div class="text-lg font-semibold">${m.module_name} <span class="text-gray-400">(${m.class_name})</span></div>
+              <div class="text-xs text-gray-500 break-all">${m.path}</div>
+            </div>
+            <div class="grid md:grid-cols-2 gap-3 mt-3">
+              ${funcs || '<div class="text-sm text-gray-500">Функции не найдены</div>'}
+            </div>
+          </div>`;
+      }).join('');
+      return `<div class="space-y-4">${cards || '<div class="text-sm text-gray-500">Модулей нет</div>'}</div>`;
+    }
+
+    $btn.on('click', function(){
+      open = !open;
+      $menu.toggle(open);
+      $arrow.text(open ? '>' : '<');
     });
-  </script>
-  
+
+    $('.menu-item').on('click', function(){
+      const action = $(this).data('action');
+      postForm('develop', action, {})
+        .done(function(res){
+          if (res.status === 'success') {
+            if (action === 'globalVariables') {
+              $out.html(renderGlobals(res.data));
+            } else if (action === 'modules') {
+              $out.html(renderModules(res.data));
+            } else {
+              $out.html('<div class="text-sm text-gray-500">ОК</div>');
+            }
+          } else {
+            $out.html('<div class="text-sm text-red-600">Ошибка: ' + (res.message || '') + '</div>');
+          }
+        })
+        .fail(function(xhr){
+          const msg = xhr.responseJSON?.message || 'Ошибка сети или сервера';
+          $out.html('<div class="text-sm text-red-600">' + msg + '</div>');
+        });
+    });
+
+    // пример: селектор языка на один URL
+    $('#languageSelector').on('change', function(){
+      const lang = $(this).val();
+      const original = '{{ current_language|default("") }}';
+      const fd = new FormData();
+      fd.append('section','language');
+      fd.append('action','changeLanguage');
+      fd.append('lang',lang);
+      $.ajax({
+        url:'/',
+        method:'POST',
+        data: fd,
+        processData:false,
+        contentType:false,
+        headers:{
+          'Accept':'application/json',
+          'X-Requested-With':'XMLHttpRequest'
+        },
+        dataType:'json'
+      })
+      .done(function(r){
+        if (r.status === 'success') location.reload();
+        else { alert(r.message || 'Ошибка'); $('#languageSelector').val(original); }
+      })
+      .fail(function(){ alert('Сеть/сервер недоступен'); $('#languageSelector').val(original); });
+    });
+  });
+</script>

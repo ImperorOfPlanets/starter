@@ -61,6 +61,7 @@ if __name__ == '__main__':
     handler = ExceptionHandler()
     sys.excepthook = handler.handle_unhandled_exception
 
+    # Проверка на настроенность
     from starter_files.utils.firstSetup_utils import first_run_setup
     is_first_run, credentials = first_run_setup()
     if is_first_run and credentials:

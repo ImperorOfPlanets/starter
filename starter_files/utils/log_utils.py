@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from starter_files.utils.globalVars_utils import get_global
 
 def cleanup_previous_logs(logs_dir: Path, current_run_id: str):
     """Удаляет предыдущие лог-файлы из debug-сессии"""
@@ -143,61 +144,52 @@ class ProjectLogger:
             raise
 
     def _log_system_info(self):
-        """Логирует системную информацию при старте"""
-        system_info = {
-            # Название операционной системы (Linux/Windows/Darwin)
-            'OS': platform.system(),
-            
-            # Версия ядра ОС или сборки Windows
-            'OS Version': platform.version(),
-            
-            # Сетевое имя компьютера в локальной сети
-            'Hostname': socket.gethostname(),
-            
-            # Имя пользователя, под которым запущен процесс
-            'Username': getpass.getuser(),
-            
-            # Версия интерпретатора Python в формате X.Y.Z
-            'Python Version': platform.python_version(),
-            
-            # Директория, из которой был запущен скрипт
-            'Working Directory': os.getcwd(),
-            
-            # Полная командная строка запуска приложения
-            'Command Line': ' '.join(sys.argv),
-            
-            # ID процесса в операционной системе
-            'PID': os.getpid(),
-            
-            # Уникальный идентификатор сеанса работы приложения
-            'Run ID': self.run_id,
-            
-            # Время старта в ISO формате (YYYY-MM-DDTHH:MM:SS)
-            'Start Time': self.start_time.isoformat(),
-            
-            # Режим работы: 'web' или 'service'
-            'Mode': self.mode,
-            
-            # Флаг Werkzeug (None/true/false):
-            # None - обычный запуск без Flask
-            # 'true' - основной процесс Flask
-            # 'false' - процесс-наблюдатель при --debug
-            'WERKZEUG_RUN_MAIN': os.environ.get('WERKZEUG_RUN_MAIN', 'None'),
-            
-            # Режим отладки Flask (1/None):
-            # '1' - debug mode включен
-            # None - production режим
-            'FLASK_DEBUG': os.environ.get('FLASK_DEBUG', 'None'),
-            
-            # Признак основного процесса:
-            # True - это основной рабочий процесс
-            # False - дочерний процесс или перезагрузчик
-            'Is Main Process': str(os.environ.get('WERKZEUG_RUN_MAIN') == 'true')
-        }
-        
+        """Логирует системную информацию при старте, используя глобальные переменные"""
         self.logger.info("=== SYSTEM INFO ===")
-        for key, value in system_info.items():
+        
+        # Основные системные переменные
+        main_keys = [
+            'core', 'core_version', 'core_release',
+            'os', 'os_version', 'architecture',
+            'hostname', 'username', 'current_time',
+            'is_service', 'script_path'
+        ]
+        
+        # Сложные структуры (словари)
+        dict_keys = ['python_info', 'environment_vars', 'privilege_info']
+        
+        # Логируем основные значения
+        for key in main_keys:
+            value = get_global(key, "N/A")
+            # Особый случай для script_path (может быть Path-объектом)
+            if key == 'script_path' and not isinstance(value, str):
+                value = str(value) if value else "N/A"
             self.logger.info(f"{key}: {value}")
+        
+        # Логируем сложные словарные структуры
+        for key in dict_keys:
+            data = get_global(key, {})
+            
+            if not data:
+                self.logger.info(f"{key}: N/A")
+                continue
+                
+            self.logger.info(f"{key}:")
+            for sub_key, sub_value in data.items():
+                # Особые обработки для разных типов данных
+                if isinstance(sub_value, list):
+                    # Для списков выводим каждый элемент
+                    self.logger.info(f"  {sub_key}:")
+                    for i, item in enumerate(sub_value):
+                        self.logger.info(f"    [{i}]: {item}")
+                elif isinstance(sub_value, dict):
+                    # Для вложенных словарей делаем дополнительный уровень
+                    self.logger.info(f"  {sub_key}:")
+                    for k, v in sub_value.items():
+                        self.logger.info(f"    {k}: {v}")
+                else:
+                    # Стандартный вывод
+                    self.logger.info(f"  {sub_key}: {sub_value}")
 
     # Стандартные методы логирования
     def debug(self, message):

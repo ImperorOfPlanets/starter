@@ -7,7 +7,8 @@ import shutil
 from pathlib import Path
 from typing import Tuple, Optional
 import getpass
-from datetime import datetime
+]\
+   -
 
 from starter_files.utils.log_utils import logger
 
