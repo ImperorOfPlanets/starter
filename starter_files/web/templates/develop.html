@@ -1,5 +1,5 @@
-<!-- Стили и элементы меню -->
 <style>
+  /* Кнопка фиксирована справа по центру */
   #toggleMenuBtn {
     position: fixed;
     top: 50%;
@@ -19,6 +19,7 @@
     z-index: 1050;
   }
 
+  /* Сайд-меню */
   #sideMenu {
     position: fixed;
     top: 50%;
@@ -50,14 +51,14 @@
     color: #fff;
   }
 
+  /* Контейнер для данных - почти весь экран */
   #devContent {
-    display: none; /* Скрываем по умолчанию */
+    display: none;
     position: fixed;
-    top: 10%;
-    right: 10%;
-    width: 80%;
-    max-width: 800px;
-    max-height: 80%;
+    top: 5%;
+    left: 2.5%;
+    width: 95%;
+    height: 90%;
     overflow-y: auto;
     background: #fff;
     border-radius: 12px;
@@ -67,7 +68,7 @@
   }
 
   #devContentCloseBtn {
-    position: absolute;
+    position: fixed;
     top: 10px;
     right: 10px;
     background: #ef4444;
