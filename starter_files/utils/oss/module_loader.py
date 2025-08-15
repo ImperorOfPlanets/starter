@@ -68,53 +68,26 @@ def load_module(module_name: str) -> object:
 
     # === Логируем все найденные пути ===
     logger.info(f"[INFO] Проверка путей для модуля '{module_name}':")
-    found_paths = []
     for path in search_paths:
         if path.exists():
             logger.info(f"  [FOUND FILE] {path}")
-            found_paths.append(path)
         else:
             logger.info(f"  [NOT FOUND] {path}")
 
-    # Перебор для загрузки первого рабочего модуля
+    # Перебор путей для загрузки первого рабочего модуля
     for path in search_paths:
-        logger.debug(f"[DEBUG] Проверяем путь: {path}")
-
         if not path.exists():
-            logger.debug(f"[DEBUG] Файл не найден: {path}")
             continue
-
-        logger.info(f"[FOUND] Файл модуля найден: {path}")
 
         module_class = load_module_from_path(path, module_name)
-        if module_class is None:
-            logger.warning(f"[WARNING] Не удалось загрузить класс из {path}")
-            continue
-
-        logger.debug(f"[DEBUG] Загруженный класс: {module_class}")
-
-        check_method = getattr(module_class, 'check', None)
-        if check_method is None:
-            logger.warning(f"[WARNING] В классе {module_class} отсутствует метод check()")
-            continue
-
-        logger.debug(f"[DEBUG] Вызываем check() для {module_class}")
-        try:
-            check_result = check_method()
-        except Exception as e:
-            logger.error(f"[ERROR] Ошибка при вызове check() для {module_class}: {e}", exc_info=True)
-            continue
-
-        logger.info(f"[CHECK] check() -> {check_result} для {module_name}")
-
-        if check_result:
+        if module_class is not None:
             _loaded_modules_cache[os_name][module_name] = module_class
             logger.info(f"[LOAD] Модуль {module_name} успешно загружен из {path}")
             return module_class
         else:
-            logger.warning(f"[CHECK FAILED] check() вернул False для {module_name} в {path}")
-    
-    # Если модуль не найден — создаем stub
+            logger.warning(f"[WARNING] Не удалось загрузить класс из {path}")
+
+    # Если модуль не найден — создаём stub
     default_stub_dir = script_path / 'starter_files' / 'utils' / 'oss' / os_name / 'default'
     default_stub_dir.mkdir(parents=True, exist_ok=True)
     stub_path = default_stub_dir / f"{module_name}.py"
@@ -126,9 +99,7 @@ def load_module(module_name: str) -> object:
 Stub для модуля {module_name.upper()} для ОС {os_name}
 """
 class {module_name.capitalize()}Module:
-    @staticmethod
-    def check() -> bool:
-        return False
+    pass
 ''')
         logger.info(f"[STUB] Создан stub: {stub_path}")
 

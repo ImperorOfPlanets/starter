@@ -43,7 +43,6 @@ class ExceptionHandler:
             "type": exc_type.__name__,
             "message": str(exc_value),
             "traceback": traceback.format_exception(exc_type, exc_value, exc_traceback),
-            "system_info": self._get_system_info(),
             "app_state": {
                 "global_vars": get_global('__all__', {}),  # Можно добавить все глобальные переменные
                 "last_operation": get_global('last_operation')
@@ -55,3 +54,13 @@ class ExceptionHandler:
         
         # Вызываем стандартный обработчик
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+    def _save_error_report(self, error_data: Dict[str, Any]) -> Path:
+        """Сохраняет отчет об ошибке в файл"""
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        error_filename = self.exceptions_dir / f"error_{timestamp}.json"
+        
+        with open(error_filename, 'w', encoding='utf-8') as f:
+            json.dump(error_data, f, ensure_ascii=False, indent=2)
+            
+        return error_filename

@@ -5,7 +5,7 @@ from OpenSSL import crypto
 from pathlib import Path
 from socket import gethostname
 
-from starter_files.utils.globalVars_utils import GlobalVars, set_global, get_global
+from starter_files.utils.globalVars_utils import get_global
 
 def setup_ssl_folder():
     """Создает папку для SSL если ее нет"""

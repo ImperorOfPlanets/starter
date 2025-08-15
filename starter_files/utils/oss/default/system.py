@@ -5,8 +5,8 @@ import subprocess
 import sys
 import ctypes
 
-from datetime import datetime
-from typing import Dict, Any, Tuple
+from datetime import datetime, timedelta
+from typing import Dict, Any
 from pathlib import Path
 
 from starter_files.utils.globalVars_utils import set_global, get_global
@@ -20,7 +20,33 @@ class SystemModule:
     @staticmethod
     def collect_basic_system_info() -> Dict[str, Any]:
         """Собирает базовую информацию о системе (без зависимостей от внешних утилит)"""
+
+        # Проверякем где запущен скрипт в докере или нет
+        set_global('running_in_docker', SystemModule.running_in_docker())
+
         privilege_info = SystemModule.get_privilege_info()
+        set_global('is_root', privilege_info['is_root'])
+        set_global('has_sudo', privilege_info['has_sudo'])
+        set_global('use_sudo', privilege_info['use_sudo'])
+
+        cpu_info = SystemModule.get_cpu_info()
+        set_global('cpu_model', cpu_info.get('name', 'N/A'))
+        set_global('cpu_cores', cpu_info.get('cores', 'N/A'))
+        set_global('cpu_logical_cores', cpu_info.get('logical_cores', 'N/A'))
+        set_global('cpu_usage', cpu_info.get('usage', 'N/A'))
+
+        memory_info = SystemModule.get_memory_info()
+        set_global('memory_total', memory_info.get('total', 'N/A'))
+        set_global('memory_used', memory_info.get('used', 'N/A'))
+        set_global('memory_percent', memory_info.get('percent', 'N/A'))
+        set_global('memory_available', memory_info.get('available', 'N/A'))
+
+        disk_info = SystemModule.get_disk_info()
+        set_global('disk_total', disk_info.get('total', 'N/A'))
+        set_global('disk_used', disk_info.get('used', 'N/A'))
+        set_global('disk_percent', disk_info.get('percent', 'N/A'))
+        set_global('disk_free', disk_info.get('free', 'N/A'))
+
         os_name, os_version = SystemModule.detect_os_name_version()
         sys_info = {
             # Ядро
@@ -49,24 +75,13 @@ class SystemModule:
                 'HOME': os.getenv('HOME')
             },
             'script_path': Path(sys.argv[0]).absolute().parent,
-            'privilege_info': privilege_info
+            'privilege_info': privilege_info,
+            'uptime': SystemModule.get_system_uptime(),
+            'timezone': SystemModule.get_timezone_info(),
         }
 
-        #print("[SystemModule] Записываем глобальные переменные:")
         for key, value in sys_info.items():
             set_global(key, value)
-            # print(f"  {key}: {value}")
-        
-        set_global('is_root', privilege_info['is_root'])
-        set_global('has_sudo', privilege_info['has_sudo'])
-        set_global('use_sudo', privilege_info['use_sudo'])
-
-        #print(f"  is_root: {privilege_info['is_root']}")
-        #print(f"  has_sudo: {privilege_info['has_sudo']}")
-        #print(f"  use_sudo: {privilege_info['use_sudo']}")
-        #print("[SystemModule] Все глобальные переменные установлены.")
-
-        # 💡 Теперь возвращаем для использования в других функциях
         return sys_info
 
     @staticmethod
@@ -81,7 +96,6 @@ class SystemModule:
             else:
                 is_root = ctypes.windll.shell32.IsUserAnAdmin() != 0
         except Exception as e:
-            logger.error(f"Error checking root: {e}")
             is_root = False
         
         has_sudo = False
@@ -99,7 +113,6 @@ class SystemModule:
             except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
                 has_sudo = False
             except Exception as e:
-                logger.error(f"Error checking sudo: {e}")
                 has_sudo = False
         
         return {
@@ -155,3 +168,301 @@ class SystemModule:
             pass
         
         return name, version
+
+    @staticmethod
+    def check_docker_compose_installed() -> bool:
+        """Проверяет, установлен ли Docker Compose (POSIX-совместимый метод)"""
+        try:
+            result = subprocess.run(
+                ['docker-compose', '--version'],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, PermissionError):
+            return False
+        except Exception as e:
+            return False
+
+    @staticmethod
+    def get_cpu_info() -> Dict[str, Any]:
+        """Возвращает информацию о процессоре (POSIX-совместимый метод)"""
+        try:
+            cpu_info = {
+                'name': 'N/A',
+                'cores': 'N/A',
+                'logical_cores': 'N/A',
+                'usage': 'N/A'
+            }
+            
+            # Получаем количество ядер
+            if platform.system() == "Darwin":
+                # macOS
+                cpu_info['logical_cores'] = int(subprocess.check_output(
+                    ['sysctl', '-n', 'hw.logicalcpu']).decode().strip())
+                cpu_info['cores'] = int(subprocess.check_output(
+                    ['sysctl', '-n', 'hw.physicalcpu']).decode().strip())
+            elif platform.system() == "Linux":
+                # Linux
+                cpu_info['logical_cores'] = os.cpu_count()
+                with open('/proc/cpuinfo', 'r') as f:
+                    cores = set()
+                    for line in f:
+                        if line.startswith('physical id'):
+                            cores.add(line.split(':')[1].strip())
+                    cpu_info['cores'] = len(cores) if cores else os.cpu_count()
+            
+            # Получаем модель процессора
+            if platform.system() == "Darwin":
+                cpu_info['name'] = subprocess.check_output(
+                    ['sysctl', '-n', 'machdep.cpu.brand_string']).decode().strip()
+            elif platform.system() == "Linux":
+                with open('/proc/cpuinfo', 'r') as f:
+                    for line in f:
+                        if line.startswith('model name'):
+                            cpu_info['name'] = line.split(':')[1].strip()
+                            break
+            
+            # Получаем загрузку CPU
+            if platform.system() in ["Linux", "Darwin"]:
+                try:
+                    # Читаем первую строку /proc/stat
+                    with open('/proc/stat', 'r') as f:
+                        stat_line = f.readline().split()[1:]
+                    # Конвертируем в числа
+                    times = [int(x) for x in stat_line]
+                    # Суммируем все время CPU
+                    total_time = sum(times)
+                    # Вычисляем время простоя
+                    idle_time = times[3]
+                    # Рассчитываем загрузку
+                    cpu_info['usage'] = f"{100 * (1 - idle_time / total_time):.1f}%"
+                except Exception:
+                    cpu_info['usage'] = 'N/A'
+            
+            return cpu_info
+        except Exception as e:
+            return {
+                'name': 'N/A',
+                'cores': 'N/A',
+                'logical_cores': 'N/A',
+                'usage': 'N/A'
+            }
+
+    @staticmethod
+    def get_memory_info() -> Dict[str, Any]:
+        """Возвращает информацию о памяти (POSIX-совместимый метод)"""
+        try:
+            mem_info = {
+                'total': 'N/A',
+                'used': 'N/A',
+                'percent': 'N/A',
+                'available': 'N/A'
+            }
+            
+            if platform.system() == "Linux":
+                with open('/proc/meminfo', 'r') as f:
+                    mem_data = {}
+                    for line in f:
+                        parts = line.split(':')
+                        if len(parts) == 2:
+                            key = parts[0].strip()
+                            value = parts[1].strip().split()[0]
+                            mem_data[key] = int(value) * 1024  # kB to bytes
+                
+                total = mem_data.get('MemTotal')
+                free = mem_data.get('MemFree')
+                buffers = mem_data.get('Buffers', 0)
+                cached = mem_data.get('Cached', 0)
+                sreclaimable = mem_data.get('SReclaimable', 0)
+                
+                if total is not None and free is not None:
+                    available = free + buffers + cached + sreclaimable
+                    used = total - free - buffers - cached - sreclaimable
+                    percent = (used / total) * 100
+                    
+                    mem_info = {
+                        'total': f"{total / (1024**3):.2f} GB",
+                        'used': f"{used / (1024**3):.2f} GB",
+                        'percent': f"{percent:.1f}%",
+                        'available': f"{available / (1024**3):.2f} GB"
+                    }
+            
+            elif platform.system() == "Darwin":
+                # Используем sysctl для macOS
+                total = int(subprocess.check_output(
+                    ['sysctl', '-n', 'hw.memsize']).decode().strip())
+                
+                # Используем vm_stat для получения информации об использованной памяти
+                vm_stat = subprocess.check_output(['vm_stat']).decode().split('\n')
+                stats = {}
+                for line in vm_stat:
+                    if ':' in line:
+                        key, value = line.split(':', 1)
+                        stats[key.strip()] = int(value.strip().rstrip('.'))
+                
+                # Рассчитываем свободную память
+                free = (stats['Pages free'] + stats['Pages inactive']) * 4096
+                used = total - free
+                percent = (used / total) * 100
+                
+                mem_info = {
+                    'total': f"{total / (1024**3):.2f} GB",
+                    'used': f"{used / (1024**3):.2f} GB",
+                    'percent': f"{percent:.1f}%",
+                    'available': f"{free / (1024**3):.2f} GB"
+                }
+            
+            return mem_info
+        except Exception as e:
+            return {
+                'total': 'N/A',
+                'used': 'N/A',
+                'percent': 'N/A',
+                'available': 'N/A'
+            }
+
+    @staticmethod
+    def get_disk_info() -> Dict[str, Any]:
+        """Возвращает информацию о дисках (POSIX-совместимый метод)"""
+        try:
+            disk_info = {
+                'total': 'N/A',
+                'used': 'N/A',
+                'percent': 'N/A',
+                'free': 'N/A'
+            }
+            
+            if platform.system() == "Linux":
+                # Используем df для получения информации о корневой файловой системе
+                df_output = subprocess.check_output(
+                    ['df', '-B1', '/']).decode().split('\n')[1]
+                parts = df_output.split()
+                if len(parts) >= 5:
+                    total = int(parts[1])
+                    used = int(parts[2])
+                    free = int(parts[3])
+                    percent = parts[4].rstrip('%')
+                    
+                    disk_info = {
+                        'total': f"{total / (1024**3):.2f} GB",
+                        'used': f"{used / (1024**3):.2f} GB",
+                        'percent': f"{percent}%",
+                        'free': f"{free / (1024**3):.2f} GB"
+                    }
+            
+            elif platform.system() == "Darwin":
+                # Используем df для macOS
+                df_output = subprocess.check_output(
+                    ['df', '/']).decode().split('\n')[1]
+                parts = [p for p in df_output.split(' ') if p]
+                if len(parts) >= 9:
+                    total = int(parts[8])
+                    used = int(parts[9])
+                    free = int(parts[10])
+                    percent = parts[4].rstrip('%')
+                    
+                    disk_info = {
+                        'total': f"{total / (1024**3):.2f} GB",
+                        'used': f"{used / (1024**3):.2f} GB",
+                        'percent': f"{percent}%",
+                        'free': f"{free / (1024**3):.2f} GB"
+                    }
+            
+            return disk_info
+        except Exception as e:
+            return {
+                'total': 'N/A',
+                'used': 'N/A',
+                'percent': 'N/A',
+                'free': 'N/A'
+            }
+
+    @staticmethod
+    def get_load_average() -> Dict[str, str]:
+        """Возвращает среднюю загрузку системы (POSIX-совместимый метод)"""
+        try:
+            if platform.system() == "Linux":
+                with open('/proc/loadavg', 'r') as f:
+                    load_avg = f.read().split()[:3]
+                return {
+                    '1min': load_avg[0],
+                    '5min': load_avg[1],
+                    '15min': load_avg[2]
+                }
+            elif platform.system() == "Darwin":
+                # Используем sysctl для macOS
+                load_avg = subprocess.check_output(
+                    ['sysctl', '-n', 'vm.loadavg']).decode().split()[1:4]
+                return {
+                    '1min': load_avg[0].rstrip(','),
+                    '5min': load_avg[1].rstrip(','),
+                    '15min': load_avg[2]
+                }
+            else:
+                return {
+                    '1min': 'N/A',
+                    '5min': 'N/A',
+                    '15min': 'N/A'
+                }
+        except Exception as e:
+            return {
+                '1min': 'N/A',
+                '5min': 'N/A',
+                '15min': 'N/A'
+            }
+
+    @staticmethod
+    def get_timezone_info() -> Dict[str, str]:
+        """Возвращает информацию о временной зоне (POSIX-совместимый метод)"""
+        try:
+            if platform.system() == "Linux":
+                # Читаем симлинк /etc/localtime
+                tz_path = os.path.realpath('/etc/localtime')
+                if 'zoneinfo' in tz_path:
+                    # Извлекаем название зоны
+                    tz_name = tz_path.split('zoneinfo/')[-1]
+                    return {'timezone': tz_name}
+                
+                # Альтернативный метод: через /etc/timezone
+                if os.path.exists('/etc/timezone'):
+                    with open('/etc/timezone', 'r') as f:
+                        tz_name = f.read().strip()
+                    return {'timezone': tz_name}
+            
+            elif platform.system() == "Darwin":
+                # Используем systemsetup для macOS
+                tz_name = subprocess.check_output(
+                    ['systemsetup', '-gettimezone']).decode().split(': ')[1].strip()
+                return {'timezone': tz_name}
+            
+            # Возвращаем значение переменной окружения как запасной вариант
+            tz_name = os.environ.get('TZ', 'UTC')
+            return {'timezone': tz_name}
+        except Exception as e:
+            return {'timezone': 'UTC'}
+
+    @staticmethod
+    def get_system_uptime() -> str:
+        """Возвращает время работы системы"""
+        try:
+            if platform.system() == "Windows":
+                # Windows implementation
+                tick_count = ctypes.windll.kernel32.GetTickCount64()
+                uptime_seconds = tick_count / 1000
+            else:
+                # Linux/MacOS implementation
+                with open('/proc/uptime', 'r') as f:
+                    uptime_seconds = float(f.readline().split()[0])
+            
+            uptime = str(timedelta(seconds=uptime_seconds))
+            return uptime.split('.')[0]  # Remove microseconds
+        except Exception as e:
+            return "N/A"
+
+    def running_in_docker() -> bool:
+        """Проверяет запущен в докере или нет"""
+        return Path('/.dockerenv').exists() or any(
+            'docker' in line for line in open('/proc/1/cgroup', 'r')
+        )

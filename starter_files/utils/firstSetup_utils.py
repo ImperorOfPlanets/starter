@@ -142,7 +142,7 @@ def open_browser(logger=None) -> None:
     Открывает браузер только при первом запуске вне Docker.
     В Docker-контейнере выводит специальный URL для доступа с хоста.
     """
-    is_docker = is_docker_container()
+    is_docker = get_global('running_in_docker')
     docker_port = os.environ.get('dockerPort', '8000')
     urls = get_server_url()
 
@@ -176,17 +176,3 @@ def open_browser(logger=None) -> None:
             if logger:
                 logger.error(error_msg)
             print(error_msg)'''
-
-def is_docker_container():
-    """Объединяет проверку файла и cgroup для надёжности."""
-    if os.path.exists('/.dockerenv'):
-        return True
-        
-    try:
-        with open('/proc/self/cgroup', 'r') as file:
-            if any('docker' in line or 'containerd' in line for line in file):
-                return True
-    except FileNotFoundError:
-        pass
-    
-    return False

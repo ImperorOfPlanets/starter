@@ -71,51 +71,49 @@ class NetworkModule:
         """Базовая реализация для неподдерживаемых ОС"""
         return [], []
 
-    @staticmethod
     def get_all_local_ips() -> list:
-        """Получаем все локальные IP и кешируем их"""
+        """Возвращает список локальных IP, учитывая Docker и хост"""
         cached_ips = get_global('local_ips')
         if cached_ips:
             return cached_ips
 
         ips = set()
-        system = platform.system()
-        
+        running_in_docker = get_global('running_in_docker')
         try:
-            if system == "Windows":
-                hostname = socket.gethostname()
-                ips.add(socket.gethostbyname(hostname))
-            else:  # POSIX
-                # Пытаемся через 'ip'
-                try:
-                    output = subprocess.check_output("ip -4 addr", shell=True, text=True, stderr=subprocess.DEVNULL)
-                    for line in output.splitlines():
-                        line = line.strip()
-                        if line.startswith("inet "):
-                            ip = line.split()[1].split("/")[0]
-                            if not ip.startswith("127."):
-                                ips.add(ip)
-                except Exception:
-                    # fallback через ifconfig
+            if running_in_docker:
+                # В Docker fallback на localhost или eth0
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                    s.connect(("8.8.8.8", 80))
+                    ips.add(s.getsockname()[0])
+            else:
+                system = platform.system()
+                if system == "Windows":
+                    hostname = socket.gethostname()
+                    ip = socket.gethostbyname(hostname)
+                    if ip:
+                        ips.add(ip)
+                else:
+                    # POSIX
                     try:
-                        output = subprocess.check_output("ifconfig", shell=True, text=True, stderr=subprocess.DEVNULL)
+                        output = subprocess.check_output("ip -4 addr", shell=True, text=True, stderr=subprocess.DEVNULL)
                         for line in output.splitlines():
                             line = line.strip()
-                            if "inet " in line and not line.startswith("127."):
-                                ip = line.split()[1]
-                                ips.add(ip)
+                            if line.startswith("inet "):
+                                ip = line.split()[1].split("/")[0]
+                                if not ip.startswith("127."):
+                                    ips.add(ip)
                     except Exception:
                         # fallback через сокет
                         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                             s.connect(("8.8.8.8", 80))
                             ips.add(s.getsockname()[0])
         except Exception as e:
-            # На всякий случай, чтобы функция не падала
             print(f"[WARN] Не удалось получить локальные IP: {e}")
 
-        ips_list = list(ips)
+        ips_list = list(ips) or ["127.0.0.1"]  # гарантируем хотя бы localhost
         set_global('local_ips', ips_list)
         return ips_list
+
 
     @staticmethod
     def get_network_devices() -> Tuple[List[NetworkDevice], List[NetworkDevice]]:

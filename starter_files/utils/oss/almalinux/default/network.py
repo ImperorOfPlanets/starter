@@ -6,3 +6,5 @@ class NetworkModule:
     @staticmethod
     def check() -> bool:
         return False
+
+
