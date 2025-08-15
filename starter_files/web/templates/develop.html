@@ -1,9 +1,88 @@
-<!-- include: dev-side-menu.html -->
+<!-- Стили и элементы меню -->
 <style>
-  #toggleMenuBtn{position:fixed;top:50%;right:0;transform:translateY(-50%);background-color:#1d4ed8;color:#fff;border-radius:4px 0 0 4px;cursor:pointer;user-select:none;font-size:24px;width:36px;height:60px;display:flex;align-items:center;justify-content:center;z-index:1050}
-  #sideMenu{position:fixed;top:50%;right:36px;transform:translateY(-50%);background:#fff;border:1px solid #e5e7eb;box-shadow:0 0 10px rgba(0,0,0,0.2);width:220px;display:none;z-index:1049;border-radius:8px 0 0 8px;padding:8px}
-  #sideMenu button{width:100%;border:none;background:none;padding:10px 14px;text-align:left;font-weight:500;cursor:pointer;border-radius:6px}
-  #sideMenu button:hover{background-color:#1d4ed8;color:#fff}
+  #toggleMenuBtn {
+    position: fixed;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    background-color: #1d4ed8;
+    color: #fff;
+    border-radius: 4px 0 0 4px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 24px;
+    width: 36px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
+  }
+
+  #sideMenu {
+    position: fixed;
+    top: 50%;
+    right: 36px;
+    transform: translateY(-50%);
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    width: 220px;
+    display: none;
+    z-index: 1049;
+    border-radius: 8px 0 0 8px;
+    padding: 8px;
+  }
+
+  #sideMenu button {
+    width: 100%;
+    border: none;
+    background: none;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 6px;
+  }
+
+  #sideMenu button:hover {
+    background-color: #1d4ed8;
+    color: #fff;
+  }
+
+  #devContent {
+    display: none; /* Скрываем по умолчанию */
+    position: fixed;
+    top: 10%;
+    right: 10%;
+    width: 80%;
+    max-width: 800px;
+    max-height: 80%;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.3);
+    padding: 20px;
+    z-index: 1060;
+  }
+
+  #devContentCloseBtn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #ef4444;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1061;
+  }
 </style>
 
 <div id="toggleMenuBtn" title="Toggle menu"><span id="arrowIcon">&lt;</span></div>
@@ -14,15 +93,20 @@
 </div>
 
 <!-- Контейнер для данных -->
-<div id="devContent" class="p-4 space-y-4"></div>
+<div id="devContent">
+  <button id="devContentCloseBtn">&times;</button>
+  <div id="devContentInner" class="p-4 space-y-4"></div>
+</div>
 
 <script>
   $(function () {
     const $arrow = $('#arrowIcon');
     const $menu  = $('#sideMenu');
     const $btn   = $('#toggleMenuBtn');
-    const $out   = $('#devContent');
-    let open = false;
+    const $dev   = $('#devContent');
+    const $inner = $('#devContentInner');
+    const $close = $('#devContentCloseBtn');
+    let menuOpen = false;
 
     function postForm(section, action, extra) {
       const fd = new FormData();
@@ -32,11 +116,11 @@
         for (const [k,v] of Object.entries(extra)) fd.append(k, v);
       }
       return $.ajax({
-        url: '/',               // один URL
+        url: '/',
         method: 'POST',
         data: fd,
-        processData: false,     // обязательно для FormData
-        contentType: false,     // обязательно для FormData
+        processData: false,
+        contentType: false,
         headers: {
           'Accept': 'application/json',
           'X-Requested-With': 'XMLHttpRequest'
@@ -46,7 +130,6 @@
     }
 
     function renderGlobals(data){
-      // data: объект ключ->значение
       const rows = Object.entries(data || {}).map(([k,v]) => `
         <tr class="border-b">
           <td class="px-3 py-2 font-medium">${k}</td>
@@ -57,15 +140,15 @@
           <div class="text-lg font-semibold mb-3">Глобальные переменные</div>
           <table class="min-w-full text-sm">
             <thead><tr class="text-left text-gray-500">
-              <th class="px-3 py-2">Ключ</th><th class="px-3 py-2">Значение</th>
+              <th class="px-3 py-2">Ключ</th>
+              <th class="px-3 py-2">Значение</th>
             </tr></thead>
-            <tbody>${rows || '<tr><td class="px-3 py-2" colspan="2">Пусто</td></tr>'}</tbody>
+            <tbody>${rows || '<tr><td class="px-3 py-2" colspan="2">Нет данных</td></tr>'}</tbody>
           </table>
         </div>`;
     }
 
     function renderModules(list){
-      // list: [{module_name,class_name,path,functions:[{name,kind,doc,comment}]}]
       const cards = (list || []).map(m => {
         const funcs = (m.functions || []).map(f => `
           <div class="border rounded-xl p-3">
@@ -75,8 +158,7 @@
             </div>
             ${f.doc ? `<div class="text-sm text-gray-700 mt-1 whitespace-pre-line">${f.doc}</div>` : ''}
             ${f.comment ? `<div class="text-xs text-gray-500 mt-2 whitespace-pre-line">${f.comment}</div>` : ''}
-          </div>
-        `).join('');
+          </div>`).join('');
         return `
           <div class="rounded-2xl shadow p-4 bg-white">
             <div class="flex items-center justify-between">
@@ -84,66 +166,51 @@
               <div class="text-xs text-gray-500 break-all">${m.path}</div>
             </div>
             <div class="grid md:grid-cols-2 gap-3 mt-3">
-              ${funcs || '<div class="text-sm text-gray-500">Функции не найдены</div>'}
+              ${funcs || '<div class="text-sm text-gray-500">Нет функций</div>'}
             </div>
           </div>`;
       }).join('');
-      return `<div class="space-y-4">${cards || '<div class="text-sm text-gray-500">Модулей нет</div>'}</div>`;
+      return `<div class="space-y-4">${cards || '<div class="text-sm text-gray-500">Нет модулей</div>'}</div>`;
     }
 
     $btn.on('click', function(){
-      open = !open;
-      $menu.toggle(open);
-      $arrow.text(open ? '>' : '<');
+      menuOpen = !menuOpen;
+      $menu.toggle(menuOpen);
+      $arrow.text(menuOpen ? '>' : '<');
     });
 
     $('.menu-item').on('click', function(){
       const action = $(this).data('action');
       postForm('develop', action, {})
         .done(function(res){
-          if (res.status === 'success') {
-            if (action === 'globalVariables') {
-              $out.html(renderGlobals(res.data));
-            } else if (action === 'modules') {
-              $out.html(renderModules(res.data));
-            } else {
-              $out.html('<div class="text-sm text-gray-500">ОК</div>');
-            }
+          if(res.status === 'success'){
+            let html = '';
+            if(action === 'globalVariables') html = renderGlobals(res.data);
+            else if(action === 'modules') html = renderModules(res.data);
+            else html = '<div>OK</div>';
+
+            $inner.html(html);
+            $dev.show();
           } else {
-            $out.html('<div class="text-sm text-red-600">Ошибка: ' + (res.message || '') + '</div>');
+            $inner.html('<div class="text-sm text-red-600">Ошибка: ' + (res.message || '') + '</div>');
+            $dev.show();
           }
         })
         .fail(function(xhr){
-          const msg = xhr.responseJSON?.message || 'Ошибка сети или сервера';
-          $out.html('<div class="text-sm text-red-600">' + msg + '</div>');
+          const msg = xhr.responseJSON?.message || 'Сетевая ошибка';
+          $inner.html('<div class="text-sm text-red-600">' + msg + '</div>');
+          $dev.show();
         });
     });
 
-    // пример: селектор языка на один URL
-    $('#languageSelector').on('change', function(){
-      const lang = $(this).val();
-      const original = '{{ current_language|default("") }}';
-      const fd = new FormData();
-      fd.append('section','language');
-      fd.append('action','changeLanguage');
-      fd.append('lang',lang);
-      $.ajax({
-        url:'/',
-        method:'POST',
-        data: fd,
-        processData:false,
-        contentType:false,
-        headers:{
-          'Accept':'application/json',
-          'X-Requested-With':'XMLHttpRequest'
-        },
-        dataType:'json'
-      })
-      .done(function(r){
-        if (r.status === 'success') location.reload();
-        else { alert(r.message || 'Ошибка'); $('#languageSelector').val(original); }
-      })
-      .fail(function(){ alert('Сеть/сервер недоступен'); $('#languageSelector').val(original); });
+    $close.on('click', function(){
+      $dev.hide();
     });
+
+    // Автозагрузка при прямой ссылке
+    const urlParams = new URLSearchParams(window.location.search);
+    const view = urlParams.get('view');
+    if(view === 'globals') $('.menu-item[data-action="globalVariables"]').trigger('click');
+    else if(view === 'modules') $('.menu-item[data-action="modules"]').trigger('click');
   });
 </script>

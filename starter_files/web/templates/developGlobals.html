@@ -1,0 +1,62 @@
+<div class="rounded-2xl shadow p-4 bg-white">
+    <div class="text-lg font-semibold mb-3">{{ t('develop.globals_title') }}</div>
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left text-gray-500">
+          <th class="px-3 py-2">{{ t('develop.key') }}</th>
+          <th class="px-3 py-2">{{ t('develop.value') }}</th>
+        </tr>
+      </thead>
+      <tbody id="globals-table-body">
+        <tr>
+          <td colspan="2" class="px-3 py-2 text-center">{{ t('develop.loading') }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  
+  <script>
+    $(function() {
+      const fd = new FormData();
+      fd.append('section', 'develop');
+      fd.append('action', 'globalVariables');
+      
+      $.ajax({
+        url: '/',
+        method: 'POST',
+        data: fd,
+        processData: false,
+        contentType: false,
+        dataType: 'json'
+      })
+      .done(res => {
+        if (res.status === 'success') {
+          const rows = Object.entries(res.data || {}).map(([k,v]) => `
+            <tr class="border-b">
+              <td class="px-3 py-2 font-medium">${k}</td>
+              <td class="px-3 py-2 break-all">${String(v)}</td>
+            </tr>
+          `).join('');
+          
+          $('#globals-table-body').html(rows || `
+            <tr>
+              <td colspan="2" class="px-3 py-2">{{ t("develop.no_data") }}</td>
+            </tr>
+          `);
+        } else {
+          $('#globals-table-body').html(`
+            <tr>
+              <td colspan="2" class="text-red-600">${res.message}</td>
+            </tr>
+          `);
+        }
+      })
+      .fail(() => {
+        $('#globals-table-body').html(`
+          <tr>
+            <td colspan="2" class="text-red-600">{{ t("develop.request_error") }}</td>
+          </tr>
+        `);
+      });
+    });
+  </script>

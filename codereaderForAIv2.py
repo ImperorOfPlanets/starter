@@ -5,7 +5,7 @@ from pathlib import Path
 from html import escape
 
 class CodeReaderConfig:
-    IGNORE_DIRS = ['.git', '__pycache__', 'venv', '.idea',
+    IGNORE_DIRS = ['.git', '__pycache__', 'venv*', '.idea',
         'node_modules',
         # L
         'differences','extracted','backups',
@@ -25,7 +25,7 @@ class CodeReaderConfig:
         'exceptions',
 
         # web
-        'web'          
+        # 'web'          
     ]
     IGNORE_FILES = [
         # Дефолтный мусор

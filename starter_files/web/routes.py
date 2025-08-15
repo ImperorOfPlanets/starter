@@ -1,15 +1,18 @@
-import os
-import sys
 
 from flask import Blueprint, current_app, g, jsonify, render_template, request, session, Response
 from importlib import import_module
 from pathlib import Path
+from typing import List, Dict, Any
 
 from starter_files.utils.i18n_utils import get_available_languages, t, set_language, get_current_language, return_basic
 from starter_files.utils.globalVars_utils import get_global
 from starter_files.utils.log_utils import get_logger
+from starter_files.utils.oss.module_loader import collect_modules_info
 
 routes = Blueprint('routes', __name__)
+
+def get_modules_index(refresh: bool = False) -> List[Dict[str, Any]]:
+    return collect_modules_info(refresh=refresh)
 
 # Функция получения модулей для панель управления
 def get_current_sections_in_panel():

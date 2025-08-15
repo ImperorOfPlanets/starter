@@ -1,0 +1,55 @@
+<div id="modules-container" class="space-y-4">
+    <div class="text-center py-4">{{ t('develop.loading') }}</div>
+  </div>
+  
+  <script>
+    $(function() {
+      const fd = new FormData();
+      fd.append('section', 'develop');
+      fd.append('action', 'modules');
+      
+      $.ajax({
+        url: '/',
+        method: 'POST',
+        data: fd,
+        processData: false,
+        contentType: false,
+        dataType: 'json'
+      })
+      .done(res => {
+        if (res.status === 'success') {
+          const cards = (res.data || []).map(m => {
+            const funcs = (m.functions || []).map(f => `
+              <div class="border rounded-xl p-3">
+                <div class="flex items-center justify-between">
+                  <div class="font-medium">${f.name}</div>
+                  <span class="text-xs px-2 py-0.5 rounded bg-gray-100">${f.kind}</span>
+                </div>
+                ${f.doc ? `<div class="text-sm text-gray-700 mt-1 whitespace-pre-line">${f.doc}</div>` : ''}
+                ${f.comment ? `<div class="text-xs text-gray-500 mt-2 whitespace-pre-line">${f.comment}</div>` : ''}
+              </div>
+            `).join('');
+            
+            return `
+              <div class="rounded-2xl shadow p-4 bg-white">
+                <div class="flex items-center justify-between">
+                  <div class="text-lg font-semibold">${m.module_name} <span class="text-gray-400">(${m.class_name})</span></div>
+                  <div class="text-xs text-gray-500 break-all">${m.path}</div>
+                </div>
+                <div class="grid md:grid-cols-2 gap-3 mt-3">
+                  ${funcs || '<div class="text-sm text-gray-500">{{ t("develop.no_functions") }}</div>'}
+                </div>
+              </div>
+            `;
+          }).join('');
+          
+          $('#modules-container').html(cards || '<div class="text-sm text-gray-500">{{ t("develop.no_modules") }}</div>');
+        } else {
+          $('#modules-container').html(`<div class="text-red-600">${res.message}</div>`);
+        }
+      })
+      .fail(() => {
+        $('#modules-container').html('<div class="text-red-600">{{ t("develop.request_error") }}</div>');
+      });
+    });
+  </script>

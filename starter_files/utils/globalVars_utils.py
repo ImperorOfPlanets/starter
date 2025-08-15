@@ -16,6 +16,12 @@ class GlobalVars:
         """Установка глобальной переменной"""
         cls._vars[name] = value
 
+    # Добавляем новый метод в класс GlobalVars
+    @classmethod
+    def get_all_vars(cls) -> Dict[str, Any]:
+        """Получение всех глобальных переменных"""
+        return cls._vars.copy()
+
     @classmethod
     def get_var(cls, name: str, default: Any = None) -> Any:
         """Получение глобальной переменной"""
@@ -44,3 +50,8 @@ def get_global(name: str, default: Any = None) -> Any:
 def del_global(name: str) -> None:
     """Удаление глобальной переменной (удобный алиас)"""
     GlobalVars.del_var(name)
+
+# Добавляем алиас
+def get_all_globals() -> Dict[str, Any]:
+    """Получение всех глобальных переменных (удобный алиас)"""
+    return GlobalVars.get_all_vars()
