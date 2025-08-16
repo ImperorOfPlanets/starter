@@ -5,6 +5,7 @@ import sys
 
 from datetime import timedelta
 from flask import Flask, render_template, request,session
+from flask_session import Session
 from pathlib import Path
 
 from starter_files.utils.envStarter_utils import read_env_file
@@ -35,8 +36,10 @@ def configure_app() -> Flask:
     app.logger = logger
 
     # Считываем секретный ключ
-    env_vars = read_env_file(Path('.env'))
+    env_vars = read_env_file(get_global('script_path') / '.env')
     app.secret_key = env_vars.get('APP_SECRET_KEY', secrets.token_hex(32))
+    print("Устанавливаемый ключ")
+    print(app.secret_key)
 
     # Настройка папки сессий
     session_dir = base_dir / "starter_files" / "web" / "sessions"

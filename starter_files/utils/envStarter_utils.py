@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
+from starter_files.utils.globalVars_utils import get_global
 
 def parse_env_content(content: str) -> Tuple[Dict[str, str], List[Union[str, Tuple[str, str]]]]:
     """Парсит содержимое .env файла, сохраняя структуру"""
@@ -80,8 +81,13 @@ def write_env_file(env_path: Path,
 
 def ensure_env_variables():
     """Обновляет .env файл в соответствии с .env.example"""
-    env_path = Path('.env')
-    env_example_path = Path('.env.example')
+    script_path = get_global('script_pat')
+
+    env_path = script_path / 'script_pat'
+    print('.env')
+    
+    env_example_path = script_path / '.env.example'
+    print(env_example_path)
     
     if not env_example_path.exists():
         return
