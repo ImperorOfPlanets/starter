@@ -39,7 +39,7 @@ class BasicDeviceInfo:
     is_up: bool
     is_physical: bool
 
-class NetworkModule:
+class NetworkModule(BaseModule):
 
     @staticmethod
     def check() -> bool:
@@ -71,6 +71,7 @@ class NetworkModule:
         """Базовая реализация для неподдерживаемых ОС"""
         return [], []
 
+    @staticmethod
     def get_all_local_ips() -> list:
         """Возвращает список локальных IP, учитывая Docker и хост"""
         cached_ips = get_global('local_ips')
@@ -113,7 +114,6 @@ class NetworkModule:
         ips_list = list(ips) or ["127.0.0.1"]  # гарантируем хотя бы localhost
         set_global('local_ips', ips_list)
         return ips_list
-
 
     @staticmethod
     def get_network_devices() -> Tuple[List[NetworkDevice], List[NetworkDevice]]:

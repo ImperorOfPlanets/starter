@@ -1,11 +1,10 @@
+from starter_files.utils.oss.base_module import BaseModule
+
 from typing import List
 
 from starter_files.utils.globalVars_utils import get_global
 
-class DockerModule:
-    @staticmethod
-    def check() -> bool:
-        return True
+class DockerModule(BaseModule):
 
     @staticmethod
     def return_commands_install() -> List[str]:

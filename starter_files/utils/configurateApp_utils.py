@@ -4,7 +4,7 @@ import secrets
 import sys
 
 from datetime import timedelta
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request,session
 from pathlib import Path
 
 from starter_files.utils.envStarter_utils import read_env_file
@@ -40,6 +40,8 @@ def configure_app() -> Flask:
 
     # Настройка папки сессий
     session_dir = base_dir / "starter_files" / "web" / "sessions"
+    print("Пака сессий")
+    print(session_dir)
     
     # Создаем папку (если не существует)
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -60,6 +62,25 @@ def configure_app() -> Flask:
 
     # Отключаем кеш
     app.jinja_env.cache = {}
+
+    # Выводим перед загрузкой
+    app.session_initialized = False
+    
+    @app.before_request
+    def initialize_session():
+        if not app.session_initialized:
+            # Инициализация сессии при первом запросе
+            session.setdefault('initialized', True)
+            session.modified = True
+            app.session_initialized = True
+            logger.info("Session system initialized")
+            
+            # Для отладки
+            try:
+                sid = session.sid if hasattr(session, 'sid') else 'not_set'
+                logger.debug(f"Initial session ID: {sid}")
+            except Exception as e:
+                logger.error(f"Error getting session ID: {str(e)}")
 
     # Добавляем заголовки отключения кеширования
     @app.after_request
@@ -108,7 +129,7 @@ def configure_app() -> Flask:
         # Add form data for POST requests
         if request.method == 'POST':
             try:
-                # Get form data (excluding sensitive fields)
+                # Get form data (excluding sensitive fields) фывфы
                 form_data = {}
                 for key, value in request.form.items():
                     if 'password' not in key.lower():

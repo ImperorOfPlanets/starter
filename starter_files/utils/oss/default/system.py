@@ -1,3 +1,4 @@
+from starter_files.utils.oss.base_module import BaseModule
 import os
 import platform
 import socket
@@ -12,7 +13,7 @@ from pathlib import Path
 from starter_files.utils.globalVars_utils import set_global, get_global
 from starter_files.utils.log_utils import get_logger
 
-class SystemModule: 
+class SystemModule(BaseModule): 
     @staticmethod
     def check() -> bool:
         return True

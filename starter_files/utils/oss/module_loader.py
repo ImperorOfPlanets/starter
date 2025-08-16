@@ -6,12 +6,64 @@ import time
 from pathlib import Path
 from starter_files.utils.globalVars_utils import set_global, get_global
 from typing import List, Dict, Any
+from starter_files.utils.log_utils import logging
 
 logger = logging.getLogger('module_loader')
 
-# === Глобальный кеш загруженных модулей ===
-# Структура: {os_name: {module_name: module_class}}
-_loaded_modules_cache = {}
+_modules_cache = None
+
+def load_modules(refresh: bool = False):
+    """
+    Сканирует все модули под текущую ОС и создаёт кеш функций.
+    При refresh=True пересоздаёт кеш даже если уже есть.
+    """
+    global _modules_cache
+    if _modules_cache and not refresh:
+        return _modules_cache
+
+    script_path = Path(get_global("script_path"))
+    os_name = get_global("os")
+    os_version = get_global("os_version")
+
+    search_paths = [
+        script_path / "starter_files" / "utils" / "oss" / "default",
+        script_path / "starter_files" / "utils" / "oss" / os_name / "default",
+        script_path / "starter_files" / "utils" / "oss" / os_name / os_version,
+    ]
+
+    modules_found = {}
+
+    for base in search_paths:
+        if not base.exists():
+            continue
+        for py_file in base.glob("*.py"):
+            module_name = py_file.stem
+            # Если модуль уже найден на более конкретном уровне, пропускаем
+            if module_name in modules_found:
+                continue
+            try:
+                module_class = load_module_from_path(py_file, module_name)
+                if module_class is None:
+                    continue
+
+                funcs = {}
+                for name, member in inspect.getmembers(module_class):
+                    if name.startswith("__"):
+                        continue
+                    if inspect.isfunction(member) or inspect.ismethod(member):
+                        funcs[name] = member
+
+                modules_found[module_name] = {
+                    "class": module_class,
+                    "functions": funcs,
+                    "path": py_file
+                }
+                logger.info(f"[LOAD] Модуль {module_name} загружен из {py_file}")
+            except Exception as e:
+                logger.warning(f"[WARN] Не удалось загрузить {py_file}: {e}")
+
+    _modules_cache = modules_found
+    return _modules_cache
 
 def load_module_from_path(path: Path, module_name: str) -> object:
     """Загружает модуль из указанного пути"""
@@ -107,6 +159,36 @@ class {module_name.capitalize()}Module:
     _loaded_modules_cache[os_name][module_name] = module_class
     logger.error(f"[ERROR] Module {module_name} not found! Stub используется: {stub_path}")
     return module_class
+
+#===== ДЛЯ ВЫПОЛЕНЕНИЯ get(НАЗВАНИЕ МОДУЛЯ,ФУУНКЦИЯ)#
+
+def get(module_name: str, func_name: str = None, *args, **kwargs):
+    """
+    Прокладка для вызова функции из модуля с fallback.
+    Если func_name не задан — возвращает сам класс модуля.
+    """
+    global _modules_cache
+    if not _modules_cache:
+        load_modules()
+
+    module = _modules_cache.get(module_name)
+    if not module:
+        logger.error(f"[ERROR] Модуль {module_name} не найден!")
+        return None
+
+    if not func_name:
+        return module["class"]
+
+    func = module["functions"].get(func_name)
+    if not func:
+        logger.warning(f"[WARN] Функция {func_name} не найдена в {module_name}")
+        return None
+
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        logger.error(f"[ERROR] Ошибка при вызове {module_name}.{func_name}: {e}")
+        return None
 
 #===== Это уже касаеться сюорки комментариев и прочего для раздела разработчиков#
 

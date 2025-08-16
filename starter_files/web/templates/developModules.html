@@ -1,55 +1,182 @@
-<div id="modules-container" class="space-y-4">
-    <div class="text-center py-4">{{ t('develop.loading') }}</div>
+<div data-action="modules" data-title="Загруженные модули" class="container-fluid">
+  <div class="card border mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 fw-semibold text-gray-700 d-flex align-items-center">
+          <i class="bi bi-boxes me-2"></i> Загруженные модули
+        </h2>
+        <button class="btn btn-sm btn-outline-primary" id="refresh-modules">
+          <i class="bi bi-arrow-clockwise"></i> Обновить
+        </button>
+      </div>
+
+      <div id="modules-container">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2 text-muted">Загрузка данных...</p>
+        </div>
+      </div>
+    </div>
   </div>
+</div>
+
+<script>
+// Глобальная функция инициализации модулей
+function initModules() {
+  console.log('Инициализация модулей...');
   
-  <script>
-    $(function() {
-      const fd = new FormData();
-      fd.append('section', 'develop');
-      fd.append('action', 'modules');
-      
-      $.ajax({
-        url: '/',
-        method: 'POST',
-        data: fd,
-        processData: false,
-        contentType: false,
-        dataType: 'json'
-      })
-      .done(res => {
-        if (res.status === 'success') {
-          const cards = (res.data || []).map(m => {
-            const funcs = (m.functions || []).map(f => `
-              <div class="border rounded-xl p-3">
-                <div class="flex items-center justify-between">
-                  <div class="font-medium">${f.name}</div>
-                  <span class="text-xs px-2 py-0.5 rounded bg-gray-100">${f.kind}</span>
-                </div>
-                ${f.doc ? `<div class="text-sm text-gray-700 mt-1 whitespace-pre-line">${f.doc}</div>` : ''}
-                ${f.comment ? `<div class="text-xs text-gray-500 mt-2 whitespace-pre-line">${f.comment}</div>` : ''}
-              </div>
-            `).join('');
-            
-            return `
-              <div class="rounded-2xl shadow p-4 bg-white">
-                <div class="flex items-center justify-between">
-                  <div class="text-lg font-semibold">${m.module_name} <span class="text-gray-400">(${m.class_name})</span></div>
-                  <div class="text-xs text-gray-500 break-all">${m.path}</div>
-                </div>
-                <div class="grid md:grid-cols-2 gap-3 mt-3">
-                  ${funcs || '<div class="text-sm text-gray-500">{{ t("develop.no_functions") }}</div>'}
-                </div>
-              </div>
-            `;
-          }).join('');
-          
-          $('#modules-container').html(cards || '<div class="text-sm text-gray-500">{{ t("develop.no_modules") }}</div>');
-        } else {
-          $('#modules-container').html(`<div class="text-red-600">${res.message}</div>`);
-        }
-      })
-      .fail(() => {
-        $('#modules-container').html('<div class="text-red-600">{{ t("develop.request_error") }}</div>');
-      });
-    });
-  </script>
+  // Инициализация обработчиков
+  $('#refresh-modules').off('click').on('click', loadModules);
+  
+  // Загрузка данных
+  loadModules();
+}
+
+// Функция загрузки данных модулей
+function loadModules() {
+  const container = $('#modules-container');
+  
+  // Показываем спиннер
+  container.html(`
+    <div class="text-center py-4">
+      <div class="spinner-border text-primary" role="status"></div>
+      <p class="mt-2 text-muted">Загрузка данных...</p>
+    </div>
+  `);
+
+  // Отправляем запрос
+  $.ajax({
+    url: '/',
+    method: 'POST',
+    data: {
+      section: 'develop',
+      action: 'modules'
+    },
+    dataType: 'json',
+    headers: {
+      'Accept': 'application/json'
+    },
+  })
+  .done(res => {
+    if (res.status === 'success' && res.data?.length > 0) {
+      renderModules(res.data);
+    } else {
+      const errorMsg = res.message || 'Нет данных о модулях';
+      container.html(`
+        <div class="alert alert-warning">
+          <i class="bi bi-exclamation-triangle me-2"></i>${errorMsg}
+        </div>
+      `);
+    }
+  })
+  .fail(xhr => {
+    let errorMsg = 'Ошибка сети';
+    try {
+      const response = JSON.parse(xhr.responseText);
+      errorMsg = response.message || errorMsg;
+    } catch (e) {
+      errorMsg = xhr.statusText || errorMsg;
+    }
+    container.html(`
+      <div class="alert alert-danger">
+        <i class="bi bi-exclamation-circle me-2"></i>${errorMsg}
+      </div>
+    `);
+  });
+}
+
+// Функция отрисовки модулей
+function renderModules(modules) {
+  const container = $('#modules-container');
+  container.empty();
+  
+  if (!modules || modules.length === 0) {
+    container.html('<p class="text-muted">Нет модулей для отображения</p>');
+    return;
+  }
+
+  // Отрисовываем каждый модуль
+  modules.forEach(module => {
+    const moduleCard = createModuleCard(module);
+    container.append(moduleCard);
+  });
+  
+  // Инициализация обработчиков для карточек модулей
+  initModuleCardHandlers();
+}
+
+// Создание карточки модуля (ПЕРЕПИСАННАЯ)
+function createModuleCard(module) {
+  const funcCount = module.functions?.length || 0;
+  
+  return `
+    <div class="card mb-3 module-card" data-module="${module.module_name}">
+      <div class="module-header card-header bg-light d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center">
+          <h4 class="card-title mb-0 me-3">${module.module_name}</h4>
+          <small class="text-muted">${module.class_name}</small>
+        </div>
+        <div class="d-flex align-items-center">
+          <span class="badge bg-secondary me-2">${funcCount} функций</span>
+          <i class="bi bi-chevron-down module-toggle-icon"></i>
+        </div>
+      </div>
+      <div class="module-body card-body d-none">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="text-truncate">
+            <i class="bi bi-folder me-1"></i>
+            <small>${module.path}</small>
+          </div>
+        </div>
+        <div class="functions-container">
+          ${renderFunctions(module.functions)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Отрисовка функций модуля
+function renderFunctions(functions) {
+  if (!functions || functions.length === 0) {
+    return '<p class="text-muted small">Нет функций для отображения</p>';
+  }
+
+  return functions.map(func => `
+    <div class="card mb-3 function-card">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h5 class="card-title mb-0">${func.name}</h5>
+          <span class="badge bg-primary">${func.kind}</span>
+        </div>
+        ${func.doc ? `<p class="card-text small">${func.doc}</p>` : ''}
+        ${func.comment ? `<div class="text-muted mt-2"><small>${func.comment}</small></div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+// Инициализация обработчиков (ПОЛНОСТЬЮ ПЕРЕПИСАННАЯ)
+function initModuleCardHandlers() {
+  // Удаляем все предыдущие обработчики
+  $(document).off('click', '.module-header');
+  
+  // Вешаем новый обработчик с использованием уникального класса
+  $(document).on('click', '.module-header', function() {
+    const $header = $(this);
+    const $card = $header.closest('.module-card');
+    const $body = $card.find('.module-body');
+    const $icon = $header.find('.module-toggle-icon');
+    
+    // Переключаем видимость только у текущего модуля
+    $body.toggleClass('d-none');
+    
+    // Переключаем иконку
+    if ($body.hasClass('d-none')) {
+      $icon.removeClass('bi-chevron-up').addClass('bi-chevron-down');
+    } else {
+      $icon.removeClass('bi-chevron-down').addClass('bi-chevron-up');
+    }
+  });
+}
+</script>

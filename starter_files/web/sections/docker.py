@@ -12,7 +12,7 @@ from flask import render_template, jsonify, Response
 
 from starter_files.utils.i18n_utils import t
 from starter_files.utils.log_utils import get_logger
-from starter_files.utils.molule_utils import get
+from starter_files.utils.oss.module_loader import get
 from starter_files.utils.globalVars_utils import get_global
 
 logger = get_logger()

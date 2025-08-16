@@ -2,10 +2,13 @@ import os
 import platform
 import subprocess
 import shutil
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, List, Optional
 from starter_files.utils.oss.base_module import BaseModule
 
+class VpnModule(BaseModule): 
+    pass
 class BaseVPNClient(BaseModule):
     """Абстрактный базовый класс для VPN клиентов"""
     
@@ -247,7 +250,7 @@ class VPNManager:
             'interfaces': []
         }
 
-# Глобальный экземпляр менеджера
+# Глобальный экземпляр менеджера фывыф
 vpn_manager = VPNManager()
 
 def get_available_clients() -> Dict[str, dict]:

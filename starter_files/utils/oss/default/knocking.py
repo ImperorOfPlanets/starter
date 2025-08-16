@@ -8,8 +8,8 @@ from typing import List, Dict, Optional, Tuple
 
 from starter_files.utils.oss.base_module import BaseModule
 
-class KnickingModule(BaseModule):
-
+class KnockingModule(BaseModule):
+    @staticmethod
     def is_knocking_installed() -> bool:
         """Check if port knocking is installed on the system"""
         try:
@@ -26,6 +26,7 @@ class KnickingModule(BaseModule):
         except Exception:
             return False
 
+    @staticmethod
     def get_knocking_config() -> Optional[Dict]:
         """Get current knocking configuration"""
         try:
@@ -45,6 +46,7 @@ class KnickingModule(BaseModule):
         except Exception:
             return None
 
+    @staticmethod
     def is_knocking_active() -> bool:
         """Check if knocking service is running"""
         try:
@@ -59,6 +61,7 @@ class KnickingModule(BaseModule):
         except Exception:
             return False
 
+    @staticmethod
     def start_knocking_service() -> bool:
         """Start the knocking service"""
         try:
@@ -69,6 +72,7 @@ class KnickingModule(BaseModule):
         except Exception:
             return False
 
+    @staticmethod
     def stop_knocking_service() -> bool:
         """Stop the knocking service"""
         try:
@@ -79,6 +83,7 @@ class KnickingModule(BaseModule):
         except Exception:
             return False
 
+    @staticmethod
     def update_knocking_config(ports: List[int], timeout: int) -> bool:
         """Update knocking configuration"""
         try:
@@ -107,6 +112,7 @@ class KnickingModule(BaseModule):
         except Exception:
             return False
 
+    @staticmethod
     def install_knocking() -> Tuple[bool, str]:
         """Install port knocking for the current OS"""
         try:
@@ -169,6 +175,7 @@ class KnickingModule(BaseModule):
         except Exception as e:
             return False, f"Error during installation: {str(e)}"
 
+    @staticmethod
     def _install_knocking_windows() -> Tuple[bool, str]:
         """Alternative Windows installation method"""
         try:

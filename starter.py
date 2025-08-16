@@ -33,6 +33,15 @@ def start_interactive_mode():
     from starter_files.utils.firstSetup_utils import open_browser
     from dotenv import load_dotenv
 
+    env_file = Path(get_global('script_path')) / '.env'
+    load_dotenv(env_file)
+    print(f"[DEBUG] Переменные окружения загружены из {env_file}")
+
+    # Для отладки: проверка переменных окружения
+    env_vars = ["APP_SECRET_KEY", "ADMIN_LOGIN", "ADMIN_PASSWORD_HASH"]
+    for var in env_vars:
+        print(f"{var} = {os.environ.get(var, 'NOT_SET')}")
+
     app = configure_app()
     ssl_context = get_ssl_context()
     open_browser()
@@ -44,7 +53,7 @@ def start_interactive_mode():
     )
 
 if __name__ == '__main__':
-    # Первым делом проверяем/создаем venv
+    # Первым делом проверяем/создаем venv фыв ыф
     if venv_utils.ensure_venv():
         sys.exit(0)
 
@@ -70,13 +79,6 @@ if __name__ == '__main__':
         print(f"Пароль: {credentials['password']}")
         print("Сохраните эти данные!")
         print("="*50 + "\n")
-
-    if os.environ.get('WERKZEUG_RUN_MAIN') is None:
-        # Основной процесс FLASK - ПЕРЕЗАПУСКАЕТЬСЯ КОТОРЫЙ
-        from dotenv import load_dotenv
-        env_file = Path(get_global('script_path')) / '.env'
-        load_dotenv(env_file)
-        print(f"[DEBUG] Переменные окружения загружены из {env_file}")
 
 
     args = parse_args()

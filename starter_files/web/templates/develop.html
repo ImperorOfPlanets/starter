@@ -1,217 +1,120 @@
-<style>
-  /* Кнопка фиксирована справа по центру */
-  #toggleMenuBtn {
-    position: fixed;
-    top: 50%;
-    right: 0;
-    transform: translateY(-50%);
-    background-color: #1d4ed8;
-    color: #fff;
-    border-radius: 4px 0 0 4px;
-    cursor: pointer;
-    user-select: none;
-    font-size: 24px;
-    width: 36px;
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1050;
-  }
-
-  /* Сайд-меню */
-  #sideMenu {
-    position: fixed;
-    top: 50%;
-    right: 36px;
-    transform: translateY(-50%);
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    box-shadow: 0 0 10px rgba(0,0,0,0.2);
-    width: 220px;
-    display: none;
-    z-index: 1049;
-    border-radius: 8px 0 0 8px;
-    padding: 8px;
-  }
-
-  #sideMenu button {
-    width: 100%;
-    border: none;
-    background: none;
-    padding: 10px 14px;
-    text-align: left;
-    font-weight: 500;
-    cursor: pointer;
-    border-radius: 6px;
-  }
-
-  #sideMenu button:hover {
-    background-color: #1d4ed8;
-    color: #fff;
-  }
-
-  /* Контейнер для данных - почти весь экран */
-  #devContent {
-    display: none;
-    position: fixed;
-    top: 5%;
-    left: 2.5%;
-    width: 95%;
-    height: 90%;
-    overflow-y: auto;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 0 20px rgba(0,0,0,0.3);
-    padding: 20px;
-    z-index: 1060;
-  }
-
-  #devContentCloseBtn {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    background: #ef4444;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    width: 28px;
-    height: 28px;
-    cursor: pointer;
-    font-weight: bold;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1061;
-  }
-</style>
-
-<div id="toggleMenuBtn" title="Toggle menu"><span id="arrowIcon">&lt;</span></div>
-
-<div id="sideMenu" class="shadow-sm">
-  <button class="menu-item" data-action="globalVariables">Глобальные переменные</button>
-  <button class="menu-item" data-action="modules">Модули</button>
+<!-- Кнопка переключения меню -->
+<div id="toggleMenuBtn" class="position-fixed top-50 end-0 translate-middle-y bg-primary text-white rounded-start p-0 user-select-none fs-3 d-flex align-items-center justify-content-center z-1050" 
+     style="width: 36px; height: 60px; cursor: pointer;" title="Toggle menu">
+  <span id="arrowIcon">&lt;</span>
 </div>
 
-<!-- Контейнер для данных -->
-<div id="devContent">
-  <button id="devContentCloseBtn">&times;</button>
-  <div id="devContentInner" class="p-4 space-y-4"></div>
+<!-- Сайдбар меню (будет заполняться динамически) -->
+<div id="sideMenu" class="position-fixed top-50 translate-middle-y bg-white border shadow-sm d-none z-1049 rounded-start p-2" 
+     style="right: 36px; width: 220px;">
+  <!-- Меню будет генерироваться здесь -->
+</div>
+
+<!-- Контейнер для контента -->
+<div id="devContent" class="position-fixed top-0 start-0 w-100 h-100 overflow-auto bg-white z-1060 d-none">
+  <!-- Фиксированная кнопка закрытия -->
+  <button id="devContentCloseBtn" class="position-fixed bg-danger text-white border-0 rounded-circle d-flex align-items-center justify-content-center fw-bold z-1099" 
+          style="width: 42px; height: 42px; top: 20px; right: 20px; cursor: pointer; font-size: 1.5rem;">
+    ✕
+  </button>
+  
+  <!-- Контент с небольшим отступом сверху -->
+  <div id="devContentInner" class="p-4 pt-5">
+    {% include 'developGlobals.html' %}
+    {% include 'developModules.html' %}
+    <!-- Другие динамические блоки -->
+  </div>
 </div>
 
 <script>
-  $(function () {
-    const $arrow = $('#arrowIcon');
-    const $menu  = $('#sideMenu');
-    const $btn   = $('#toggleMenuBtn');
-    const $dev   = $('#devContent');
-    const $inner = $('#devContentInner');
-    const $close = $('#devContentCloseBtn');
-    let menuOpen = false;
-
-    function postForm(section, action, extra) {
-      const fd = new FormData();
-      fd.append('section', section);
-      fd.append('action', action);
-      if (extra && typeof extra === 'object') {
-        for (const [k,v] of Object.entries(extra)) fd.append(k, v);
+$(function() {
+  const $arrow = $('#arrowIcon');
+  const $menu = $('#sideMenu');
+  const $btn = $('#toggleMenuBtn');
+  const $dev = $('#devContent');
+  const $inner = $('#devContentInner');
+  const $close = $('#devContentCloseBtn');
+  let menuOpen = false;
+  
+  // Инициализация динамического меню
+  function initDynamicMenu() {
+    // Находим все блоки с атрибутами data-action и data-title
+    const $sections = $inner.find('[data-action][data-title]');
+    
+    // Очищаем меню перед созданием
+    $menu.empty();
+    
+    // Создаем кнопки меню для каждого раздела
+    $sections.each(function() {
+      const $section = $(this);
+      const action = $section.data('action');
+      const title = $section.data('title');
+      
+      // Создаем элемент меню
+      const $menuItem = $('<button>')
+        .addClass('menu-item w-100 border-0 bg-transparent px-3 py-2 text-start fw-medium rounded')
+        .css('cursor', 'pointer')
+        .text(title)
+        .data('action', action);
+      
+      // Добавляем в меню
+      $menu.append($menuItem);
+      
+      // Скрываем раздел изначально
+      $section.addClass('d-none');
+    });
+    
+    // Обработка кликов по пунктам меню
+    $menu.on('click', '.menu-item', function() {
+      const $this = $(this);
+      const action = $this.data('action');
+      
+      // Скрываем все разделы
+      $inner.find('[data-action]').addClass('d-none');
+      
+      // Показываем выбранный раздел
+      const $section = $inner.find(`[data-action="${action}"]`);
+      $section.removeClass('d-none');
+      
+      // Вызываем функцию инициализации
+      const initFuncName = 'init' + action.charAt(0).toUpperCase() + action.slice(1);
+      if (typeof window[initFuncName] === 'function') {
+        window[initFuncName]();
       }
-      return $.ajax({
-        url: '/',
-        method: 'POST',
-        data: fd,
-        processData: false,
-        contentType: false,
-        headers: {
-          'Accept': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest'
-        },
-        dataType: 'json'
-      });
-    }
-
-    function renderGlobals(data){
-      const rows = Object.entries(data || {}).map(([k,v]) => `
-        <tr class="border-b">
-          <td class="px-3 py-2 font-medium">${k}</td>
-          <td class="px-3 py-2 break-all">${String(v)}</td>
-        </tr>`).join('');
-      return `
-        <div class="rounded-2xl shadow p-4 bg-white">
-          <div class="text-lg font-semibold mb-3">Глобальные переменные</div>
-          <table class="min-w-full text-sm">
-            <thead><tr class="text-left text-gray-500">
-              <th class="px-3 py-2">Ключ</th>
-              <th class="px-3 py-2">Значение</th>
-            </tr></thead>
-            <tbody>${rows || '<tr><td class="px-3 py-2" colspan="2">Нет данных</td></tr>'}</tbody>
-          </table>
-        </div>`;
-    }
-
-    function renderModules(list){
-      const cards = (list || []).map(m => {
-        const funcs = (m.functions || []).map(f => `
-          <div class="border rounded-xl p-3">
-            <div class="flex items-center justify-between">
-              <div class="font-medium">${f.name}</div>
-              <span class="text-xs px-2 py-0.5 rounded bg-gray-100">${f.kind}</span>
-            </div>
-            ${f.doc ? `<div class="text-sm text-gray-700 mt-1 whitespace-pre-line">${f.doc}</div>` : ''}
-            ${f.comment ? `<div class="text-xs text-gray-500 mt-2 whitespace-pre-line">${f.comment}</div>` : ''}
-          </div>`).join('');
-        return `
-          <div class="rounded-2xl shadow p-4 bg-white">
-            <div class="flex items-center justify-between">
-              <div class="text-lg font-semibold">${m.module_name} <span class="text-gray-400">(${m.class_name})</span></div>
-              <div class="text-xs text-gray-500 break-all">${m.path}</div>
-            </div>
-            <div class="grid md:grid-cols-2 gap-3 mt-3">
-              ${funcs || '<div class="text-sm text-gray-500">Нет функций</div>'}
-            </div>
-          </div>`;
-      }).join('');
-      return `<div class="space-y-4">${cards || '<div class="text-sm text-gray-500">Нет модулей</div>'}</div>`;
-    }
-
-    $btn.on('click', function(){
-      menuOpen = !menuOpen;
-      $menu.toggle(menuOpen);
-      $arrow.text(menuOpen ? '>' : '<');
+      
+      // Показываем контейнер с контентом
+      $dev.removeClass('d-none');
     });
-
-    $('.menu-item').on('click', function(){
-      const action = $(this).data('action');
-      postForm('develop', action, {})
-        .done(function(res){
-          if(res.status === 'success'){
-            let html = '';
-            if(action === 'globalVariables') html = renderGlobals(res.data);
-            else if(action === 'modules') html = renderModules(res.data);
-            else html = '<div>OK</div>';
-
-            $inner.html(html);
-            $dev.show();
-          } else {
-            $inner.html('<div class="text-sm text-red-600">Ошибка: ' + (res.message || '') + '</div>');
-            $dev.show();
-          }
-        })
-        .fail(function(xhr){
-          const msg = xhr.responseJSON?.message || 'Сетевая ошибка';
-          $inner.html('<div class="text-sm text-red-600">' + msg + '</div>');
-          $dev.show();
-        });
-    });
-
-    $close.on('click', function(){
-      $dev.hide();
-    });
-
-    // Автозагрузка при прямой ссылке
+  }
+  
+  // Переключение меню
+  $btn.on('click', function() {
+    menuOpen = !menuOpen;
+    $menu.toggleClass('d-none');
+    $arrow.text(menuOpen ? '>' : '<');
+  });
+  
+  // Закрытие контейнера с контентом
+  $close.on('click', function() {
+    $dev.addClass('d-none');
+  });
+  
+  // Автозагрузка при прямой ссылке
+  function loadFromUrlParam() {
     const urlParams = new URLSearchParams(window.location.search);
     const view = urlParams.get('view');
-    if(view === 'globals') $('.menu-item[data-action="globalVariables"]').trigger('click');
-    else if(view === 'modules') $('.menu-item[data-action="modules"]').trigger('click');
-  });
+    
+    if (view) {
+      // Находим соответствующий пункт меню и кликаем его
+      const $menuItem = $menu.find(`.menu-item[data-action="${view}"]`);
+      if ($menuItem.length) {
+        $menuItem.trigger('click');
+      }
+    }
+  }
+  
+  // Инициализация
+  initDynamicMenu();
+  loadFromUrlParam();
+});
 </script>

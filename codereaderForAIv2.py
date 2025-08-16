@@ -19,13 +19,13 @@ class CodeReaderConfig:
         'templates',
 
         # Зависимости
-        # 'requirements',
+        'requirements',
 
         # Исключения
         'exceptions',
 
         # web
-        # 'web'          
+        'web'          
     ]
     IGNORE_FILES = [
         # Дефолтный мусор

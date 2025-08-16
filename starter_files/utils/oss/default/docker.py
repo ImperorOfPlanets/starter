@@ -1,3 +1,4 @@
+from starter_files.utils.oss.base_module import BaseModule
 import json
 import logging
 import platform
@@ -7,22 +8,13 @@ from pathlib import Path
 import os
 import time
 from typing import Dict, List, Optional
-from starter_files.utils.molule_utils import get
+from starter_files.utils.oss.module_loader import get
 from datetime import datetime
 
 logger = logging.getLogger('docker_oss')
 
-class DockerModule:
+class DockerModule(BaseModule):
     """Реализация Docker утилит"""
-
-    @classmethod
-    def check(cls) -> bool:
-        """
-        Проверяет, может ли этот модуль использоваться в текущей системе.
-        Для Docker всегда возвращаем True, так как это реализация по умолчанию.
-        """
-        return True
-
     @staticmethod
     def check_installed() -> bool:
         """Проверяет установлен ли Docker и возвращает статус"""

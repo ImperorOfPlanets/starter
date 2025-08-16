@@ -47,6 +47,14 @@ def login(data, session):
     if username == admin_login and hash_password(password) == admin_pass_hash:
         session['username'] = username
         session.permanent = True  # Делаем сессию постоянной
+        session.modified = True
+        # Явное сохранение сессии
+        if hasattr(session, 'save'):
+            session.save()
+
+        print(f"Установлена сессия. ID: {session.sid if hasattr(session, 'sid') else 'not_set'}")
+        print(f"Данные сессии: {dict(session)}")
+
         return {
             'status': 'success',
             'redirect': url_for('routes.index')

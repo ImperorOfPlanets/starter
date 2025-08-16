@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 from starter_files.utils.envStarter_utils import read_env_file, parse_env_content, generate_env_content
 from starter_files.utils.i18n_utils import get_available_languages
-from starter_files.utils.molule_utils import get
+from starter_files.utils.oss.module_loader import get
 from starter_files.utils.globalVars_utils import get_global
 
 # Обязательные переменные для первоначальной настройки asd sa
@@ -128,8 +128,6 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
 
 def get_server_url() -> list:
     """Возвращает список всех URL сервера с учетом порта"""
-    from starter_files.utils.molule_utils import get
-
     docker_port = os.environ.get('dockerPort', '8000')
     ips = get('network','get_all_local_ips')
     # Выводим в консоль
