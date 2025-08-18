@@ -89,21 +89,21 @@ def index(data, session):
             'free': get_global('disk_free', 'N/A')
         },
         'docker':{
-            "docker_installed": get_global('docker_installed', 'N/A'),
-            "docker_compose_installed": get_global('docker_compose_installed', 'N/A')
+            "docker_installed": get_global('docker_installed',False),
+            "docker_compose_installed": get_global('docker_compose_installed',False)
         },
         'knocking':{
-            "port_knocking_installed ": get_global('port_knocking_installed', 'N/A'),
+            "knocking_installed ": get_global('knocking_installed',False),
         },
         'git':{
-            'git_installed': get_global('git_installed', 'N/A'),
+            'git_installed': get_global('git_installed',False),
             'git_authentication': get_global('git_authentication', 'N/A'),
         },
         'systemd':{
-            'systemd_installed': get_global('systemd_installed', 'N/A')
+            'systemd_installed': get_global('systemd_installed',False)
         },
-        'vpn':{
-            'systemd_installed': get_global('systemd_installed', 'N/A')
+        'vpnEther':{
+            'vpnEther_installed': get_global('vpnEther_installed',False)
         },
     }
 

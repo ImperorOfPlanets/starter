@@ -1,33 +1,89 @@
-import logging
 import subprocess
 import os
 import platform
-import socket
 import subprocess
-from typing import List, Dict, Optional, Tuple
-
+from typing import List, Dict, Optional
+from datetime import datetime, timedelta
+from pathlib import Path
 from starter_files.utils.globalVars_utils import get_global, set_global
 from starter_files.utils.oss.module_loader import get
 
 from starter_files.utils.oss.base_module import BaseModule
 
 class KnockingModule(BaseModule):
+
     @staticmethod
     def is_knocking_installed() -> bool:
-        """Check if port knocking is installed on the system"""
+        """Установлен ли порт Port Knocking"""
         try:
-            # Check for common port knocking implementations
-            if platform.system() == "Linux":
-                return (
-                    os.path.exists("/usr/sbin/knockd") or 
-                    os.path.exists("/etc/knockd.conf")
-                )
-            elif platform.system() == "Windows":
-                # Windows implementation checks would go here
-                return False
-            return False
+            return (
+                os.path.exists("/usr/sbin/knockd") or
+                os.path.exists("/etc/knockd.conf")
+            )
         except Exception:
             return False
+
+    @staticmethod
+    def install_knocking(log_file_path: str) -> Dict[str, str]:
+        """Устанавливает Git и записывает логи в указанный файл"""
+        result = {'status': 'success', 'message': '', 'logs': []}
+        
+        try:
+            log_dir = Path(log_file_path).parent
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
+            with open(log_file_path, 'w') as log_file:
+                def log(message):
+                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    log_entry = f"[{timestamp}] {message}"
+                    log_file.write(log_entry + '\n')
+                    log_file.flush()
+                    result['logs'].append(log_entry)
+                    logger.info(log_entry)
+                
+                log("Starting Git installation...")
+
+                commands = get("git", "return_commands_install_git")
+
+                for cmd in commands:
+                    log(f"Executing: {cmd}")
+                    process = subprocess.Popen(
+                        cmd,
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        bufsize=1,
+                        universal_newlines=True
+                    )
+                    
+                    for line in iter(process.stdout.readline, ''):
+                        if line:
+                            log(line.strip())
+                    
+                    return_code = process.wait()
+                    if return_code != 0:
+                        log(f"Command failed with exit code {return_code}")
+                        result['status'] = 'error'
+                        result['message'] = f"Command failed: {cmd}"
+                        return result
+                
+                time.sleep(2)
+                if GitModule.check_git_installed():
+                    log("Git installed successfully!")
+                    result['message'] = "Git installed successfully!"
+                else:
+                    log("Installation completed but Git not detected.")
+                    result['status'] = 'warning'
+                    result['message'] = "Installation completed but Git not detected."
+        
+        except Exception as e:
+            error_msg = f"Installation failed: {str(e)}"
+            result['status'] = 'error'
+            result['message'] = error_msg
+            logger.exception("Git installation error")
+        
+        return result
 
     @staticmethod
     def get_knocking_config() -> Optional[Dict]:
@@ -116,40 +172,9 @@ class KnockingModule(BaseModule):
             return False
 
     @staticmethod
-    def _install_knocking_windows() -> Tuple[bool, str]:
-        """Alternative Windows installation method"""
-        try:
-            # 1. Проверяем наличие Powerknock
-            # 2. Если нет - скачиваем и устанавливаем
-            # 3. Настраиваем службу
-            
-            # Это пример - нужно адаптировать под реальную реализацию
-            download_url = "https://example.com/powerknock/latest.zip"
-            install_path = os.path.join(os.environ["ProgramFiles"], "Powerknock")
-            
-            # Создаем директорию
-            os.makedirs(install_path, exist_ok=True)
-            
-            # Скачиваем (можно использовать urllib или requests)
-            # ... код для скачивания и распаковки ...
-            
-            # Добавляем в PATH
-            subprocess.run(
-                f'setx PATH "%PATH%;{install_path}"',
-                shell=True,
-                check=True
-            )
-            
-            return True, "Powerknock installed successfully"
-        except Exception as e:
-            return False, str(e)
-
-    @staticmethod
     def set_globals():
         """Устанавливает глобальные для Port Knocking"""
-        port_knocking_installed = get('knocking',"is_knocking_installed")
-        logger.info("Переменная knocking_installed")
-        logger.info(port_knocking_installed)
+        knocking_installed = get('knocking',"is_knocking_installed")
         
         # Устанавливаем глобальные переменные
-        set_global('knocking_installed', port_knocking_installed)
+        set_global('knocking_installed', knocking_installed)

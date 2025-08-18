@@ -140,5 +140,4 @@ class ServiceModule(BaseModule):
     def set_globals():
         """Устанавливает глобальные для SERVICE"""
         systemd_installed = get('service',"is_systemd_installed")
-        print(f"УСТАНАВЛИВАЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮ ${systemd_installed}")
         set_global('systemd_installed', systemd_installed)

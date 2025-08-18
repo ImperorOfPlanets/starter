@@ -103,7 +103,7 @@
                 </div>
                 <div class="card-body">
                     <p class="card-text"><strong>{{ t('status') }}:</strong> 
-                        {% if sys_info.docker.docker_installed %}  <!-- Исправлено -->
+                        {% if sys_info.docker.docker_installed %}
                             <span class="badge bg-success">{{ t('installed') }}</span>
                         {% else %}
                             <span class="badge bg-danger">{{ t('not_installed') }}</span>
@@ -113,7 +113,7 @@
                         {% endif %}
                     </p>
                     <p class="card-text"><strong>Compose:</strong> 
-                        {% if sys_info.docker.docker_compose_installed %}  <!-- Исправлено -->
+                        {% if sys_info.docker.docker_compose_installed %}
                             <span class="badge bg-success">{{ t('installed') }}</span>
                         {% else %}
                             <span class="badge bg-danger">{{ t('not_installed') }}</span>
@@ -178,6 +178,26 @@
                         {% else %}
                             <span class="badge bg-danger">{{ t('not_installed') }}</span>
                             <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="service">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-cpu me-2"></i> vpnEther
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
+                        {% if sys_info.vpnEther.vpnEther_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="vpnEther">
                                 <i class="bi bi-download"></i> {{ t('install') }}
                             </button>
                         {% endif %}

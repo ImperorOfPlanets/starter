@@ -66,8 +66,10 @@ if __name__ == '__main__':
         from starter_files.utils.requirements_utils import install_and_restart
         install_and_restart()
     
+
     args = parse_args()
-    # Инициализируем логгер сразу после получения аргументов
+    
+    # Инициализируем логгер
     LogManager.initialize(
         debug_mode=args.debug,
         service_mode=args.service
@@ -91,7 +93,13 @@ if __name__ == '__main__':
         print("Сохраните эти данные!")
         print("="*50 + "\n")
 
+    print("=== ПРОВЕРКА ОБНОВЛЕНИЙ === ")
 
+    from starter_files.utils.oss.module_loader import get
+    seconds = get('updates','seconds_since_last_update')
+    print(f"Секунд с последнего обновления ${seconds}")
+
+    print("=========================== ")
     logger.debug(f"Command line arguments: service={args.service}, debug={args.debug}")
 
     # Сервисный режим
