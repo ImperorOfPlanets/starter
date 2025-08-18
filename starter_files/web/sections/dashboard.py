@@ -41,7 +41,12 @@ COMPONENT_CONFIG = {
         'module': 'git',
         'check': 'check_git_installed',
         'install': 'install_git'
-    }
+    },
+    'systemd': {
+        'module': 'service',
+        'check': 'check_git_installed',
+        'install': 'install_git'
+    },
 }
 
 # Путь к директории логов установки
@@ -93,9 +98,15 @@ def index(data, session):
         'git':{
             'git_installed': get_global('git_installed', 'N/A'),
             'git_authentication': get_global('git_authentication', 'N/A'),
-        }
+        },
+        'systemd':{
+            'systemd_installed': get_global('systemd_installed', 'N/A')
+        },
+        'vpn':{
+            'systemd_installed': get_global('systemd_installed', 'N/A')
+        },
     }
-    
+
     return render_template(
         'sections/dashboard/index.html',
         sys_info=sys_info,

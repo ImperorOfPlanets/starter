@@ -7,13 +7,10 @@ from pathlib import Path
 from starter_files.utils.globalVars_utils import set_global, get_global
 from typing import List, Dict, Any, Tuple, Optional
 from starter_files.utils.log_utils import LogManager
-logger = LogManager.get_logger()
 
-logger = logging.getLogger('module_loader')
+LogManager.register_log_dir('modules', 'modules')
+logger = LogManager.get_logger('modules')
 
-_modules_cache = None
-
-# Глобальный кеш для хранения реализаций всех модулей по уровням
 _modules_cache = {}  # Формат: {module_name: [impl1, impl2, impl3]}
 
 def load_modules(refresh: bool = False):

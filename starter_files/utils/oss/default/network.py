@@ -1,4 +1,5 @@
 from starter_files.utils.oss.base_module import BaseModule
+
 import socket
 import json
 import platform
@@ -80,6 +81,7 @@ class NetworkModule(BaseModule):
         running_in_docker = get_global('running_in_docker')
         try:
             if running_in_docker:
+                print("В ДОКЕРЕ")
                 # В Docker fallback на localhost или eth0
                 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                     s.connect(("8.8.8.8", 80))

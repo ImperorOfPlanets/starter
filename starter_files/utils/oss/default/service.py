@@ -1,12 +1,31 @@
+from starter_files.utils.oss.base_module import BaseModule
+
 import platform
 import subprocess
 import os
-from starter_files.utils.oss.base_module import BaseModule
+from starter_files.utils.globalVars_utils import get_global, set_global
+from starter_files.utils.oss.module_loader import get
 
 SERVICE_NAME = "starter-service"
 
 class ServiceModule(BaseModule):
     """Модуль для работы с системными сервисами"""
+
+    @staticmethod
+    def is_systemd_installed():
+        """Проверяет, установлен ли systemd"""
+        try:
+            subprocess.run(
+                ['systemctl', '--version'],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5
+            )
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            return False
+
     @staticmethod
     def get_service_status(self) -> dict:
         """Получает статус сервиса для текущей ОС"""
@@ -116,3 +135,10 @@ class ServiceModule(BaseModule):
 
         except subprocess.CalledProcessError as e:
             return {'status': 'error', 'message': f'Failed to {action} service: {str(e)}'}
+
+    @staticmethod
+    def set_globals():
+        """Устанавливает глобальные для SERVICE"""
+        systemd_installed = get('service',"is_systemd_installed")
+        print(f"УСТАНАВЛИВАЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮЮ ${systemd_installed}")
+        set_global('systemd_installed', systemd_installed)
