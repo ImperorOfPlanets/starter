@@ -5,10 +5,11 @@ import sys
 from importlib import import_module
 from pathlib import Path
 from flask import g
+from starter_files.utils.globalVars_utils import get_global
 
 from starter_files.utils.log_utils import LogManager
-logger = LogManager.get_logger()
-from starter_files.utils.globalVars_utils import GlobalVars, set_global, get_global
+LogManager.register_log_dir('translations', 'translations')
+logger = LogManager.get_logger('translations')
 
 # Глобальная переменная для кеширования языков
 _AVAILABLE_LANGUAGES = None

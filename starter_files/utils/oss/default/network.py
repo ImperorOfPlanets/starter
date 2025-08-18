@@ -3,6 +3,7 @@ import socket
 import json
 import platform
 import subprocess
+import sys
 
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
@@ -108,7 +109,7 @@ class NetworkModule(BaseModule):
         except Exception as e:
             logger.info(f"[WARN] Не удалось получить локальные IP: {e}")
 
-        ips_list = list(ips) or ["127.0.0.1"]  # гарантируем хотя бы localhost
+        ips_list = list(ips) if ips else ["0.0.0.0" if sys.platform != "win32" else "127.0.0.1"]
         set_global('local_ips', ips_list)
         return ips_list
 
