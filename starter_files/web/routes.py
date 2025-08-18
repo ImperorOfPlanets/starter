@@ -6,15 +6,18 @@ from typing import List, Dict, Any
 
 from starter_files.utils.i18n_utils import get_available_languages, t, set_language, get_current_language, return_basic
 from starter_files.utils.globalVars_utils import get_global
-from starter_files.utils.log_utils import get_logger
+from starter_files.utils.log_utils import LogManager
+logger = LogManager.get_logger()
+
 from starter_files.utils.oss.module_loader import collect_modules_info
 
 routes = Blueprint('routes', __name__)
 
+# Для раздела разработчикам
 def get_modules_index(refresh: bool = False) -> List[Dict[str, Any]]:
     return collect_modules_info(refresh=refresh)
 
-# Функция получения модулей для панель управления
+# Функция получения секций для панель управления
 def get_current_sections_in_panel():
     sections_in_control_panel = []
     
@@ -44,7 +47,8 @@ def get_current_sections_in_panel():
                 sections_in_control_panel.append(section_info)
                 
         except Exception as e:
-            print(f"Error loading section {section_slug}: {str(e)}")
+            logger.exception(f"Error loading section {section_slug}")
+            raise
     
     return sorted(sections_in_control_panel, key=lambda x: x['section_order'])
 

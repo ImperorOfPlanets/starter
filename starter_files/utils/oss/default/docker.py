@@ -9,14 +9,16 @@ import os
 import time
 from typing import Dict, List, Optional
 from starter_files.utils.oss.module_loader import get
+from starter_files.utils.globalVars_utils import get_global, set_global
 from datetime import datetime
 
 logger = logging.getLogger('docker_oss')
 
 class DockerModule(BaseModule):
     """Реализация Docker утилит"""
+
     @staticmethod
-    def check_installed() -> bool:
+    def check_docker_installed() -> bool:
         """Проверяет установлен ли Docker и возвращает статус"""
         try:
             result = subprocess.run(
@@ -30,23 +32,23 @@ class DockerModule(BaseModule):
             return False
 
     @staticmethod
-    def check_docker_compose_installed() -> bool:
-        """Проверяет установлен ли Docker Compose и возвращает статус"""
+    def check_docker_compose_installed():
+        """Проверка наличия Docker Compose (v1 и v2)"""
         try:
-            subprocess.run(
-                ['docker-compose', '--version'],
-                capture_output=True,
-                text=True,
-                check=True
-            )
+            # Проверка новой версии (v2)
+            subprocess.check_output(["docker", "compose", "version"], stderr=subprocess.DEVNULL)
             return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            return False
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            try:
+                # Проверка старой версии (v1)
+                subprocess.check_output(["docker-compose", "--version"], stderr=subprocess.DEVNULL)
+                return True
+            except (FileNotFoundError, subprocess.CalledProcessError):
+                return False
 
     @staticmethod
     def install_docker(log_file_path: str) -> Dict[str, str]:
         """Устанавливает Docker и записывает логи в указанный файл"""
-        os_name = platform.system()
         result = {'status': 'success', 'message': '', 'logs': []}
         
         try:
@@ -66,9 +68,9 @@ class DockerModule(BaseModule):
                     logger.info(log_entry)
                 
                 log("Starting Docker installation...")
-                
-                commands = DockerModule.return_commands_install()
-                
+
+                commands = get("docker","return_commands_install_docker")
+
                 # Выполняем команды установки
                 for cmd in commands:
                     log(f"Executing: {cmd}")
@@ -97,9 +99,85 @@ class DockerModule(BaseModule):
                 
                 # Проверяем успешность установки
                 time.sleep(2)
-                if DockerModule.check_installed():
+                if get('docker','check_docker_installed'):
                     log("Docker installed successfully! Please restart your session.")
                     result['message'] = "Docker installed successfully! Please restart your session."
+                else:
+                    log("Installation completed but Docker not detected. Try restarting your system.")
+                    result['status'] = 'warning'
+                    result['message'] = "Installation completed but Docker not detected. Try restarting your system."
+        
+        except Exception as e:
+            # Записываем ошибку в лог
+            error_msg = f"Installation failed: {str(e)}"
+            try:
+                with open(log_file_path, 'a') as f:
+                    f.write(error_msg + '\n')
+            except:
+                logger.exception("Failed to write error to log file")
+            
+            result['status'] = 'error'
+            result['message'] = error_msg
+            logger.exception("Docker installation error")
+        
+        return result
+
+    @staticmethod
+    def install_docker_сompose(log_file_path: str) -> Dict[str, str]:
+        """Устанавливает Docker Compose и записывает логи в указанный файл"""
+        result = {'status': 'success', 'message': '', 'logs': []}
+        
+        try:
+            # Создаем директорию для логов, если нужно
+            log_dir = Path(log_file_path).parent
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Открываем файл для записи логов один раз на весь процесс установки
+            with open(log_file_path, 'w') as log_file:
+                def log(message):
+                    """Вспомогательная функция для записи в лог и в результат"""
+                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    log_entry = f"[{timestamp}] {message}"
+                    log_file.write(log_entry + '\n')
+                    log_file.flush()  # Обеспечиваем немедленную запись
+                    result['logs'].append(log_entry)
+                    logger.info(log_entry)
+                
+                log("Starting Docker Compose installation...")
+
+                commands = get("docker","return_commands_install_compose")
+
+                # Выполняем команды установки
+                for cmd in commands:
+                    log(f"Executing: {cmd}")
+                    process = subprocess.Popen(
+                        cmd,
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,  # Объединяем stdout и stderr
+                        text=True,
+                        bufsize=1,  # Построчный буфер
+                        universal_newlines=True
+                    )
+                    
+                    # Читаем вывод в реальном времени
+                    for line in iter(process.stdout.readline, ''):
+                        if line:
+                            log(line.strip())
+                    
+                    # Проверяем статус завершения
+                    return_code = process.wait()
+                    if return_code != 0:
+                        log(f"Command failed with exit code {return_code}")
+                        result['status'] = 'error'
+                        result['message'] = f"Command failed: {cmd}"
+                        return result
+                
+                # Проверяем успешность установки
+                time.sleep(2)
+                if get('docker','check_docker_compose_installed'):
+                    log("Docker Compose installed successfully! Please restart your session.")
+                    result['message'] = "Docker Compose installed successfully! Please restart your session."
                 else:
                     log("Installation completed but Docker not detected. Try restarting your system.")
                     result['status'] = 'warning'
@@ -223,6 +301,7 @@ class DockerModule(BaseModule):
     @staticmethod
     def get_docker_info() -> Dict:
         """Собирает информацию о Docker"""
+
         info = {
             'version': 'N/A',
             'containers': {
@@ -308,6 +387,7 @@ class DockerModule(BaseModule):
     @staticmethod
     def get_containers(all: bool = False) -> List[Dict]:
         """Получает список контейнеров"""
+
         containers = []
         try:
             format_str = '{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}|{{.RunningFor}}|{{.Size}}'
@@ -481,9 +561,26 @@ class DockerModule(BaseModule):
     @staticmethod
     def prune_system() -> Dict:
         """Очищает неиспользуемые объекты Docker"""
+
         try:
             subprocess.run(['docker', 'system', 'prune', '-f'], check=True)
             return {'status': 'success', 'message': 'System pruned successfully'}
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to prune system: {str(e)}")
             return {'status': 'error', 'message': f"Failed to prune system: {str(e)}"}
+
+    @staticmethod
+    def set_globals():
+        """Устанавливает глобальные для DOCKER"""
+        docker_installed = get('docker',"check_docker_installed")
+        logger.info("Переменная docker_installed")
+        logger.info(docker_installed)
+
+        docker_compose_installed = get('docker',"check_docker_compose_installed")
+        logger.info("Переменная docker_compose_installed")
+        logger.info(docker_compose_installed)
+
+        
+        # Устанавливаем глобальные переменные
+        set_global('docker_installed', docker_installed)
+        set_global('docker_compose_installed', docker_compose_installed)

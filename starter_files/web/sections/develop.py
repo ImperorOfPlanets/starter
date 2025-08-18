@@ -46,38 +46,66 @@ def globalVariables(data, session):
         }
 
 def modules(data, session):
-    """Возвращает информацию о модулях."""
+    """Возвращает информацию о модулях со всеми реализациями."""
     try:
+        logger.info("Starting modules collection")
+        
+        # Собираем информацию о модулях
         modules_data = collect_modules_info()
+        logger.info(f"Received {len(modules_data)} raw module records")
         
-        # Упрощенная сериализация модулей
-        def serialize_module(module):
-            serialized = {
-                "module_name": str(module.get("module_name", "")),
-                "class_name": str(module.get("class_name", "")),
-                "path": str(module.get("path", "")),
-                "functions": []
-            }
+        # Логируем первые 3 записи для диагностики
+        for i, module in enumerate(modules_data[:3]):
+            logger.info(f"Module #{i+1}: {module.get('module_name')} | "
+                         f"Path: {module.get('path')} | "
+                         f"OS: {module.get('os')} | "
+                         f"Functions: {len(module.get('functions', []))}")
+        
+        # Группируем реализации по имени модуля
+        grouped_modules = {}
+        for module in modules_data:
+            module_name = module["module_name"]
             
-            for func in module.get("functions", []):
-                serialized_func = {
-                    "name": str(func.get("name", "")),
-                    "kind": str(func.get("kind", "")),
-                    "doc": str(func.get("doc", "")),
-                    "comment": str(func.get("comment", ""))
+            if not module_name:
+                logger.info("Skipping module with empty name")
+                continue
+                
+            if module_name not in grouped_modules:
+                logger.info(f"New module group: {module_name}")
+                grouped_modules[module_name] = {
+                    "module_name": module_name,
+                    "implementations": []
                 }
-                serialized["functions"].append(serialized_func)
-            
-            return serialized
+                
+            grouped_modules[module_name]["implementations"].append(module)
         
-        serialized_data = [serialize_module(m) for m in modules_data]
+        logger.info(f"Created {len(grouped_modules)} module groups")
+        
+        # Преобразуем в список и сортируем реализации
+        result = []
+        for module_name, module_data in grouped_modules.items():
+            # Сортируем реализации по уровню приоритета (0 - высший)
+            module_data["implementations"].sort(key=lambda x: x["level"])
+            result.append(module_data)
+            
+            # Логируем информацию о реализациях
+            impls = module_data["implementations"]
+            logger.info(f"Module '{module_name}' has {len(impls)} implementations:")
+            for i, impl in enumerate(impls):
+                logger.info(f"  Impl #{i+1}: Level={impl['level']} | "
+                             f"OS={impl.get('os')} | "
+                             f"Path={impl.get('path')}")
+        
+        logger.info(f"Returning {len(result)} module groups")
         
         return {
             "status": "success",
-            "data": serialized_data
+            "data": result
         }
+        
     except Exception as e:
+        logger.info("Critical error in modules endpoint")
         return {
             "status": "error",
-            "message": str(e)
+            "message": f"{str(e)} (See server logs for details)"
         }

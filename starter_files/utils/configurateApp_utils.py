@@ -1,7 +1,6 @@
 import logging
 import os
 import secrets
-import sys
 
 from datetime import timedelta
 from flask import Flask, render_template, request,session
@@ -9,10 +8,10 @@ from flask_session import Session
 from pathlib import Path
 
 from starter_files.utils.envStarter_utils import read_env_file
-from starter_files.utils.log_utils import get_logger
-from starter_files.utils.globalVars_utils import GlobalVars, set_global, get_global
-
+from starter_files.utils.globalVars_utils import get_global
 from starter_files.web.routes import routes
+
+from starter_files.utils.log_utils import LogManager
 
 def configure_app() -> Flask:
     """
@@ -30,21 +29,19 @@ def configure_app() -> Flask:
         template_folder=templates_path,
         static_folder=static_path
     )
-
-    # Инициализируем логгер только один раз
-    logger = get_logger()
-    app.logger = logger
+    LogManager.initialize(debug_mode=app.debug)
+    logger = LogManager.get_logger('flask_app')
 
     # Считываем секретный ключ
     env_vars = read_env_file(get_global('script_path') / '.env')
     app.secret_key = env_vars.get('APP_SECRET_KEY', secrets.token_hex(32))
-    print("Устанавливаемый ключ")
-    print(app.secret_key)
+    logger.info("Устанавливаемый ключ")
+    logger.info(app.secret_key)
 
     # Настройка папки сессий
     session_dir = base_dir / "starter_files" / "web" / "sessions"
-    print("Пака сессий")
-    print(session_dir)
+    logger.info("Пака сессий")
+    logger.info(session_dir)
     
     # Создаем папку (если не существует)
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -93,16 +90,14 @@ def configure_app() -> Flask:
         response.headers['Expires'] = '0'
         return response
 
+    werkzeug_logger = LogManager.get_logger('werkzeug')
     # Отключаем логирование Werkzeug (встроенного сервера Flask)
     if app.debug:
-        werkzeug_logger = logging.getLogger('werkzeug')
         werkzeug_logger.setLevel(logging.WARNING)
-        werkzeug_logger.addHandler(logging.NullHandler())
 
     # Настройка логирования Werkzeug
     if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-        werkzeug_logger = logger.getChild('werkzeug')
-        werkzeug_logger.setLevel(logging.INFO)
+        werkzeug_logger.setLevel(logging.ERROR)
         
         # Удаляем стандартные обработчики Werkzeug
         for handler in werkzeug_logger.handlers[:]:
@@ -148,14 +143,12 @@ def configure_app() -> Flask:
     def internal_error(error):
         logger.exception(f"500 Internal Server Error: {str(error)}")
         try:
-            return render_template('error.html', 
-                                error_message="Internal Server Error",
-                                error_details=str(error)), 500
+            return render_template('error.html', error_message="Internal Server Error",error_details=str(error)), 500
         except Exception as template_error:
             logger.error(f"Не удалось отрендерить error.html: {template_error}")
             return f"500 Internal Server Error: {str(error)}", 500
 
     app.register_blueprint(routes)
-
+    logger.info("Приложение запущено")
     return app
 

@@ -84,10 +84,10 @@ def ensure_env_variables():
     script_path = get_global('script_pat')
 
     env_path = script_path / 'script_pat'
-    print('.env')
+    logger.info('.env')
     
     env_example_path = script_path / '.env.example'
-    print(env_example_path)
+    logger.info(env_example_path)
     
     if not env_example_path.exists():
         return

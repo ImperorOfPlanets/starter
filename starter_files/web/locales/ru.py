@@ -131,7 +131,8 @@ translations = {
                 "memory": "Память",
                 "total": "Всего",
                 "used": "Использовано",
-                "available": "Доступно"
+                "available": "Доступно",
+                "install": "Установить"
             }
         },
 

@@ -1,6 +1,5 @@
 from starter_files.utils.oss.base_module import BaseModule
 import socket
-import logging
 import json
 import platform
 import subprocess
@@ -9,8 +8,6 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 
 from starter_files.utils.globalVars_utils import get_global, set_global
-
-logger = logging.getLogger(__name__)
 
 @dataclass
 class NetworkConnection:
@@ -109,7 +106,7 @@ class NetworkModule(BaseModule):
                             s.connect(("8.8.8.8", 80))
                             ips.add(s.getsockname()[0])
         except Exception as e:
-            print(f"[WARN] Не удалось получить локальные IP: {e}")
+            logger.info(f"[WARN] Не удалось получить локальные IP: {e}")
 
         ips_list = list(ips) or ["127.0.0.1"]  # гарантируем хотя бы localhost
         set_global('local_ips', ips_list)

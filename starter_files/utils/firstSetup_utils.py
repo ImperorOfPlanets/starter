@@ -1,8 +1,6 @@
 import hashlib
 import os
 import secrets
-import sys
-import webbrowser
 
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -10,6 +8,9 @@ from starter_files.utils.envStarter_utils import read_env_file, parse_env_conten
 from starter_files.utils.i18n_utils import get_available_languages
 from starter_files.utils.oss.module_loader import get
 from starter_files.utils.globalVars_utils import get_global
+from starter_files.utils.log_utils import LogManager
+
+logger = LogManager.get_logger()
 
 # Обязательные переменные для первоначальной настройки asd sa
 REQUIRED_ENV_VARS = [
@@ -24,7 +25,7 @@ def is_first_run() -> bool:
     base_dir = get_global('script_path')
     env_path = base_dir / '.env'
 
-    print(f"[DEBUG] Проверка .env файла: {env_path.resolve()}")
+    logger.info(f"[DEBUG] Проверка .env файла: {env_path.resolve()}")
 
     if not env_path.exists():
         return True
@@ -55,27 +56,27 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
     if not is_first_run():
         return False, None
 
-    print(f"[DEBUG] script_path глобальная переменная: {get_global('script_path')}")
+    logger.info(f"[DEBUG] script_path глобальная переменная: {get_global('script_path')}")
     # Получаем путь относительно запускаемого скрипта
     base_dir = get_global('script_path')
     env_path = base_dir / '.env'
     env_example_path = base_dir / '.env.example'
-    print(f"[DEBUG] Путь для .env: {env_path}")
-    print(f"[DEBUG] Путь для .env.example: {env_example_path}")
+    logger.info(f"[DEBUG] Путь для .env: {env_path}")
+    logger.info(f"[DEBUG] Путь для .env.example: {env_example_path}")
 
     # Выводим информацию о создании файла
-    print(f"\n{'='*50}")
-    print("ВЫПОЛНЕНИЕ ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ")
-    print(f"Создаем файл конфигурации: {env_path}")
-    print(f"Используем шаблон: {env_example_path}")
-    print(f"{'='*50}\n")
+    logger.info(f"\n{'='*50}")
+    logger.info("ВЫПОЛНЕНИЕ ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ")
+    logger.info(f"Создаем файл конфигурации: {env_path}")
+    logger.info(f"Используем шаблон: {env_example_path}")
+    logger.info(f"{'='*50}\n")
 
     if not env_example_path.exists():
-        print(f"Файл шаблона .env.example не найден в {base_dir}")
+        logger.info(f"Файл шаблона .env.example не найден в {base_dir}")
         return False, None
 
     # Выводим информацию о создании файла
-    print(f"\nСоздаем файл конфигурации: {env_path}")
+    logger.info(f"\nСоздаем файл конфигурации: {env_path}")
 
     with open(env_example_path, 'r', encoding='utf-8') as f:
         example_content = f.read()
@@ -85,11 +86,11 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
     
     if interactive:
         languages = get_available_languages()
-        print("\n=== Первоначальная настройка ===")
-        print("Доступные языки:")
+        logger.info("\n=== Первоначальная настройка ===")
+        logger.info("Доступные языки:")
         
         for i, (code, data) in enumerate(languages.items(), 1):
-            print(f"{i}. {data['this_language']} ({code})")
+            logger.info(f"{i}. {data['this_language']} ({code})")
         
         while True:
             choice = input(f"Выберите язык (1-{len(languages)}): ")
@@ -97,7 +98,7 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
                 lang_code = list(languages.keys())[int(choice)-1]
                 credentials['language'] = languages[lang_code]['this_language']
                 break
-            print(f"Пожалуйста, введите число от 1 до {len(languages)}")
+            logger.info(f"Пожалуйста, введите число от 1 до {len(languages)}")
     else:
         lang_code = 'en'  # Язык по умолчанию для сервисного режима
         credentials['language'] = 'English'
@@ -113,11 +114,11 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
         f.write(generate_env_content(example_vars, example_lines))
 
     if interactive:
-        print("\n=== Учетные данные ===")
-        print(f"Язык интерфейса: {credentials['language']}")
-        print(f"Логин: {credentials['login']}")
-        print(f"Пароль: {credentials['password']} (сохраните этот пароль!)")
-        print("="*30)
+        logger.info("\n=== Учетные данные ===")
+        logger.info(f"Язык интерфейса: {credentials['language']}")
+        logger.info(f"Логин: {credentials['login']}")
+        logger.info(f"Пароль: {credentials['password']} (сохраните этот пароль!)")
+        logger.info("="*30)
 
     return True, {
         'login': credentials['login'],
@@ -131,11 +132,11 @@ def get_server_url() -> list:
     docker_port = os.environ.get('dockerPort', '8000')
     ips = get('network','get_all_local_ips')
     # Выводим в консоль
-    print("Список локальных IP из кеша:", ips)
+    logger.info("Список локальных IP из кеша: %s", ips)
 
     return [f"https://{ip}:{docker_port}" for ip in ips]
 
-def open_browser(logger=None) -> None:
+def open_browser() -> None:
     """
     Открывает браузер только при первом запуске вне Docker.
     В Docker-контейнере выводит специальный URL для доступа с хоста.
@@ -144,7 +145,7 @@ def open_browser(logger=None) -> None:
     docker_port = os.environ.get('dockerPort', '8000')
     urls = get_server_url()
 
-    print("\nСервер запущен. Доступен по адресам:")
+    logger.info("\nСервер запущен. Доступен по адресам:")
     
     # Основной URL для вывода/открытия
     primary_url = None
@@ -152,15 +153,15 @@ def open_browser(logger=None) -> None:
     if is_docker:
         # В Docker - показываем специальный URL для доступа с хоста
         docker_url = f"https://localhost:{docker_port}"
-        print(docker_url)
-        print("(Это Docker-контейнер. Используйте этот URL на хост-машине)")
+        logger.info(docker_url)
+        logger.info("(Это Docker-контейнер. Используйте этот URL на хост-машине)")
         if logger:
             logger.info(f"Docker-контейнер: доступ через {docker_url}")
         primary_url = docker_url
     else:
         # Не в Docker - показываем все IP
         for url in urls:
-            print(url)
+            logger.info(url)
             if logger:
                 logger.info(f"Сервер запущен: {url}")
         primary_url = urls[0] if urls else None
@@ -173,4 +174,4 @@ def open_browser(logger=None) -> None:
             error_msg = f"Не удалось открыть браузер: {e}"
             if logger:
                 logger.error(error_msg)
-            print(error_msg)'''
+            logger.info(error_msg)'''

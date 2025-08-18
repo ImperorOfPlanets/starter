@@ -3,9 +3,8 @@ import re
 from pathlib import Path
 from flask import render_template, send_from_directory
 from starter_files.utils.i18n_utils import t
-from starter_files.utils.log_utils import get_logger
-
-logger = get_logger()
+from starter_files.utils.log_utils import LogManager
+logger = LogManager.get_logger()
 
 # Конфигурация модуля для панели управления
 this_section_in_control_panel = True

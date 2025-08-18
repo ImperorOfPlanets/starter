@@ -9,6 +9,7 @@ from pathlib import Path
 from starter_files.utils import venv_utils
 from starter_files.utils.globalVars_utils import get_global
 from starter_files.utils.oss.default.system import SystemModule
+from starter_files.utils.log_utils import LogManager
 
 # Устанавливает глобальные переменные
 SystemModule.collect_basic_system_info()
@@ -64,16 +65,26 @@ if __name__ == '__main__':
     except ImportError:
         from starter_files.utils.requirements_utils import install_and_restart
         install_and_restart()
+    
+    args = parse_args()
+    # Инициализируем логгер сразу после получения аргументов
+    LogManager.initialize(
+        debug_mode=args.debug,
+        service_mode=args.service
+    )
+    logger = LogManager.get_logger("main")
 
     # Устанавливаем глобальный обработчик исключений
     from starter_files.utils.exceptionHandler_utils import ExceptionHandler
     handler = ExceptionHandler()
     sys.excepthook = handler.handle_unhandled_exception
+    logger.debug("Exception handler initialized")
 
     # Проверка на настроенность
     from starter_files.utils.firstSetup_utils import first_run_setup
     is_first_run, credentials = first_run_setup()
     if is_first_run and credentials:
+        logger.info("First run setup completed")
         print("\n=== Первичная настройка завершена ===")
         print(f"Логин: {credentials['login']}")
         print(f"Пароль: {credentials['password']}")
@@ -81,11 +92,13 @@ if __name__ == '__main__':
         print("="*50 + "\n")
 
 
-    args = parse_args()
+    logger.debug(f"Command line arguments: service={args.service}, debug={args.debug}")
 
     # Сервисный режим
     if args.service:
+        logger.info("Starting service mode")
         start_service_mode()
 
     # Обычный режим
+    logger.info("Starting interactive mode")
     start_interactive_mode()

@@ -11,9 +11,9 @@ from typing import Dict, Any
 from pathlib import Path
 
 from starter_files.utils.globalVars_utils import set_global, get_global
-from starter_files.utils.log_utils import get_logger
 
-class SystemModule(BaseModule): 
+class SystemModule(BaseModule):
+
     @staticmethod
     def check() -> bool:
         return True
@@ -127,7 +127,7 @@ class SystemModule(BaseModule):
         """Проверяет, нужно ли использовать sudo для выполнения команд"""
         priv_info = SystemModule.get_privilege_info()
         return priv_info['use_sudo']
-    
+
     @staticmethod
     def check_python_version() -> bool:
         """Проверяет соответствие версии Python требованиям"""
@@ -467,3 +467,9 @@ class SystemModule(BaseModule):
         return Path('/.dockerenv').exists() or any(
             'docker' in line for line in open('/proc/1/cgroup', 'r')
         )
+
+    @staticmethod
+    def set_globals():
+        """Возвращает время работы системы"""
+        set_global("path_log_install",get_global('script_path') / 'starter_files' / 'logs' / 'install')
+        set_global("path_log_web",get_global('script_path') / 'starter_files' / 'logs' / 'web')

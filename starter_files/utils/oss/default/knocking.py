@@ -6,6 +6,9 @@ import socket
 import subprocess
 from typing import List, Dict, Optional, Tuple
 
+from starter_files.utils.globalVars_utils import get_global, set_global
+from starter_files.utils.oss.module_loader import get
+
 from starter_files.utils.oss.base_module import BaseModule
 
 class KnockingModule(BaseModule):
@@ -113,69 +116,6 @@ class KnockingModule(BaseModule):
             return False
 
     @staticmethod
-    def install_knocking() -> Tuple[bool, str]:
-        """Install port knocking for the current OS"""
-        try:
-            if platform.system() == "Linux":
-                # Для Debian/Ubuntu
-                if os.path.exists("/etc/debian_version"):
-                    subprocess.run(
-                        ["apt-get", "update"],
-                        check=True
-                    )
-                    subprocess.run(
-                        ["apt-get", "install", "-y", "knockd"],
-                        check=True
-                    )
-                    return True, "Knockd successfully installed"
-                
-                # Для CentOS/RHEL
-                elif os.path.exists("/etc/redhat-release"):
-                    subprocess.run(
-                        ["yum", "install", "-y", "epel-release"],
-                        check=True
-                    )
-                    subprocess.run(
-                        ["yum", "install", "-y", "knock-server"],
-                        check=True
-                    )
-                    return True, "Knock-server successfully installed"
-                
-                # Для других дистрибутивов
-                else:
-                    return False, "Unsupported Linux distribution"
-
-            elif platform.system() == "Windows":
-                # Установка для Windows (используем Chocolatey или прямой download)
-                try:
-                    # Проверяем наличие Chocolatey
-                    subprocess.run(
-                        ["choco", "--version"],
-                        check=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
-                    )
-                    
-                    # Устанавливаем knockd через Chocolatey
-                    subprocess.run(
-                        ["choco", "install", "-y", "knockd"],
-                        check=True
-                    )
-                    return True, "Knockd installed via Chocolatey"
-                    
-                except:
-                    # Альтернативный метод установки для Windows
-                    return False, "Windows installation requires manual steps"
-            
-            else:
-                return False, f"Unsupported OS: {platform.system()}"
-        
-        except subprocess.CalledProcessError as e:
-            return False, f"Installation failed: {str(e)}"
-        except Exception as e:
-            return False, f"Error during installation: {str(e)}"
-
-    @staticmethod
     def _install_knocking_windows() -> Tuple[bool, str]:
         """Alternative Windows installation method"""
         try:
@@ -203,3 +143,13 @@ class KnockingModule(BaseModule):
             return True, "Powerknock installed successfully"
         except Exception as e:
             return False, str(e)
+
+    @staticmethod
+    def set_globals():
+        """Устанавливает глобальные для Port Knocking"""
+        port_knocking_installed = get('knocking',"is_knocking_installed")
+        logger.info("Переменная knocking_installed")
+        logger.info(port_knocking_installed)
+        
+        # Устанавливаем глобальные переменные
+        set_global('knocking_installed', port_knocking_installed)

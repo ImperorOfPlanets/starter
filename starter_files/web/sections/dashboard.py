@@ -2,20 +2,51 @@ import os
 import platform
 import socket
 import sys
+import uuid
+import threading
 
 from datetime import datetime, timedelta
-from flask import render_template
+from flask import render_template, jsonify
 
 from starter_files.utils.i18n_utils import t
 from starter_files.utils.globalVars_utils import get_global
+from starter_files.utils.oss.module_loader import get
 
-from starter_files.utils.log_utils import get_logger
-logger = get_logger()
+from starter_files.utils.log_utils import LogManager
+logger = LogManager.get_logger()
 
 this_section_in_control_panel = True
 section_icon = "bi-speedometer2"
 section_name = "Dashboard"
 section_order = 1
+
+# Конфигурация компонентов для универсальной установки
+COMPONENT_CONFIG = {
+    'docker': {
+        'module': 'docker',
+        'check': 'check_docker_installed',
+        'install': 'install_docker'
+    },
+    'docker-compose': {
+        'module': 'docker',
+        'check': 'check_docker_compose_installed',
+        'install': 'install_docker_сompose'
+    },
+    'port-knocking': {
+        'module': 'knocking',
+        'check': 'is_knocking_installed',
+        'install': 'install_port_knocking'
+    },
+    'git': {
+        'module': 'git',
+        'check': 'check_git_installed',
+        'install': 'install_git'
+    }
+}
+
+# Путь к директории логов установки
+INSTALL_LOGS_DIR = get_global('path_log_install')
+INSTALL_LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 def index(data, session):
     # Get system info from global variables with proper fallbacks
@@ -28,8 +59,6 @@ def index(data, session):
         'username': get_global('username', os.getenv('USER') or os.getenv('USERNAME') or 'N/A'),
         'current_time': get_global('current_time', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
         'uptime': get_global('uptime', 'N/A'),
-        'docker_installed': get_global('docker_installed', False),
-        'docker_compose_installed': get_global('docker_compose_installed', False),
         'python_info': {
             'version': get_global('python_version', platform.python_version()),
             'implementation': get_global('python_implementation', platform.python_implementation()),
@@ -53,6 +82,17 @@ def index(data, session):
             'used': get_global('disk_used', 'N/A'),
             'percent': get_global('disk_percent', 'N/A'),
             'free': get_global('disk_free', 'N/A')
+        },
+        'docker':{
+            "docker_installed": get_global('docker_installed', 'N/A'),
+            "docker_compose_installed": get_global('docker_compose_installed', 'N/A')
+        },
+        'knocking':{
+            "port_knocking_installed ": get_global('port_knocking_installed', 'N/A'),
+        },
+        'git':{
+            'git_installed': get_global('git_installed', 'N/A'),
+            'git_authentication': get_global('git_authentication', 'N/A'),
         }
     }
     
@@ -67,5 +107,123 @@ def index(data, session):
         cpu_info=sys_info['cpu'],
         memory_info=sys_info['memory'],
         disk_info=sys_info['disk'],
+        docker_info = sys_info['docker'],
         t=t
     )
+# ===================УСТАНОВКА ===============================
+
+def install_package(data, session):
+    """Универсальный обработчик установки пакетов"""
+    package = data.get('package')
+    
+    if not package or package not in COMPONENT_CONFIG:
+        return jsonify({'status': 'error', 'message': 'Invalid package name'})
+    
+    config = COMPONENT_CONFIG[package]
+    
+    try:
+        # Проверка установлен ли компонент
+        check = get(config['module'], config['check'])
+        if check:
+            return jsonify({'status': 'info', 'message': f'{package} is already installed'})
+    except Exception as e:
+        logger.error(f"Component check failed: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Installation check failed: {str(e)}'})
+    
+    # Создание уникального ID установки
+    install_id = str(uuid.uuid4())
+    log_file_path = INSTALL_LOGS_DIR / f"install_{package}_{install_id}.log"
+    
+    # Запуск установки в отдельном потоке
+    def run_installation():
+        try:
+            result = get(config['module'], config['install'], log_file_path=str(log_file_path))
+            
+            # Проверка результата установки
+            if result['status'] == 'error':
+                raise Exception(result['message'])
+
+            # Проверка результата установки
+            if result.get('status') == 'error':
+                raise Exception(result.get('message', 'Unknown error'))
+            
+            # Дополнительная проверка через API-вызов
+            if not get(config['module'], config['check']):
+                raise Exception(f"Verification failed after installation")
+                
+            # Запись успешного завершения
+            with open(log_file_path, 'a') as f:
+                f.write("\nInstallation completed and verified successfully!\n")
+                
+        except Exception as e:
+            with open(log_file_path, 'a') as f:
+                f.write(f"\nFATAL ERROR: {str(e)}\n")
+            logger.error(f"{package} installation failed: {str(e)}")
+    
+    thread = threading.Thread(target=run_installation)
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'status': 'started',
+        'message': f'{package} installation started',
+        'install_id': install_id
+    })
+
+def download_install_logs(data, session):
+    """Отправка файла логов для скачивания"""
+    package = data.get('package')
+    install_id = data.get('install_id')
+    if not install_id:
+        return "Installation ID required", 400
+    
+    log_file_path = INSTALL_LOGS_DIR / f"install_{package}_{install_id}.log"
+    
+    if not log_file_path.exists():
+        return "Log file not found", 404
+    
+    try:
+        from flask import send_file
+        return send_file(
+            log_file_path,
+            as_attachment=True,
+            download_name=f"install_{install_id}.log",
+            mimetype='text/plain'
+        )
+    except Exception as e:
+        return str(e), 500
+
+def get_install_logs(data, session):
+    """Возвращает содержимое лог-файла установки"""
+    package = data.get('package')
+    install_id = data.get('install_id')
+    if not install_id:
+        return jsonify({
+            'status': 'error',
+            'message': 'Installation ID required',
+            'logs': ''
+        })
+    
+    log_file_path = INSTALL_LOGS_DIR / f"install_{package}_{install_id}.log"
+    
+    if not log_file_path.exists():
+        return jsonify({
+            'status': 'error',
+            'message': 'Log file not found',
+            'logs': ''
+        })
+    
+    try:
+        with open(log_file_path, 'r') as f:
+            logs = f.read()
+        
+        return jsonify({
+            'status': 'success',
+            'logs': logs
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'logs': ''
+        })

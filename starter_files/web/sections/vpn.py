@@ -1,7 +1,6 @@
 import platform
 from flask import render_template, request
 from starter_files.utils.i18n_utils import t
-from starter_files.utils.vpn import get_available_clients, get_vpn_status
 
 this_section_in_control_panel = True
 section_icon = "bi-shield-lock"

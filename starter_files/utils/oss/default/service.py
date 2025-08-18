@@ -1,10 +1,7 @@
 import platform
 import subprocess
 import os
-from starter_files.utils.log_utils import logging
 from starter_files.utils.oss.base_module import BaseModule
-
-logger = logging.getLogger('service_module')
 
 SERVICE_NAME = "starter-service"
 
@@ -72,7 +69,7 @@ class ServiceModule(BaseModule):
                 status['running'] = status['installed']
 
                 result = subprocess.run(
-                    ['launchctl', 'print', f'gui/{os.getuid()}/{SERVICE_NAME}'],
+                    ['launchctl', 'logger.info', f'gui/{os.getuid()}/{SERVICE_NAME}'],
                     capture_output=True,
                     text=True,
                     check=False

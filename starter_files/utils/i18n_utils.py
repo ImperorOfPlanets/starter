@@ -6,10 +6,9 @@ from importlib import import_module
 from pathlib import Path
 from flask import g
 
-from starter_files.utils.log_utils import get_logger
+from starter_files.utils.log_utils import LogManager
+logger = LogManager.get_logger()
 from starter_files.utils.globalVars_utils import GlobalVars, set_global, get_global
-
-logger = get_logger()
 
 # Глобальная переменная для кеширования языков
 _AVAILABLE_LANGUAGES = None
@@ -42,7 +41,7 @@ def get_available_languages(force_reload=False) -> dict:
     languages = {}
     
     if not locales_dir.exists():
-        print(f"ОШИБКА: Папка с локалями не найдена по пути: {locales_dir}")
+        logger.info(f"ОШИБКА: Папка с локалями не найдена по пути: {locales_dir}")
         return languages
     
     for locale_file in locales_dir.glob('*.py'):
@@ -62,7 +61,7 @@ def get_available_languages(force_reload=False) -> dict:
                 'translations': section.translations  # Полные данные переводов
             }
         except ImportError as e:
-            print(f"Ошибка импорта {lang_code}: {str(e)}")
+            logger.info(f"Ошибка импорта {lang_code}: {str(e)}")
             continue
     
     _AVAILABLE_LANGUAGES = languages

@@ -23,9 +23,9 @@ class FSUtils:
             path = Path(folder)
             if not path.exists():
                 path.mkdir(parents=True)
-                print(f'Папка "{folder}" создана')
+                logger.info(f'Папка "{folder}" создана')
             else:
-                print(f'Папка "{folder}" уже существует')
+                logger.info(f'Папка "{folder}" уже существует')
 
     @staticmethod
     def validate_env_file(env_path: str, allowed_empty: List[str] = None) -> List[str]:

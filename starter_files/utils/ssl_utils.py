@@ -21,7 +21,7 @@ def setup_ssl_folder():
         ssl_dir.chmod(0o755)
         return ssl_dir
     except Exception as e:
-        print(f"Ошибка создания SSL папки: {e}")
+        logger.info(f"Ошибка создания SSL папки: {e}")
         raise
 
 def check_existing_certificates():
@@ -87,5 +87,5 @@ def get_ssl_context():
         cert_file, key_file = generate_self_signed_cert()
         return (str(cert_file), str(key_file))
     except Exception as e:
-        print(f"Ошибка работы с SSL сертификатами: {e}")
+        logger.info(f"Ошибка работы с SSL сертификатами: {e}")
         raise

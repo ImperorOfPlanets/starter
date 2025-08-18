@@ -11,11 +11,11 @@ from datetime import datetime
 from flask import render_template, jsonify, Response
 
 from starter_files.utils.i18n_utils import t
-from starter_files.utils.log_utils import get_logger
+from starter_files.utils.log_utils import LogManager
+logger = LogManager.get_logger()
+
 from starter_files.utils.oss.module_loader import get
 from starter_files.utils.globalVars_utils import get_global
-
-logger = get_logger()
 
 this_section_in_control_panel = True
 section_icon = "bi-box"
@@ -219,93 +219,3 @@ def prune_system(data, session):
     
     result = get('docker', 'prune_system') or {'status': 'error', 'message': 'Unknown error'}
     return result
-
-# Константа для пути к логам установки
-INSTALL_LOGS_DIR = get_global('script_path') / 'starter_files' / 'logs' / 'installs'
-INSTALL_LOGS_DIR.mkdir(parents=True, exist_ok=True)
-
-def install_docker(data, session):
-    """Обработка установки Docker"""
-    # Проверяем, не установлен ли уже Docker
-    docker_installed = get('docker', 'check_installed') or False
-    if docker_installed:
-        return jsonify({
-            'status': 'info', 
-            'message': 'Docker is already installed'
-        })
-    
-    # Создаем уникальный ID для этой установки
-    install_id = str(uuid.uuid4())
-    log_file_path = INSTALL_LOGS_DIR / f"install_{install_id}.log"
-    
-    # Гарантируем создание файла перед запуском установки
-    try:
-        # Создаем пустой файл логов
-        with open(log_file_path, 'w') as f:
-            f.write(f"Docker installation started at {datetime.now()}\n")
-        logger.info(f"Created installation log file: {log_file_path}")
-    except Exception as e:
-        logger.error(f"Failed to create log file: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': f'Failed to create log file: {str(e)}'
-        })
-    
-    # Запускаем установку в отдельном потоке
-    def run_install():
-        try:
-            get('docker', 'install_docker', str(log_file_path))
-        except Exception as e:
-            # Записываем ошибку в лог, если установка не удалась
-            with open(log_file_path, 'a') as f:
-                f.write(f"\nInstallation failed: {str(e)}\n")
-            logger.error(f"Docker installation failed: {str(e)}")
-    
-    thread = threading.Thread(target=run_install)
-    thread.daemon = True
-    thread.start()
-    
-    # Возвращаем ID установки
-    return jsonify({
-        'status': 'started',
-        'message': 'Installation started',
-        'install_id': install_id
-    })
-
-def get_install_logs(data, session):
-    """Возвращает содержимое лог-файла установки"""
-    install_id = data.get('install_id')
-    if not install_id:
-        return jsonify({'status': 'error', 'message': 'Installation ID required'})
-    
-    log_file_path = INSTALL_LOGS_DIR / f"install_{install_id}.log"
-    
-    if not log_file_path.exists():
-        # Проверяем, возможно установка не запустилась
-        docker_installed = get('docker', 'check_installed') or False
-        if docker_installed:
-            message = "Docker is already installed - no logs available"
-        else:
-            message = "Log file not found. Installation may have failed to start."
-        
-        return jsonify({
-            'status': 'error', 
-            'message': message, 
-            'logs': ''
-        })
-    
-    try:
-        with open(log_file_path, 'r') as f:
-            logs = f.read()
-        
-        return jsonify({
-            'status': 'success', 
-            'logs': logs,
-            'install_id': install_id
-        })
-    except Exception as e:
-        return jsonify({
-            'status': 'error', 
-            'message': str(e),
-            'logs': ''
-        })

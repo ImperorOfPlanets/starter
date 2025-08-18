@@ -11,11 +11,11 @@ def hash_password(password: str) -> str:
 def login(data, session):
     """Обработчик входа"""
     # Логирование входящих данных
-    print(f"\n=== DEBUG AUTH ===")
-    print(f"Input data: {data}")
-    print(f"Session: {dict(session)}")
-    print(f"ENV: ADMIN_LOGIN={os.getenv('ADMIN_LOGIN')}")
-    print(f"ENV: ADMIN_PASSWORD_HASH={os.getenv('ADMIN_PASSWORD_HASH')}")
+    logger.info(f"\n=== DEBUG AUTH ===")
+    logger.info(f"Input data: {data}")
+    logger.info(f"Session: {dict(session)}")
+    logger.info(f"ENV: ADMIN_LOGIN={os.getenv('ADMIN_LOGIN')}")
+    logger.info(f"ENV: ADMIN_PASSWORD_HASH={os.getenv('ADMIN_PASSWORD_HASH')}")
 
     username = data.get('username')
     password = data.get('password')
@@ -24,8 +24,8 @@ def login(data, session):
 
     # Хэширование входящего пароля для сравнения
     input_hash = hashlib.sha256(password.encode('utf-8')).hexdigest() if password else None
-    print(f"Input hash: {input_hash}")
-    print(f"Stored hash: {admin_pass_hash}")
+    logger.info(f"Input hash: {input_hash}")
+    logger.info(f"Stored hash: {admin_pass_hash}")
     
     # Проверка наличия данных
     if not all([username, password]):
@@ -52,8 +52,8 @@ def login(data, session):
         if hasattr(session, 'save'):
             session.save()
 
-        print(f"Установлена сессия. ID: {session.sid if hasattr(session, 'sid') else 'not_set'}")
-        print(f"Данные сессии: {dict(session)}")
+        logger.info(f"Установлена сессия. ID: {session.sid if hasattr(session, 'sid') else 'not_set'}")
+        logger.info(f"Данные сессии: {dict(session)}")
 
         return {
             'status': 'success',

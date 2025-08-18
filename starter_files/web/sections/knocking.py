@@ -1,17 +1,7 @@
 from flask import render_template
 from starter_files.utils.i18n_utils import t
-from starter_files.utils.log_utils import get_logger
-from starter_files.utils.knocking_utils import (
-    is_knocking_installed,
-    get_knocking_config,
-    is_knocking_active,
-    start_knocking_service,
-    stop_knocking_service,
-    update_knocking_config,
-    install_knocking
-)
-
-logger = get_logger()
+from starter_files.utils.log_utils import LogManager
+logger = LogManager.get_logger()
 
 this_section_in_control_panel = True
 section_icon = "bi-shield-lock"

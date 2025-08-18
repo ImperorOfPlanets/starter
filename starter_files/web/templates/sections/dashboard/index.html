@@ -1,3 +1,5 @@
+<!-- Модальное окно установки -->
+{% include 'sections/dashboard/modal.html' %}
 <div class="container-fluid">
     <div class="d-flex justify-content-end pt-3 pb-2 mb-3 border-bottom">
         <div class="btn-toolbar">
@@ -92,7 +94,8 @@
                 </div>
             </div>
         </div>
-
+        <hr class="mt-3"/>
+        <h1>Обязательный софт</h1>
         <div class="col-md-3 mt-2">
             <div class="card h-100">
                 <div class="card-header bg-dark text-white">
@@ -100,17 +103,84 @@
                 </div>
                 <div class="card-body">
                     <p class="card-text"><strong>{{ t('status') }}:</strong> 
-                        {% if sys_info.docker_installed %}
+                        {% if sys_info.docker.docker_installed %}  <!-- Исправлено -->
                             <span class="badge bg-success">{{ t('installed') }}</span>
                         {% else %}
                             <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="docker">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
                         {% endif %}
                     </p>
                     <p class="card-text"><strong>Compose:</strong> 
-                        {% if sys_info.docker_compose_installed %}
+                        {% if sys_info.docker.docker_compose_installed %}  <!-- Исправлено -->
                             <span class="badge bg-success">{{ t('installed') }}</span>
                         {% else %}
                             <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="docker-compose">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-shield-lock me-2"></i> Port Knocking
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
+                        {% if sys_info.knocking.port_knocking_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="port-knocking">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>        
+
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-git me-2"></i> Git
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
+                        {% if sys_info.git.git_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="git">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    
+        <!-- Пример для другой утилиты -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <i class=""></i> EXAMPLE
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
+                        {% if sys_info.git_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="git">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
                         {% endif %}
                     </p>
                 </div>
