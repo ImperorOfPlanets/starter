@@ -94,14 +94,41 @@ if __name__ == '__main__':
         print("="*50 + "\n")
 
     print("=== ПРОВЕРКА ОБНОВЛЕНИЙ === ")
-
     from starter_files.utils.oss.module_loader import get
     seconds = get('updates','seconds_since_last_update')
     print(f"Секунд с последнего обновления ${seconds}")
-
     print("=========================== ")
-    logger.debug(f"Command line arguments: service={args.service}, debug={args.debug}")
 
+    # Собираем информацию о фаерволе
+    from starter_files.utils.oss.default.firewall import FirewallModule
+    print("=== ПРОВЕРКА ПОРТОВ ===")
+    firewall_info = FirewallModule.collect_firewall_info()
+    
+    if firewall_info['is_available']:
+        print(f"Активный фаервол: {firewall_info['active_firewall']}")
+    else:
+        print("⚠️  Не обнаружен активный фаервол!")
+    
+    # Разрешенные порты в фаерволе
+    if firewall_info['open_ports']:
+        print("\nРазрешенные порты в фаерволе:")
+        for port_info in firewall_info['open_ports']:
+            chain_info = f" ({port_info.get('chain', '')})" if port_info.get('chain') else ""
+            print(f"  - Порт {port_info['port']}/{port_info['protocol']}{chain_info}")
+    else:
+        print("\nНет разрешенных портов в фаерволе")
+    
+    # Слушающие порты
+    if firewall_info['listening_ports']:
+        print("\nСлушающие порты:")
+        for port_info in firewall_info['listening_ports']:
+            print(f"  - Порт {port_info['port']}/{port_info['protocol']} ({port_info.get('state', 'LISTEN')})")
+    else:
+        print("\nНет слушающих портов")
+    
+    print("===========================")
+
+    logger.debug(f"Command line arguments: service={args.service}, debug={args.debug}")
     # Сервисный режим
     if args.service:
         logger.info("Starting service mode")
