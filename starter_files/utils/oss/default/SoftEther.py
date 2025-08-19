@@ -1,15 +1,18 @@
 from starter_files.utils.oss.base_module import BaseModule
-from typing import List
+from typing import List, Dict
+from datetime import datetime
+from pathlib import Path
 from starter_files.utils.globalVars_utils import get_global, set_global
 from starter_files.utils.oss.module_loader import get
 import platform
 import logging
 import subprocess
 import os
+import time
 
 logger = logging.getLogger('softether_oss')
 
-class SoftEtherModule(BaseModule):
+class SoftetherModule(BaseModule):
     """Реализация для установки SoftEther VPN Client"""
 
     @staticmethod
@@ -29,50 +32,80 @@ class SoftEtherModule(BaseModule):
         return arch_map.get(arch, 'Intel x64 / AMD64 (64bit)')
 
     @staticmethod
-    def return_commands_install_softether() -> List[str]:
-        """Возвращает команды для установки SoftEther VPN Client"""
-        os_type = get_global('os_type')
-        is_root = get_global('is_root')
-        use_sudo = get_global('use_sudo')
+    def install_softether(log_file_path: str) -> Dict[str, str]:
+        """Устанавливает SoftEtherVPN и записывает логи в указанный файл"""
+        result = {'status': 'success', 'message': '', 'logs': []}
         
-        prefix = "sudo " if (not is_root and use_sudo) or not is_root else ""
-        version = "v4.42-9798-rtm-2023.06.30"
-        repo_url = "https://github.com/chipitsine/SoftEtherVPN.git"
+        try:
+            # Создаем директорию для логов, если нужно
+            log_dir = Path(log_file_path).parent
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Открываем файл для записи логов один раз на весь процесс установки
+            with open(log_file_path, 'w') as log_file:
+                def log(message):
+                    """Вспомогательная функция для записи в лог и в результат"""
+                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    log_entry = f"[{timestamp}] {message}"
+                    log_file.write(log_entry + '\n')
+                    log_file.flush()  # Обеспечиваем немедленную запись
+                    result['logs'].append(log_entry)
+                    logger.info(log_entry)
+                
+                log("Starting SoftEtherVPN installation...")
+
+                commands = get("softether","return_commands_install_softether")
+
+                # Выполняем команды установки
+                for cmd in commands:
+                    log(f"Executing: {cmd}")
+                    process = subprocess.Popen(
+                        cmd,
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,  # Объединяем stdout и stderr
+                        text=True,
+                        bufsize=1,  # Построчный буфер
+                        universal_newlines=True
+                    )
+                    
+                    # Читаем вывод в реальном времени
+                    for line in iter(process.stdout.readline, ''):
+                        if line:
+                            log(line.strip())
+                    
+                    # Проверяем статус завершения
+                    return_code = process.wait()
+                    if return_code != 0:
+                        log(f"Command failed with exit code {return_code}")
+                        result['status'] = 'error'
+                        result['message'] = f"Command failed: {cmd}"
+                        return result
+                
+                # Проверяем успешность установки
+                time.sleep(2)
+                if get('softether','check_softether_installed'):
+                    log("SoftEtherVPN installed successfully! Please restart your session.")
+                    result['message'] = "Docker installed successfully! Please restart your session."
+                else:
+                    log("Installation completed but Docker not detected. Try restarting your system.")
+                    result['status'] = 'warning'
+                    result['message'] = "Installation completed but Docker not detected. Try restarting your system."
         
-        commands = []
+        except Exception as e:
+            # Записываем ошибку в лог
+            error_msg = f"Installation failed: {str(e)}"
+            try:
+                with open(log_file_path, 'a') as f:
+                    f.write(error_msg + '\n')
+            except:
+                logger.exception("Failed to write error to log file")
+            
+            result['status'] = 'error'
+            result['message'] = error_msg
+            logger.exception("SoftEtherVPN installation error")
         
-        # Установка зависимостей
-        if os_type == 'linux':
-            if get_global('os_family') == 'debian':
-                commands = [
-                    f"{prefix}apt update",
-                    f"{prefix}apt -y install cmake gcc g++ make pkgconf "
-                    "libncurses5-dev libssl-dev libsodium-dev libreadline-dev zlib1g-dev"
-                ]
-            elif get_global('os_family') in ['rhel', 'centos', 'fedora']:
-                commands = [
-                    f"{prefix}yum -y groupinstall 'Development Tools'",
-                    f"{prefix}yum -y install cmake ncurses-devel openssl-devel "
-                    "libsodium-devel readline-devel zlib-devel"
-                ]
-        elif os_type == 'macos':
-            commands = [
-                "brew update",
-                "brew install cmake openssl libsodium readline"
-            ]
-        
-        # Клонирование и сборка
-        build_cmd = [
-            f"git clone {repo_url}",
-            "cd SoftEtherVPN",
-            "git submodule init && git submodule update",
-            "./configure",
-            "make -C build",
-            f"{prefix}make -C build install"
-        ]
-        
-        commands.extend(build_cmd)
-        return commands
+        return result
 
     @staticmethod
     def return_commands_configure_client(vpn_config: dict) -> List[str]:
@@ -167,6 +200,6 @@ class SoftEtherModule(BaseModule):
         set_global('softether_installed', installed)
         
         if installed:
-            status = SoftEtherModule.get_service_status()
+            status = SoftetherModule.get_service_status()
             set_global('softether_status', status['status_text'])
             set_global('softether_active', status['active'])

@@ -47,6 +47,11 @@ COMPONENT_CONFIG = {
         'check': 'check_git_installed',
         'install': 'install_git'
     },
+    'vpnEther': {
+        'module': 'softether',
+        'check': 'check_softether_installed',
+        'install': 'install_softether'
+    },
 }
 
 # Путь к директории логов установки

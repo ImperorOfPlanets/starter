@@ -1,6 +1,7 @@
 from starter_files.utils.oss.base_module import BaseModule
 import os
 import platform
+import re
 import socket
 import subprocess
 import sys
@@ -58,6 +59,8 @@ class SystemModule(BaseModule):
             # ОС
             'os': os_name,
             'os_version': os_version,
+            'os_family': SystemModule.get_os_family(),
+            'os_type': SystemModule.get_os_type(),
 
             'architecture': platform.machine(),
             'hostname': socket.gethostname(),
@@ -169,6 +172,89 @@ class SystemModule(BaseModule):
             pass
         
         return name, version
+
+    @staticmethod
+    def get_os_family() -> str:
+        """
+        Определяет семейство операционной системы.
+        Возвращает: 'debian', 'rhel', 'arch', 'suse', 'macos', 'windows' или 'unknown'
+        """
+        system = platform.system().lower()
+        
+        # Для Windows и macOS сразу возвращаем результат
+        if system == 'windows':
+            return 'windows'
+        elif system == 'darwin':
+            return 'macos'
+        
+        # Для Linux определяем дистрибутив
+        try:
+            # Пробуем прочитать /etc/os-release
+            with open('/etc/os-release', 'r') as f:
+                content = f.read()
+            
+            # Ищем ID_LIKE или ID
+            id_like_match = re.search(r'ID_LIKE="?([^"\n]+)"?', content)
+            id_match = re.search(r'ID="?([^"\n]+)"?', content)
+            
+            if id_like_match:
+                ids = id_like_match.group(1).lower()
+            elif id_match:
+                ids = id_match.group(1).lower()
+            else:
+                return 'unknown'
+            
+            # Определяем семейство по известным меткам
+            if 'debian' in ids or 'ubuntu' in ids:
+                return 'debian'
+            elif 'rhel' in ids or 'fedora' in ids or 'centos' in ids:
+                return 'rhel'
+            elif 'arch' in ids:
+                return 'arch'
+            elif 'suse' in ids or 'opensuse' in ids:
+                return 'suse'
+            else:
+                return 'unknown'
+                
+        except FileNotFoundError:
+            # Если файла нет, пробуем определить через менеджер пакетов
+            try:
+                # Проверяем apt (Debian/Ubuntu)
+                subprocess.run(['apt', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                return 'debian'
+            except:
+                try:
+                    # Проверяем yum/dnf (RHEL/CentOS/Fedora)
+                    subprocess.run(['yum', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    return 'rhel'
+                except:
+                    try:
+                        # Проверяем pacman (Arch)
+                        subprocess.run(['pacman', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                        return 'arch'
+                    except:
+                        try:
+                            # Проверяем zypper (SUSE)
+                            subprocess.run(['zypper', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                            return 'suse'
+                        except:
+                            return 'unknown'
+
+    def get_os_type() -> str:
+        """
+        Определяет тип операционной системы.
+        Возвращает: 'linux', 'windows', 'macos' или 'unknown'
+        """
+        system = platform.system().lower()
+        
+        if system == 'linux':
+            return 'linux'
+        elif system == 'windows':
+            return 'windows'
+        elif system == 'darwin':
+            return 'macos'
+        else:
+            return 'unknown'
 
     @staticmethod
     def check_docker_compose_installed() -> bool:
