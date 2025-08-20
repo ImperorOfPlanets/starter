@@ -10,12 +10,12 @@ import uuid
 from datetime import datetime
 from flask import render_template, jsonify, Response
 
-from starter_files.utils.i18n_utils import t
-from starter_files.utils.log_utils import LogManager
+from starter_files.core.i18n_utils import t
+from starter_files.core.log_utils import LogManager
 logger = LogManager.get_logger()
 
-from starter_files.utils.oss.module_loader import get
-from starter_files.utils.globalVars_utils import get_global
+from starter_files.core.oss.module_loader import get
+from starter_files.core.utils.globalVars_utils import get_global
 
 this_section_in_control_panel = True
 section_icon = "bi-box"

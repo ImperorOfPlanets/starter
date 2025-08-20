@@ -2,7 +2,7 @@
 import hashlib
 import os
 from flask import session, url_for
-from starter_files.utils.i18n_utils import t, get_available_languages
+from starter_files.core.i18n_utils import t, get_available_languages
 
 def hash_password(password: str) -> str:
     """Хеширование пароля"""

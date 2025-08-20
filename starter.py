@@ -6,10 +6,10 @@ import sys
 import textwrap
 from pathlib import Path
 
-from starter_files.utils import venv_utils
-from starter_files.utils.globalVars_utils import get_global
-from starter_files.utils.oss.default.system import SystemModule
-from starter_files.utils.log_utils import LogManager
+from starter_files.core.utils import venv_utils
+from starter_files.core.utils.globalVars_utils import get_global
+from starter_files.core.oss.default.system import SystemModule
+from starter_files.core.utils.log_utils import LogManager
 
 # Устанавливает глобальные переменные
 SystemModule.collect_basic_system_info()
@@ -29,9 +29,9 @@ def start_service_mode():
 
 def start_interactive_mode():
     # Обычный режим
-    from starter_files.utils.configurateApp_utils import configure_app
-    from starter_files.utils.ssl_utils import get_ssl_context
-    from starter_files.utils.firstSetup_utils import open_browser
+    from starter_files.core.utils.configurateApp_utils import configure_app
+    from starter_files.core.utils.ssl_utils import get_ssl_context
+    from starter_files.core.utils.firstSetup_utils import open_browser
     from dotenv import load_dotenv
 
     env_file = Path(get_global('script_path')) / '.env'
@@ -63,7 +63,7 @@ if __name__ == '__main__':
         import flask
         import dotenv
     except ImportError:
-        from starter_files.utils.requirements_utils import install_and_restart
+        from starter_files.core.utils.requirements_utils import install_and_restart
         install_and_restart()
     
 
@@ -77,13 +77,13 @@ if __name__ == '__main__':
     logger = LogManager.get_logger("main")
 
     # Устанавливаем глобальный обработчик исключений
-    from starter_files.utils.exceptionHandler_utils import ExceptionHandler
+    from starter_files.core.utils.exceptionHandler_utils import ExceptionHandler
     handler = ExceptionHandler()
     sys.excepthook = handler.handle_unhandled_exception
     logger.debug("Exception handler initialized")
 
     # Проверка на настроенность
-    from starter_files.utils.firstSetup_utils import first_run_setup
+    from starter_files.core.utils.firstSetup_utils import first_run_setup
     is_first_run, credentials = first_run_setup()
     if is_first_run and credentials:
         logger.info("First run setup completed")
@@ -94,13 +94,13 @@ if __name__ == '__main__':
         print("="*50 + "\n")
 
     print("=== ПРОВЕРКА ОБНОВЛЕНИЙ === ")
-    from starter_files.utils.oss.module_loader import get
+    from starter_files.core.oss.module_loader import get
     seconds = get('updates','seconds_since_last_update')
     print(f"Секунд с последнего обновления ${seconds}")
     print("=========================== ")
 
     # Собираем информацию о фаерволе
-    from starter_files.utils.oss.default.firewall import FirewallModule
+    from starter_files.core.oss.default.firewall import FirewallModule
     print("=== ПРОВЕРКА ПОРТОВ ===")
     firewall_info = FirewallModule.collect_firewall_info()
     
@@ -110,13 +110,17 @@ if __name__ == '__main__':
         print("⚠️  Не обнаружен активный фаервол!")
     
     # Разрешенные порты в фаерволе
-    if firewall_info['open_ports']:
+    if firewall_info['all_ports_open']:
+        print("\n✅ Все порты разрешены")
+        if firewall_info['open_ports']:
+            print(f"Причина: {firewall_info['open_ports'][0]['service']}")
+    elif firewall_info['open_ports']:
         print("\nРазрешенные порты в фаерволе:")
         for port_info in firewall_info['open_ports']:
-            chain_info = f" ({port_info.get('chain', '')})" if port_info.get('chain') else ""
-            print(f"  - Порт {port_info['port']}/{port_info['protocol']}{chain_info}")
+            service_info = f" ({port_info.get('service', '')})" if port_info.get('service') else ""
+            print(f"  - Порт {port_info['port']}/{port_info['protocol']}{service_info}")
     else:
-        print("\nНет разрешенных портов в фаерволе")
+        print("\nНет явно разрешенных портов в фаерволе")
     
     # Слушающие порты
     if firewall_info['listening_ports']:

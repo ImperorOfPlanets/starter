@@ -1,8 +1,8 @@
 import platform
 import subprocess
 from flask import render_template
-from starter_files.utils.i18n_utils import t
-from starter_files.utils.log_utils import LogManager
+from starter_files.core.i18n_utils import t
+from starter_files.core.log_utils import LogManager
 logger = LogManager.get_logger()
 
 # Конфигурация модуля для панели управления

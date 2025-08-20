@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Tuple, Optional
 import getpass
 
-from starter_files.utils.log_utils import logger
+from starter_files.core.utils.log_utils import logger
 
 class ServiceManager:
     def __init__(self, script_path: str, service_name: str = "starter-service"):

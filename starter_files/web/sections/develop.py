@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
-from starter_files.utils.globalVars_utils import get_all_globals
-from starter_files.utils.oss.module_loader import collect_modules_info
+from starter_files.core.utils.globalVars_utils import get_all_globals
+from starter_files.core.oss.module_loader import collect_modules_info
 
 this_section_in_control_panel = False
 section_name = "Develop"

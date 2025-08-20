@@ -1,5 +1,7 @@
 # Генерируемая структура кода
 project_structure.html
+codereader_config.json
+codereaderForAIv2.py
 
 # Лог сервиса
 service.log

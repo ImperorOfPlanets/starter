@@ -1,0 +1,102 @@
+<!-- Шаблон для вкладки "Открытые порты" -->
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">Открытые порты</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="btn-group me-2">
+                <button class="btn btn-sm btn-outline-secondary" id="refreshPortsBtn">
+                    <i class="bi bi-arrow-repeat"></i> Обновить
+                </button>
+                <button class="btn btn-sm btn-primary" id="addOpenPortBtn">
+                    <i class="bi bi-plus-circle"></i> Добавить порт
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица открытых портов -->
+    <div class="table-responsive">
+        <table class="table table-striped table-sm" id="portsTable">
+            <thead>
+                <tr>
+                    <th>Порт</th>
+                    <th>Протокол</th>
+                    <th>Сервис</th>
+                    <th>Статус</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for port in firewall_info.open_ports %}
+                <tr>
+                    <td>{{ port.port }}</td>
+                    <td><span class="badge bg-info text-dark text-uppercase">{{ port.protocol }}</span></td>
+                    <td>{{ port.service }}</td>
+                    <td><span class="badge bg-success">Открыт</span></td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-danger close-port-btn" data-port="{{ port.port }}" data-protocol="{{ port.protocol }}">
+                                <i class="bi bi-x-circle"></i> Закрыть
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center">Нет открытых портов</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    $('#refreshPortsBtn').on('click', function() {
+        loadFirewallContent('open_ports');
+    });
+
+    $('#addOpenPortBtn').on('click', function() {
+        $('#portModalTitle').text('Открыть порт');
+        $('#portAction').val('open');
+        $('#portForm')[0].reset();
+        $('#portServiceContainer').show();
+        var portModal = new bootstrap.Modal('#portModal');
+        portModal.show();
+    });
+
+    $('.close-port-btn').on('click', function() {
+        const port = $(this).data('port');
+        const protocol = $(this).data('protocol');
+        
+        $('#confirmMessage').text('Вы уверены, что хотите закрыть порт ' + port + '/' + protocol + '?');
+        $('#confirmActionBtn').data('action', 'close').data('port', port).data('protocol', protocol);
+        var confirmModal = new bootstrap.Modal('#confirmModal');
+        confirmModal.show();
+    });
+
+    // Переопределяем обработчик для подтверждающего модального окна
+    $('#confirmActionBtn').off('click').on('click', function() {
+        const action = $(this).data('action');
+        $('#confirmModal').modal('hide');
+        
+        if (action === 'close') {
+            const port = $(this).data('port');
+            const protocol = $(this).data('protocol');
+            
+            $.post('/', {
+                section: 'firewall',
+                action: 'close_port',
+                port: port,
+                protocol: protocol
+            }, function(response) {
+                showAlert(response.status === 'success' ? 'alert-success' : 'alert-danger', response.message);
+                if (response.status === 'success') {
+                    loadFirewallContent('open_ports');
+                }
+            });
+        }
+    });
+});
+</script>

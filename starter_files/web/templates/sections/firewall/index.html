@@ -1,0 +1,95 @@
+<div class="row">
+    <!-- Подменю Firewall -->
+    <div class="col-md-3 col-lg-2">
+        <ul class="nav flex-column" id="firewallSubMenu">
+            <li class="nav-item">
+                <a class="nav-link active" href="#" data-action="overview">
+                    <i class="bi bi-speedometer2 me-2"></i> Обзор
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" data-action="open_ports">
+                    <i class="bi bi-door-open me-2"></i> Открытые порты
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" data-action="listening_ports">
+                    <i class="bi bi-ear me-2"></i> Прослушивающие порты
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" data-action="rules">
+                    <i class="bi bi-list-check me-2"></i> Правила
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" data-action="actions">
+                    <i class="bi bi-lightning me-2"></i> Быстрые действия
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Контент Firewall -->
+    <div class="col-md-9 col-lg-10">
+        <div id="firewallContent">
+            <!-- Контент будет загружаться здесь -->
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для добавления/удаления порта -->
+<div class="modal fade" id="portModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="portModalTitle">Управление портом</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="portForm">
+                    <input type="hidden" id="portAction" name="action">
+                    <div class="mb-3">
+                        <label for="portNumber" class="form-label">Номер порта</label>
+                        <input type="number" class="form-control" id="portNumber" name="port" min="1" max="65535" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="portProtocol" class="form-label">Протокол</label>
+                        <select class="form-select" id="portProtocol" name="protocol" required>
+                            <option value="tcp">TCP</option>
+                            <option value="udp">UDP</option>
+                            <option value="both">TCP и UDP</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="portServiceContainer">
+                        <label for="portService" class="form-label">Сервис (опционально)</label>
+                        <input type="text" class="form-control" id="portService" name="service" placeholder="Например: HTTP, SSH...">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="savePortBtn">Применить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для подтверждения действий -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Подтверждение действия</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="confirmMessage">Вы уверены, что хотите выполнить это действие?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-danger" id="confirmActionBtn">Подтвердить</button>
+            </div>
+        </div>
+    </div>
+</div>
