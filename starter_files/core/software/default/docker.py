@@ -1,4 +1,4 @@
-from starter_files.core.oss.base_module import BaseModule
+from starter_files.core.base_module import BaseModule
 import json
 import logging
 import platform
@@ -8,7 +8,7 @@ from pathlib import Path
 import os
 import time
 from typing import Dict, List, Optional
-from starter_files.core.oss.module_loader import get
+from starter_files.core.utils.loader_utils import get
 from starter_files.core.utils.globalVars_utils import get_global, set_global
 from datetime import datetime
 

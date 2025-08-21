@@ -1,6 +1,6 @@
 import json
 from flask import render_template, jsonify, request
-from starter_files.core.oss.module_loader import get
+from starter_files.core.utils.loader_utils import get
 
 this_section_in_control_panel = True
 section_icon = "bi-shield"

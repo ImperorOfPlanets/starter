@@ -1,6 +1,6 @@
 import platform
 from flask import render_template, request
-from starter_files.core.i18n_utils import t
+from starter_files.core.utils.i18n_utils import t
 
 this_section_in_control_panel = True
 section_icon = "bi-shield-lock"

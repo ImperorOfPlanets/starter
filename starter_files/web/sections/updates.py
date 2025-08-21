@@ -1,5 +1,5 @@
 from flask import render_template
-from starter_files.core.i18n_utils import t
+from starter_files.core.utils.i18n_utils import t
 
 # Конфигурация модуля для панели управления
 this_section_in_control_panel = True

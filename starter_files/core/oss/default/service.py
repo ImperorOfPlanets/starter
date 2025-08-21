@@ -1,10 +1,10 @@
-from starter_files.core.oss.base_module import BaseModule
+from starter_files.core.base_module import BaseModule
 
 import platform
 import subprocess
 import os
 from starter_files.core.utils.globalVars_utils import get_global, set_global
-from starter_files.core.oss.module_loader import get
+from starter_files.core.utils.loader_utils import get
 
 SERVICE_NAME = "starter-service"
 

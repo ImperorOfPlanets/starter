@@ -1,4 +1,4 @@
-from starter_files.core.oss.base_module import BaseModule
+from starter_files.core.base_module import BaseModule
 import json
 import os
 import shutil
@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, Tuple, List, Optional
-from starter_files.core.log_utils import LogManager
+from starter_files.core.utils.log_utils import LogManager
 
 class UpdatesModule(BaseModule):
     """

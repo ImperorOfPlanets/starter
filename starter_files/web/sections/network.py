@@ -3,8 +3,8 @@ from flask import render_template, jsonify
 from typing import Dict, Any, List, Tuple
 from dataclasses import dataclass
 
-from starter_files.core.i18n_utils import t
-from starter_files.core.log_utils import LogManager
+from starter_files.core.utils.i18n_utils import t
+from starter_files.core.utils.log_utils import LogManager
 logger = LogManager.get_logger()
 
 this_section_in_control_panel = True

@@ -1,11 +1,11 @@
-from starter_files.core.oss.base_module import BaseModule
+from starter_files.core.base_module import BaseModule
 import subprocess
 import logging
 from pathlib import Path
 from typing import Dict, List
 from datetime import datetime, time
 import re
-from starter_files.core.oss.module_loader import get
+from starter_files.core.utils.loader_utils import get
 from starter_files.core.utils.globalVars_utils import get_global, set_global
 
 logger = logging.getLogger('git_oss')

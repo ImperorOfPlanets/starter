@@ -6,9 +6,9 @@ from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
 from starter_files.core.utils.globalVars_utils import get_global, set_global
-from starter_files.core.oss.module_loader import get
+from starter_files.core.utils.loader_utils import get
 
-from starter_files.core.oss.base_module import BaseModule
+from starter_files.core.base_module import BaseModule
 
 class KnockingModule(BaseModule):
 

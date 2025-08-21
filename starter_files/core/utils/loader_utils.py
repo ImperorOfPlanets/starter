@@ -27,68 +27,77 @@ def load_modules(refresh: bool = False):
     os_version = get_global("os_version")
     logger.info(f"Текущая ОС: {os_name} {os_version}")
 
-    search_paths = [
-        script_path / "starter_files" / "core" / "oss" / os_name / os_version,  # 1. Самая специфичная
-        script_path / "starter_files" / "core" / "oss" / os_name / "default",    # 2. Общая для ОС
-        script_path / "starter_files" / "core" / "oss" / "default",              # 3. Общая реализация
+    base_categories = [
+        ("oss", script_path / "starter_files" / "core" / "oss"),
+        ("software", script_path / "starter_files" / "core" / "software")
     ]
 
     # Словарь для сбора всех реализаций
     all_implementations = {}
 
-    logger.info("\nПоиск модулей по путям (в порядке приоритета):")
-    for i, base in enumerate(search_paths):
-        priority = i + 1
-        level = i  # Уровень приоритета: 0=os_version, 1=os_default, 2=global_default
-        exists = "НАЙДЕНА" if base.exists() else "не найдена"
-        logger.info(f" {priority}. {base} [{exists}] (уровень {level})")
+    for category_name, base_dir in base_categories:
+        logger.info(f"\nПоиск модулей в категории: {category_name.upper()}")
+        
+        search_paths = [
+            base_dir / os_name / os_version,      # 1. Самая специфичная
+            base_dir / os_name / "default",       # 2. Общая для ОС
+            base_dir / "default",                 # 3. Общая реализация
+        ]
 
-        if not base.exists():
-            continue
+        logger.info("Пути поиска (в порядке приоритета):")
+        for i, base in enumerate(search_paths):
+            priority = i + 1
+            level = i  # Уровень приоритета
+            exists = "НАЙДЕНА" if base.exists() else "не найдена"
+            logger.info(f" {priority}. {base} [{exists}] (уровень {level})")
 
-        logger.info(f"  Сканирование файлов в: {base}")
-        for py_file in base.glob("*.py"):
-            module_name = py_file.stem
-            
-            # Инициализируем список для модуля, если нужно
-            if module_name not in all_implementations:
-                all_implementations[module_name] = []
-                
-            # Проверяем, есть ли уже реализация с таким же путем
-            existing_paths = [impl["path"] for impl in all_implementations[module_name]]
-            if py_file in existing_paths:
-                logger.info(f"      Пропуск (уже загружен ранее)")
+            if not base.exists():
                 continue
 
-            try:
-                logger.info(f"      Попытка загрузки модуля...")
-                module_class = load_module_from_path(py_file, module_name)
-
-                if module_class is None:
-                    logger.info("      ❌ Не удалось загрузить класс модуля")
+            logger.info(f"  Сканирование файлов в: {base}")
+            for py_file in base.glob("*.py"):
+                module_name = py_file.stem  # Добавляем префикс категории
+                
+                # Инициализируем список для модуля, если нужно
+                if module_name not in all_implementations:
+                    all_implementations[module_name] = []
+                    
+                # Проверяем, есть ли уже реализация с таким же путем
+                existing_paths = [impl["path"] for impl in all_implementations[module_name]]
+                if py_file in existing_paths:
+                    logger.info(f"      Пропуск (уже загружен ранее)")
                     continue
 
-                funcs = {}
-                logger.info("      Поиск функций в классе:")
-                for name, member in inspect.getmembers(module_class):
-                    if name.startswith("__"):
-                        continue
-                    if inspect.isfunction(member) or inspect.ismethod(member):
-                        funcs[name] = member
-                        logger.info(f"        - {name}")
+                try:
+                    logger.info(f"      Попытка загрузки модуля...")
+                    module_class = load_module_from_path(py_file, py_file.stem)
 
-                # Добавляем реализацию в список
-                all_implementations[module_name].append({
-                    "class": module_class,
-                    "functions": funcs,
-                    "path": py_file,
-                    "level": level
-                })
-                logger.info(f"      ✅ Реализация модуля '{module_name}' успешно загружена (уровень {level})")
-            except Exception as e:
-                error_msg = f"      ❌ Ошибка загрузки: {str(e)}"
-                logger.info(error_msg)
-                logger.warning(f"[WARN] Не удалось загрузить {py_file}: {e}")
+                    if module_class is None:
+                        logger.info("      ❌ Не удалось загрузить класс модуля")
+                        continue
+
+                    funcs = {}
+                    logger.info("      Поиск функций в классе:")
+                    for name, member in inspect.getmembers(module_class):
+                        if name.startswith("__"):
+                            continue
+                        if inspect.isfunction(member) or inspect.ismethod(member):
+                            funcs[name] = member
+                            logger.info(f"        - {name}")
+
+                    # Добавляем реализацию в список
+                    all_implementations[module_name].append({
+                        "class": module_class,
+                        "functions": funcs,
+                        "path": py_file,
+                        "level": level,
+                        #"category": category_name
+                    })
+                    logger.info(f"      ✅ Реализация модуля '{module_name}' успешно загружена (уровень {level})")
+                except Exception as e:
+                    error_msg = f"      ❌ Ошибка загрузки: {str(e)}"
+                    logger.info(error_msg)
+                    logger.warning(f"[WARN] Не удалось загрузить {py_file}: {e}")
 
     # Сортируем реализации по приоритету для каждого модуля
     for module_name in all_implementations:

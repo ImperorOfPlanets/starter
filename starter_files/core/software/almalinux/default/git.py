@@ -1,6 +1,6 @@
 from typing import List
 
-from starter_files.core.oss.base_module import BaseModule
+from starter_files.core.base_module import BaseModule
 from starter_files.core.utils.globalVars_utils import get_global
 
 class GitModule(BaseModule):

@@ -1,13 +1,13 @@
 import re
 from pathlib import Path
 from flask import redirect, url_for
-from starter_files.core.i18n_utils import set_language
+from starter_files.core.utils.i18n_utils import set_language
 
 ENV_PATH = Path('.env')
 
 def changeLanguage(data, session):
     lang = data.get('lang')
-    from starter_files.core.i18n_utils import get_available_languages
+    from starter_files.core.utils.i18n_utils import get_available_languages
     languages = get_available_languages()
     
     if lang in languages:

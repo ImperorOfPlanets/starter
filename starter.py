@@ -94,7 +94,7 @@ if __name__ == '__main__':
         print("="*50 + "\n")
 
     print("=== ПРОВЕРКА ОБНОВЛЕНИЙ === ")
-    from starter_files.core.oss.module_loader import get
+    from starter_files.core.utils.loader_utils import get
     seconds = get('updates','seconds_since_last_update')
     print(f"Секунд с последнего обновления ${seconds}")
     print("=========================== ")

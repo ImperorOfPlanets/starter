@@ -4,12 +4,12 @@ from importlib import import_module
 from pathlib import Path
 from typing import List, Dict, Any
 
-from starter_files.core.i18n_utils import get_available_languages, t, set_language, get_current_language, return_basic
+from starter_files.core.utils.i18n_utils import get_available_languages, t, set_language, get_current_language, return_basic
 from starter_files.core.utils.globalVars_utils import get_global
-from starter_files.core.log_utils import LogManager
+from starter_files.core.utils.log_utils import LogManager
 logger = LogManager.get_logger()
 
-from starter_files.core.oss.module_loader import collect_modules_info
+from starter_files.core.utils.loader_utils import get, collect_modules_info
 
 routes = Blueprint('routes', __name__)
 
