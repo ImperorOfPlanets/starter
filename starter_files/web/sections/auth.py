@@ -4,6 +4,9 @@ import os
 from flask import session, url_for
 from starter_files.core.utils.i18n_utils import t, get_available_languages
 
+from starter_files.core.utils.log_utils import LogManager
+logger = LogManager.get_logger()
+
 def hash_password(password: str) -> str:
     """Хеширование пароля"""
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
