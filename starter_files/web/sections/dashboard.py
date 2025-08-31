@@ -44,8 +44,13 @@ COMPONENT_CONFIG = {
     },
     'systemd': {
         'module': 'service',
-        'check': 'check_git_installed',
-        'install': 'install_git'
+        'check': 'is_systemd_installed',
+        'install': 'install_systemd'
+    },
+    'starter-service': {
+        'module': 'service',
+        'check': 'is_service_installed',
+        'install': 'install_service'
     },
     'vpnEther': {
         'module': 'softether',
@@ -105,7 +110,9 @@ def index(data, session):
             'git_authentication': get_global('git_authentication', 'N/A'),
         },
         'systemd':{
-            'systemd_installed': get_global('systemd_installed',False)
+            'systemd_installed': get_global('systemd_installed', False),
+            'service_installed': get_global('service_installed', False),
+            'service_status': get_global('service_status', 'unknown')
         },
         'vpnEther':{
             'vpnEther_installed': get_global('vpnEther_installed',False)

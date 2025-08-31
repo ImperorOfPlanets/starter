@@ -437,9 +437,101 @@ translations = {
         # ==================== SERVICE ====================
         'service': {
             'basic': {
-                'title': 'Сервисная служба СТАРТЕР',
-                'description': 'Информация о службе "СТАРТЕР"'
+                'title': "Сервис",
+                "description": "Управление сервисами и задачами"
+            },
+            'index': {
+                "service_title": "Управление сервисом",
+                "refresh": "Обновить",
+                "service_status": "Статус сервиса",
+                "details": "Подробности",
+                "service_name": "Имя сервиса",
+                "service_installed": "Сервис установлен",
+                "yes": "Да",
+                "no": "Нет",
+                "service_running": "Сервис запущен",
+                "service_autostart": "Автозагрузка",
+                "service_actions": "Действия с сервисом",
+                "service_stop": "Остановить",
+                "service_restart": "Перезапустить",
+                "service_start": "Запустить",
+                "service_disable_autostart": "Отключить автозагрузку",
+                "service_enable_autostart": "Включить автозагрузку",
+                "service_uninstall": "Удалить сервис",
+                "service_install": "Установить сервис",
+                "scheduled_tasks": "Периодические задачи",
+                "add_task": "Добавить задачу",
+                "task_name": "Название задачи",
+                "task_schedule": "Расписание",
+                "task_command": "Команда",
+                "task_status": "Статус задачи",
+                "actions": "Действия",
+                "no_tasks_configured": "Нет настроенных задач",
+                "add_scheduled_task": "Добавить периодическую задачу",
+                "hourly": "Ежечасно",
+                "daily": "Ежедневно",
+                "weekly": "Еженедельно",
+                "monthly": "Ежемесячно",
+                "custom": "Произвольное",
+                "custom_schedule": "Произвольное расписание",
+                "cron_format_help": "Формат cron: минута час день месяц день_недели",
+                "cancel": "Отмена",
+                "save_task": "Сохранить задачу",
+                "confirm_install_service": "Вы уверены, что хотите установить сервис?",
+                "service_installed_successfully": "Сервис успешно установлен",
+                "service_installation_failed": "Ошибка установки сервиса",
+                "request_failed": "Ошибка запроса",
+                "confirm_uninstall_service": "Вы уверены, что хотите удалить сервис?",
+                "service_uninstalled_successfully": "Сервис успешно удален",
+                "service_uninstallation_failed": "Ошибка удаления сервиса",
+                "action_completed_successfully": "Действие успешно выполнено",
+                "action_failed": "Действие не выполнено",
+                "task_added_successfully": "Задача успешно добавлена",
+                "task_addition_failed": "Ошибка добавления задачи",
+                "active": "Активна",
+                "status": "Статус"
             }
         },
+        'settings': {
+            'basic': {
+                'title': "Настройки",
+                "description": "Конфигурация проекта и Docker окружения"
+            },
+            'index': {
+                "settings_title": "Настройки проекта",
+                "refresh": "Обновить",
+                "project_settings": "Параметры проекта",
+
+                # project_path
+                "project_path": "Путь до проекта",
+                "project_path_help": "Укажите абсолютный путь до каталога проекта",
+
+                # docker_files
+                "docker_files": "Папка Docker",
+                "docker_files_help": "Путь до папки с .env и docker-compose.example.yml",
+
+                # project_type
+                "project_type": "Тип проекта",
+                "environment": "Окружение",
+
+                # actions
+                "validate_paths": "Проверить пути",
+                "save_settings": "Сохранить настройки",
+                "generate_docker_compose": "Сгенерировать Docker Compose",
+
+                # validation blocks
+                "project_validation": "Проверка проекта",
+                "docker_validation": "Проверка Docker файлов",
+                "run_validation_to_see_results": "Запустите проверку, чтобы увидеть результаты",
+
+                # statuses
+                "settings_saved_successfully": "Настройки успешно сохранены",
+                "settings_save_failed": "Ошибка сохранения настроек",
+                "docker_compose_generated_successfully": "Файл docker-compose.yml успешно сгенерирован",
+                "docker_compose_generation_failed": "Ошибка генерации docker-compose.yml",
+                "request_failed": "Ошибка запроса",
+                "confirm_generate_docker_compose": "Вы уверены, что хотите сгенерировать docker-compose.yml?"
+            }
+        }
     }
 }

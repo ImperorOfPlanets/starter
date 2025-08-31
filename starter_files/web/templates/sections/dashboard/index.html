@@ -70,6 +70,7 @@
             </div>
         </div>
 
+        <!-- UP TIME -->
         <div class="col-md-3 mt-2">
             <div class="card h-100">
                 <div class="card-header bg-success text-white">
@@ -81,7 +82,8 @@
                 </div>
             </div>
         </div>
-        
+
+        <!-- PYTHON -->
         <div class="col-md-3 mt-2">
             <div class="card h-100">
                 <div class="card-header bg-info text-white">
@@ -95,7 +97,10 @@
             </div>
         </div>
         <hr class="mt-3"/>
+
         <h1>Обязательный софт</h1>
+
+        <!-- Docker -->
         <div class="col-md-3 mt-2">
             <div class="card h-100">
                 <div class="card-header bg-dark text-white">
@@ -126,6 +131,7 @@
             </div>
         </div>
 
+        <!-- Port Knocking -->
         <div class="col-md-3 mt-2">
             <div class="card h-100">
                 <div class="card-header bg-dark text-white">
@@ -146,6 +152,7 @@
             </div>
         </div>        
 
+        <!-- Git -->
         <div class="col-md-3 mt-2">
             <div class="card h-100">
                 <div class="card-header bg-dark text-white">
@@ -166,26 +173,7 @@
             </div>
         </div>
 
-        <div class="col-md-3 mt-2">
-            <div class="card h-100">
-                <div class="card-header bg-dark text-white">
-                    <i class="bi bi-cpu me-2"></i> systemd
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
-                        {% if sys_info.systemd.systemd_installed %}
-                            <span class="badge bg-success">{{ t('installed') }}</span>
-                        {% else %}
-                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
-                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="service">
-                                <i class="bi bi-download"></i> {{ t('install') }}
-                            </button>
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-        </div>
-
+        <!-- VPN -->
         <div class="col-md-3 mt-2">
             <div class="card h-100">
                 <div class="card-header bg-dark text-white">
@@ -200,6 +188,42 @@
                             <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="vpnEther">
                                 <i class="bi bi-download"></i> {{ t('install') }}
                             </button>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Starter Service and SYSTEMD -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-gear me-2"></i> Starter Service
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>Systemd:</strong> 
+                        {% if sys_info.systemd.systemd_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="systemd">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                    <p class="card-text"><strong>Service:</strong> 
+                        {% if sys_info.systemd.service_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                            <span class="badge bg-info">{{ sys_info.systemd.service_status }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            {% if sys_info.systemd.systemd_installed %}
+                                <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="starter-service">
+                                    <i class="bi bi-download"></i> {{ t('install') }}
+                                </button>
+                            {% else %}
+                                <small class="text-muted">Install systemd first</small>
+                            {% endif %}
                         {% endif %}
                     </p>
                 </div>

@@ -1,0 +1,131 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('env_editor_title') }}</h1>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-envelope me-2"></i> {{ t('environment_variables') }}
+                </div>
+                <div class="card-body">
+                    <form id="envForm">
+                        <div class="table-responsive">
+                            <table class="table table-striped" id="envTable">
+                                <thead>
+                                    <tr>
+                                        <th>{{ t('variable_name') }}</th>
+                                        <th>{{ t('variable_value') }}</th>
+                                        <th>{{ t('actions') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for key, value in env_vars.items() %}
+                                    <tr>
+                                        <td>
+                                            <input type="text" class="form-control" name="key" value="{{ key }}">
+                                        </td>
+                                        <td>
+                                            <input type="text" class="form-control" name="value" value="{{ value }}">
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-danger btn-sm remove-row">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <button type="button" class="btn btn-success btn-sm mt-2" id="addRow">
+                            <i class="bi bi-plus-circle"></i> {{ t('add_variable') }}
+                        </button>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-3">
+                            <button type="button" class="btn btn-primary" data-action="saveEnv">
+                                <i class="bi bi-save"></i> {{ t('save_env') }}
+                            </button>
+                            <button type="button" class="btn btn-success" data-action="generateCompose">
+                                <i class="bi bi-file-earmark-code"></i> {{ t('generate_docker_compose') }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Добавление новой строки
+    $('#addRow').on('click', function() {
+        const newRow = `
+            <tr>
+                <td>
+                    <input type="text" class="form-control" name="key" placeholder="{{ t('variable_name') }}">
+                </td>
+                <td>
+                    <input type="text" class="form-control" name="value" placeholder="{{ t('variable_value') }}">
+                </td>
+                <td>
+                    <button type="button" class="btn btn-danger btn-sm remove-row">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+        $('#envTable tbody').append(newRow);
+    });
+
+    // Удаление строки
+    $(document).on('click', '.remove-row', function() {
+        $(this).closest('tr').remove();
+    });
+
+    // Сохранение .env
+    $('[data-action="saveEnv"]').on('click', function() {
+        const envVars = {};
+        $('#envTable tbody tr').each(function() {
+            const key = $(this).find('input[name="key"]').val().trim();
+            const value = $(this).find('input[name="value"]').val().trim();
+            if (key) {
+                envVars[key] = value;
+            }
+        });
+
+        $.post('/', {
+            section: 'settings',
+            action: 'save_env',
+            env_vars: JSON.stringify(envVars)
+        }, function(response) {
+            if (response.status === 'success') {
+                alert('{{ t("env_saved_successfully") }}');
+            } else {
+                alert('{{ t("env_save_failed") }}: ' + response.message);
+            }
+        }).fail(function() {
+            alert('{{ t("request_failed") }}');
+        });
+    });
+
+    // Генерация docker-compose
+    $('[data-action="generateCompose"]').on('click', function() {
+        $.post('/', {
+            section: 'settings',
+            action: 'generate_docker_compose'
+        }, function(response) {
+            if (response.status === 'success') {
+                alert('{{ t("docker_compose_generated_successfully") }}');
+            } else {
+                alert('{{ t("docker_compose_generation_failed") }}: ' + response.message);
+            }
+        }).fail(function() {
+            alert('{{ t("request_failed") }}');
+        });
+    });
+});
+</script>

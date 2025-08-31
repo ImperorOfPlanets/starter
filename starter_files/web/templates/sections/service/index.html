@@ -94,14 +94,98 @@
                                     <i class="bi bi-check-circle"></i> {{ t('service_enable_autostart') }}
                                 </button>
                             {% endif %}
+                            
+                            <button class="btn btn-outline-danger" data-action="uninstallService">
+                                <i class="bi bi-trash"></i> {{ t('service_uninstall') }}
+                            </button>
                         {% else %}
-                            <div class="alert alert-warning">
-                                <h5><i class="bi bi-exclamation-triangle"></i> {{ t('service_not_installed') }}</h5>
-                                <p>{{ t('service_install_instructions') }}</p>
-                            </div>
+                            <button class="btn btn-success" data-action="installService">
+                                <i class="bi bi-download"></i> {{ t('service_install') }}
+                            </button>
                         {% endif %}
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица для управления периодическими задачами -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-clock me-2"></i> {{ t('scheduled_tasks') }}</span>
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+                        <i class="bi bi-plus-circle"></i> {{ t('add_task') }}
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="tasksTable">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('task_name') }}</th>
+                                    <th>{{ t('task_schedule') }}</th>
+                                    <th>{{ t('task_command') }}</th>
+                                    <th>{{ t('task_status') }}</th>
+                                    <th>{{ t('actions') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="5" class="text-center">
+                                        {{ t('no_tasks_configured') }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно добавления задачи -->
+<div class="modal fade" id="addTaskModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ t('add_scheduled_task') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addTaskForm">
+                    <div class="mb-3">
+                        <label for="taskName" class="form-label">{{ t('task_name') }}</label>
+                        <input type="text" class="form-control" id="taskName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskSchedule" class="form-label">{{ t('task_schedule') }}</label>
+                        <select class="form-select" id="taskSchedule" required>
+                            <option value="hourly">{{ t('hourly') }}</option>
+                            <option value="daily">{{ t('daily') }}</option>
+                            <option value="weekly">{{ t('weekly') }}</option>
+                            <option value="monthly">{{ t('monthly') }}</option>
+                            <option value="custom">{{ t('custom') }}</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="customScheduleGroup" style="display: none;">
+                        <label for="customSchedule" class="form-label">{{ t('custom_schedule') }}</label>
+                        <input type="text" class="form-control" id="customSchedule" 
+                               placeholder="0 * * * * (каждый час)">
+                        <div class="form-text">{{ t('cron_format_help') }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskCommand" class="form-label">{{ t('task_command') }}</label>
+                        <textarea class="form-control" id="taskCommand" rows="3" required 
+                                  placeholder="python /path/to/script.py --task"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('cancel') }}</button>
+                <button type="button" class="btn btn-primary" id="saveTaskBtn">{{ t('save_task') }}</button>
             </div>
         </div>
     </div>
@@ -113,5 +197,146 @@ $(document).ready(function() {
     $('[data-action="refreshStatus"]').on('click', function() {
         $('#mainMenu a[data-section="service"]').click();
     });
+
+    // Обработчик установки сервиса
+    $('[data-action="installService"]').on('click', function() {
+        if (confirm('{{ t("confirm_install_service") }}')) {
+            $.post('/', {
+                section: 'service',
+                action: 'install_service'
+            }, function(response) {
+                if (response.status === 'success') {
+                    alert('{{ t("service_installed_successfully") }}');
+                    $('#mainMenu a[data-section="service"]').click();
+                } else {
+                    alert('{{ t("service_installation_failed") }}: ' + response.message);
+                }
+            }).fail(function() {
+                alert('{{ t("request_failed") }}');
+            });
+        }
+    });
+
+    // Обработчик удаления сервиса
+    $('[data-action="uninstallService"]').on('click', function() {
+        if (confirm('{{ t("confirm_uninstall_service") }}')) {
+            $.post('/', {
+                section: 'service',
+                action: 'uninstall_service'
+            }, function(response) {
+                if (response.status === 'success') {
+                    alert('{{ t("service_uninstalled_successfully") }}');
+                    $('#mainMenu a[data-section="service"]').click();
+                } else {
+                    alert('{{ t("service_uninstallation_failed") }}: ' + response.message);
+                }
+            }).fail(function() {
+                alert('{{ t("request_failed") }}');
+            });
+        }
+    });
+
+    // Обработчик действий с сервисом (старт, стоп и т.д.)
+    $('[data-action="serviceAction"]').on('click', function() {
+        const actionData = $(this).data('data');
+        $.post('/', {
+            section: 'service',
+            action: 'service_action',
+            ...actionData
+        }, function(response) {
+            if (response.status === 'success') {
+                alert('{{ t("action_completed_successfully") }}');
+                $('#mainMenu a[data-section="service"]').click();
+            } else {
+                alert('{{ t("action_failed") }}: ' + response.message);
+            }
+        }).fail(function() {
+            alert('{{ t("request_failed") }}');
+        });
+    });
+
+    // Показать/скрыть поле для кастомного расписания
+    $('#taskSchedule').on('change', function() {
+        if ($(this).val() === 'custom') {
+            $('#customScheduleGroup').show();
+        } else {
+            $('#customScheduleGroup').hide();
+        }
+    });
+
+    // Обработчик сохранения задачи
+    $('#saveTaskBtn').on('click', function() {
+        const taskData = {
+            task_name: $('#taskName').val(),
+            task_schedule: $('#taskSchedule').val(),
+            task_command: $('#taskCommand').val()
+        };
+
+        if (taskData.task_schedule === 'custom') {
+            taskData.custom_schedule = $('#customSchedule').val();
+        }
+
+        $.post('/', {
+            section: 'service',
+            action: 'add_scheduled_task',
+            ...taskData
+        }, function(response) {
+            if (response.status === 'success') {
+                alert('{{ t("task_added_successfully") }}');
+                $('#addTaskModal').modal('hide');
+                // Обновить таблицу задач
+                loadScheduledTasks();
+            } else {
+                alert('{{ t("task_addition_failed") }}: ' + response.message);
+            }
+        }).fail(function() {
+            alert('{{ t("request_failed") }}');
+        });
+    });
+
+    // Функция загрузки списка задач
+    function loadScheduledTasks() {
+        $.post('/', {
+            section: 'service',
+            action: 'get_scheduled_tasks'
+        }, function(response) {
+            if (response.status === 'success') {
+                // Обработать и отобразить задачи в таблице
+                updateTasksTable(response.tasks);
+            } else {
+                console.error('Failed to load tasks:', response.message);
+            }
+        }).fail(function() {
+            console.error('Request failed');
+        });
+    }
+
+    // Функция обновления таблицы задач
+    function updateTasksTable(tasks) {
+        const $tableBody = $('#tasksTable tbody');
+        $tableBody.empty();
+
+        if (tasks.length === 0) {
+            $tableBody.append('<tr><td colspan="5" class="text-center">{{ t("no_tasks_configured") }}</td></tr>');
+            return;
+        }
+
+        tasks.forEach(task => {
+            const $row = $('<tr>');
+            $row.append($('<td>').text(task.name));
+            $row.append($('<td>').text(task.schedule));
+            $row.append($('<td>').text(task.command));
+            $row.append($('<td>').html('<span class="badge bg-success">{{ t("active") }}</span>'));
+            
+            const $actions = $('<td>');
+            $actions.append('<button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>');
+            $row.append($actions);
+            
+            $tableBody.append($row);
+        });
+    }
+
+    // Загрузить задачи при открытии страницы
+    loadScheduledTasks();
 });
 </script>
