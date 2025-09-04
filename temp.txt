@@ -1,7 +1,889 @@
-Мы должны сосредоточиться на разделе settings! В нем будут храниться переменныe для настройки! И как он же и будет генерировать и проверять docker-compose! И все прочее! Этот модуль который я тебе дал из него просто можно пользоваться функциями. То есть наша задача модуль settings и секция!
+##starter_files\core\software\default\settings.py
+<code>
+# starter_files\core\software\default\settings.py
+import json
+import os
+from pathlib import Path
+from typing import Dict, Any, Optional
+
+from starter_files.core.base_module import BaseModule
+from starter_files.core.utils.globalVars_utils import get_global, set_global
+from starter_files.core.utils.log_utils import LogManager
+
+logger = LogManager.get_logger('settings')
+
+class SettingsModule(BaseModule):
+
+    DEFAULT_SETTINGS = {
+        "project_path": "/app/laravel",
+        "docker_files": "/app/docker/", #  Это путь до папки где лежат файлы для докера и скрипты запуска контейнеров
+        "project_type": "client",
+        "environment": "production"
+    }
+
+    """Модуль для управления настройками проекта"""
+    
+    # Путь к файлу настроек по умолчанию
+    DEFAULT_SETTINGS_PATH = "/app/config/settings.json"
+    
+    @staticmethod
+    def get_settings() -> Dict[str, Any]:
+        """Получает текущие настройки проекта"""
+        settings_path = SettingsModule._get_settings_path()
+        
+        # Если файл настроек существует, загружаем его
+        if os.path.exists(settings_path):
+            try:
+                with open(settings_path, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.error(f"Error loading settings: {str(e)}")
+                return SettingsModule.DEFAULT_SETTINGS.copy()
+        
+        # Если файла нет, возвращаем настройки по умолчанию
+        return SettingsModule.DEFAULT_SETTINGS.copy()
+    
+    @staticmethod
+    def save_settings(settings: Dict[str, Any]) -> bool:
+        """Сохраняет настройки проекта"""
+        try:
+            settings_path = SettingsModule._get_settings_path()
+            
+            # Создаем директорию, если её нет
+            os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+            
+            # Сохраняем настройки
+            with open(settings_path, 'w') as f:
+                json.dump(settings, f, indent=4)
+            
+            logger.info("Settings saved successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving settings: {str(e)}")
+            return False
+    
+    @staticmethod
+    def validate_project_path(path: str) -> Dict[str, Any]:
+        """Проверяет путь к проекту на валидность"""
+        result = {
+            "valid": False,
+            "exists": False,
+            "is_dir": False,
+            "message": ""
+        }
+        
+        try:
+            path_obj = Path(path)
+            result["exists"] = path_obj.exists()
+            result["is_dir"] = path_obj.is_dir()
+            
+            if not result["exists"]:
+                result["message"] = "Path does not exist"
+            elif not result["is_dir"]:
+                result["message"] = "Path is not a directory"
+            else:
+                # Проверяем, содержит ли путь файлы проекта
+                project_files = list(path_obj.glob('*'))
+                result["valid"] = len(project_files) > 0
+                result["message"] = "Valid project path" if result["valid"] else "Directory is empty"
+                
+        except Exception as e:
+            result["message"] = f"Validation error: {str(e)}"
+        
+        return result
+    
+    @staticmethod
+    def validate_docker_path(path: str) -> Dict[str, Any]:
+        """Проверяет путь к Docker на валидность"""
+        result = {
+            "valid": False,
+            "exists": False,
+            "is_dir": False,
+            "has_compose": False,
+            "message": ""
+        }
+        
+        try:
+            path_obj = Path(path)
+            result["exists"] = path_obj.exists()
+            result["is_dir"] = path_obj.is_dir()
+            
+            if not result["exists"]:
+                result["message"] = "Path does not exist"
+            elif not result["is_dir"]:
+                result["message"] = "Path is not a directory"
+            else:
+                # Проверяем наличие docker-compose.yml
+                compose_path = path_obj / "docker-compose.yml"
+                result["has_compose"] = compose_path.exists()
+                result["valid"] = result["has_compose"]
+                result["message"] = "Valid Docker path" if result["valid"] else "Missing docker-compose.yml"
+                
+        except Exception as e:
+            result["message"] = f"Validation error: {str(e)}"
+        
+        return result
+    
+    @staticmethod
+    def generate_docker_compose(settings: Dict[str, Any]) -> bool:
+        pass
+    
+    @staticmethod
+    def _generate_compose_content(settings: Dict[str, Any]) -> str:
+        pass
+    
+    @staticmethod
+    def _get_settings_path() -> str:
+        """Возвращает путь к файлу настроек"""
+        # Можно добавить логику для определения пути к файлу настроек
+        # Например, из переменных окружения или глобальных настроек
+        return os.environ.get('APP_SETTINGS_PATH', SettingsModule.DEFAULT_SETTINGS_PATH)
+    
+    @staticmethod
+    def set_globals():
+        """Устанавливает глобальные переменные для настроек"""
+        settings = SettingsModule.get_settings()
+        set_global('project_settings', settings)
+        set_global('project_path', settings.get('project_path', '/app/laravel'))
+        set_global('docker_path', settings.get('docker_path', '/app/docker'))
+</code>
+
+##starter_files\core\utils\envStarter_utils.py
+<code>
+from pathlib import Path
+from typing import Dict, List, Tuple, Union
+from starter_files.core.utils.globalVars_utils import get_global
+
+def parse_env_content(content: str) -> Tuple[Dict[str, str], List[Union[str, Tuple[str, str]]]]:
+    """Парсит содержимое .env файла, сохраняя структуру"""
+    variables = {}
+    lines = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            lines.append(line)
+            continue
+        
+        if '=' in stripped:
+            key, value = stripped.split('=', 1)
+            key = key.strip()
+            variables[key] = value.strip()
+            lines.append((key, line))
+        else:
+            lines.append(line)
+    
+    return variables, lines
+
+def generate_env_content(vars_dict: Dict[str, str], 
+                       template_lines: List[Union[str, Tuple[str, str]]],
+                       preserve_custom: bool = True) -> str:
+    """Генерирует содержимое .env файла с сохранением структуры"""
+    result = []
+    vars_to_add = vars_dict.copy()
+    custom_vars = {}
+    
+    for line in template_lines:
+        if isinstance(line, tuple):
+            key, original_line = line
+            if key in vars_to_add:
+                if '=' in original_line:
+                    prefix = original_line.split('=', 1)[0]
+                    new_line = f"{prefix}={vars_to_add.pop(key)}"
+                else:
+                    new_line = f"{key}={vars_to_add.pop(key)}"
+                result.append(new_line)
+            else:
+                result.append(original_line)
+        else:
+            result.append(line)
+    
+    if preserve_custom:
+        custom_vars = {k: v for k, v in vars_dict.items() if k not in [l[0] for l in template_lines if isinstance(l, tuple)]}
+        if custom_vars:
+            result.append('\n# Custom variables')
+            for key, value in custom_vars.items():
+                result.append(f"{key}={value}")
+    
+    return '\n'.join(result)
+
+def read_env_file(env_path: Path) -> Dict[str, str]:
+    """Читает .env файл и возвращает словарь переменных"""
+    if not env_path.exists():
+        return {}
+    
+    with open(env_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    variables, _ = parse_env_content(content)
+    return variables
+
+def write_env_file(env_path: Path, 
+                  vars_dict: Dict[str, str], 
+                  template_path: Path = None):
+    """Записывает .env файл с сохранением структуры шаблона"""
+    if template_path and template_path.exists():
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template_content = f.read()
+        _, template_lines = parse_env_content(template_content)
+        content = generate_env_content(vars_dict, template_lines)
+    else:
+        content = generate_env_content(vars_dict, [])
+    
+    with open(env_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+
+def ensure_env_variables():
+    """Обновляет .env файл в соответствии с .env.example"""
+    script_path = get_global('script_pat')
+
+    env_path = script_path / 'script_pat'
+    logger.info('.env')
+    
+    env_example_path = script_path / '.env.example'
+    logger.info(env_example_path)
+    
+    if not env_example_path.exists():
+        return
+    
+    current_vars = read_env_file(env_path)
+    with open(env_example_path, 'r', encoding='utf-8') as f:
+        example_content = f.read()
+    example_vars, example_lines = parse_env_content(example_content)
+    
+    merged_vars = {**example_vars, **current_vars}
+    content = generate_env_content(merged_vars, example_lines)
+    
+    with open(env_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+</code>
+
+##starter_files\core\utils\fs_utils.py
+<code>
+import os
+import shutil
+import hashlib
+import re
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+class FSUtils:
+    """Утилиты для работы с файловой системой"""
+
+    @staticmethod
+    def check_folders(folders_to_check: List[str]) -> None:
+        """
+        Проверяет наличие папок и создает их при необходимости.
+        
+        Args:
+            folders_to_check: Список папок для проверки (относительно рабочей директории)
+        """
+        folders_to_check = [
+            'docker', 'laravel'
+        ]
+        for folder in folders_to_check:
+            path = Path(folder)
+            if not path.exists():
+                path.mkdir(parents=True)
+                logger.info(f'Папка "{folder}" создана')
+            else:
+                logger.info(f'Папка "{folder}" уже существует')
+
+    @staticmethod
+    def validate_env_file(env_path: str, allowed_empty: List[str] = None) -> List[str]:
+        """
+        Проверяет .env файл на незаполненные переменные.
+        
+        Args:
+            env_path: Путь к .env файлу
+            allowed_empty: Список переменных, которые могут быть пустыми
+            
+        Returns:
+            Список незаполненных переменных
+        """
+        if allowed_empty is None:
+            allowed_empty = ['ENABLED_SERVICES']
+            
+        empty_vars = []
+        env_pattern = re.compile(
+            r'^\s*(?!#)(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?P<value>\s*("")?(\'\')?[^#\n]*)(?=\n|$)',
+            re.MULTILINE
+        )
+
+        with open(env_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+            for match in env_pattern.finditer(content):
+                key = match.group('key')
+                value = match.group('value').strip()
+                
+                if key not in allowed_empty:
+                    is_empty = (
+                        not value 
+                        or value in ('""', "''", "' '", '" "')
+                        or (len(value.strip('"\'')) == 0)
+                    )
+                    
+                    if is_empty:
+                        empty_vars.append(key)
+                        
+        return empty_vars
+
+    @staticmethod
+    def copy_environment_variables(env_example_path: str, env_path: str) -> None:
+        """
+        Копирует переменные из старого .env в новый .env.example.
+        
+        Args:
+            env_example_path: Путь к новому .env.example
+            env_path: Путь к текущему .env
+        """
+        # Чтение старых переменных
+        old_vars = {}
+        if Path(env_path).exists():
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if '=' in line and not line.startswith('#'):
+                        key, value = line.strip().split('=', 1)
+                        old_vars[key] = value
+
+        # Копирование с сохранением старых значений
+        if Path(env_example_path).exists():
+            with open(env_example_path, 'r', encoding='utf-8') as f_in:
+                with open(env_path, 'w', encoding='utf-8') as f_out:
+                    for line in f_in:
+                        if '=' in line and not line.startswith('#'):
+                            key, _ = line.split('=', 1)
+                            if key in old_vars:
+                                line = f"{key}={old_vars[key]}\n"
+                        f_out.write(line)
+
+    @staticmethod
+    def get_file_hash(file_path: str) -> str:
+        """
+        Вычисляет SHA-256 хеш файла.
+        
+        Args:
+            file_path: Путь к файлу
+            
+        Returns:
+            Хеш-сумма файла в hex-формате
+        """
+        with open(file_path, 'rb') as f:
+            return hashlib.sha256(f.read()).hexdigest()
+
+    @staticmethod
+    def create_backup(source_dir: str, backup_dir: str, exclude: List[str] = None) -> None:
+        """
+        Создает резервную копию директории.
+        
+        Args:
+            source_dir: Директория для бэкапа
+            backup_dir: Целевая директория
+            exclude: Список шаблонов для исключения
+        """
+        if exclude is None:
+            exclude = []
+            
+        source = Path(source_dir)
+        backup = Path(backup_dir)
+        
+        for item in source.glob('**/*'):
+            if any(item.match(pattern) for pattern in exclude):
+                continue
+                
+            if item.is_file():
+                relative = item.relative_to(source)
+                target = backup / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(item, target)
+
+    @staticmethod
+    def sync_dirs(source_dir: str, target_dir: str, patterns: List[str], ignore: List[str] = None) -> Dict:
+        """
+        Синхронизирует файлы между директориями по шаблонам.
+        
+        Args:
+            source_dir: Источник
+            target_dir: Цель
+            patterns: Шаблоны файлов для включения
+            ignore: Шаблоны файлов для исключения
+            
+        Returns:
+            Словарь с информацией о синхронизированных файлах
+        """
+        if ignore is None:
+            ignore = []
+            
+        changes = {'new': [], 'updated': [], 'removed': []}
+        source = Path(source_dir)
+        target = Path(target_dir)
+        
+        # Обработка новых/измененных файлов
+        for pattern in patterns:
+            for src_path in source.glob(pattern):
+                if src_path.is_file():
+                    rel_path = src_path.relative_to(source)
+                    
+                    if any(rel_path.match(ignore_pattern) for ignore_pattern in ignore):
+                        continue
+                        
+                    dst_path = target / rel_path
+                    dst_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    if not dst_path.exists():
+                        changes['new'].append(str(rel_path))
+                    elif FSUtils.get_file_hash(src_path) != FSUtils.get_file_hash(dst_path):
+                        changes['updated'].append(str(rel_path))
+                        
+                    shutil.copy2(src_path, dst_path)
+        
+        return changes
+
+    @staticmethod
+    def create_shortcut(target: str, shortcut: str, args: str = "", workdir: str = "") -> None:
+        """
+        Создает ярлык в Windows.
+        
+        Args:
+            target: Целевой файл
+            shortcut: Путь к ярлыку
+            args: Аргументы командной строки
+            workdir: Рабочая директория
+        """
+        try:
+            import winshell
+            from win32com.client import Dispatch
+            
+            shell = Dispatch('WScript.Shell')
+            shortcut = shell.CreateShortCut(shortcut)
+            shortcut.TargetPath = target
+            shortcut.Arguments = args
+            shortcut.WorkingDirectory = workdir
+            shortcut.save()
+        except ImportError:
+            raise Exception("Для создания ярлыков требуется pywin32 и winshell")
+
+    @staticmethod
+    def get_ip_addresses() -> List[str]:
+        """Возвращает список IP-адресов устройства"""
+        import socket
+        try:
+            hostnames = socket.gethostbyname_ex(socket.gethostname())
+            return hostnames[2]
+        except Exception:
+            return []
+
+    @staticmethod
+    def is_valid_network(ip_address: str) -> bool:
+        """
+        Проверяет, соответствует ли IP адресу диапазону '10.8.*'.
+        
+        Args:
+            ip_address: IP-адрес для проверки
+            
+        Returns:
+            bool: True если адрес валидный
+        """
+        import re
+        return bool(re.match(r'^10\.8\.\d+\.\d+$', ip_address))
+</code>
+
+##starter_files\web\routes.py
+<code>
+
+from flask import Blueprint, current_app, g, jsonify, render_template, request, session, Response
+from importlib import import_module
+from pathlib import Path
+from typing import List, Dict, Any
+
+from starter_files.core.utils.i18n_utils import get_available_languages, t, set_language, get_current_language, return_basic
+from starter_files.core.utils.globalVars_utils import get_global
+from starter_files.core.utils.log_utils import LogManager
+logger = LogManager.get_logger()
+
+from starter_files.core.utils.loader_utils import get, collect_modules_info
+
+routes = Blueprint('routes', __name__)
+
+# Для раздела разработчикам
+def get_modules_index(refresh: bool = False) -> List[Dict[str, Any]]:
+    return collect_modules_info(refresh=refresh)
+
+# Функция получения секций для панель управления
+def get_current_sections_in_panel():
+    sections_in_control_panel = []
+    
+    starter_path = get_global('script_path')
+
+    sections_dir = starter_path / 'starter_files' / 'web' / 'sections'
+    
+    for section_file in sections_dir.glob('*.py'):
+        if section_file.stem == '__init__':
+            continue
+            
+        section_slug = section_file.stem
+
+        try:
+            section = import_module(f'starter_files.web.sections.{section_slug}')
+            
+            if getattr(section, 'this_section_in_control_panel', False):
+                # Получаем мета-информацию через функцию t()
+                section_title = t(f'sections.{section_slug}.basic.title', default=getattr(section, 'section_name', section_slug.replace('_', ' ').title()))
+
+                section_info = {
+                    'section_slug': section_slug,
+                    'section_name': return_basic(section_slug, 'title', getattr(section, 'section_name', section_slug.replace('_', ' ').title())),
+                    'section_icon': getattr(section, 'section_icon', 'bi-box'),
+                    'section_order': getattr(section, 'section_order', 99)
+                }
+                sections_in_control_panel.append(section_info)
+                
+        except Exception as e:
+            logger.exception(f"Error loading section {section_slug}")
+            raise
+    
+    return sorted(sections_in_control_panel, key=lambda x: x['section_order'])
+
+@routes.context_processor
+def inject_variables():
+    return {
+        'languages': get_available_languages(),
+        'current_language': get_current_language(),
+        'sections_in_control_panel': get_current_sections_in_panel()
+    }
+
+@routes.route('/', methods=['GET'])
+def index():
+
+    # Получаем текущий язык
+    lang = get_current_language()
+    # Устанавливаем текущий язык
+    set_language(lang)
+    # Получаем список доступных языков
+    languages = get_available_languages()
+    
+    return render_template('index.html', current_language=lang, languages=languages, t=t, logged_in='username' in session)
+
+@routes.route('/', methods=['POST'])
+def handle_sections():
+    section_name = request.form.get('section')
+    action_name = request.form.get('action')
+    
+    if not section_name or not action_name:
+        return jsonify({'status': 'error', 'message': 'Section and action required'}), 400
+    
+    # Сохраняем в глобальном контексте, чтобы функция t() могла определить модуль и файл
+    g.current_section = section_name
+    g.current_function = action_name
+    
+    try:
+        section = import_module(f'starter_files.web.sections.{section_name}')
+        
+        if not hasattr(section, action_name):
+            return jsonify({'status': 'error', 'message': 'Action not found'}), 404
+        
+        data = {k: v for k, v in request.form.items() if k not in ['section', 'action']}
+        result = getattr(section, action_name)(data, session)
+
+        # Добавленная проверка типа результата
+        if isinstance(result, Response):
+            return result  # Возвращаем Response как есть
+
+        # Обработка результата с учётом Accept заголовка
+        if 'text/html' in request.accept_mimetypes:
+            if isinstance(result, str):
+                return result
+            elif isinstance(result, dict) and 'html' in result:
+                return result['html']
+            else:
+                return jsonify({'status': 'error', 'message': 'HTML response not available'}), 406
+        else:
+            return jsonify(result)
+        
+    except Exception as e:
+        if 'text/html' in request.accept_mimetypes:
+            return f"Error: {str(e)}", 500
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+</code>
+
+##starter_files\web\sections\settings.py
+<code>
+import json
+from flask import render_template, jsonify, request
+from starter_files.core.utils.i18n_utils import t
+from starter_files.core.utils.log_utils import LogManager
+from starter_files.core.software.default.settings import SettingsModule
+
+logger = LogManager.get_logger()
+
+this_section_in_control_panel = True
+section_icon = "bi-gear"
+section_name = "Settings"
+section_order = 2   # после dashboard
+
+def index(data, session):
+    """Главная страница настроек"""
+    settings = SettingsModule.get_settings()
+    return render_template(
+        "sections/settings/index.html",
+        settings=settings,
+        t=t
+    )
+
+def validate_project_path(data, session):
+    path = data.get("path")
+    if not path:
+        return jsonify({"status": "error", "message": "Path required"})
+    result = SettingsModule.validate_project_path(path)
+    return jsonify({"status": "success", "validation": result})
+
+def validate_docker_path(data, session):
+    path = data.get("path")
+    if not path:
+        return jsonify({"status": "error", "message": "Path required"})
+    result = SettingsModule.validate_docker_path(path)
+    return jsonify({"status": "success", "validation": result})
+
+def save_settings(data, session):
+    try:
+        raw = data.get("settings")
+        settings = json.loads(raw) if isinstance(raw, str) else raw
+        ok = SettingsModule.save_settings(settings)
+        if ok:
+            return jsonify({"status": "success"})
+        else:
+            return jsonify({"status": "error", "message": "Save failed"})
+    except Exception as e:
+        logger.error(f"Error saving settings: {e}")
+        return jsonify({"status": "error", "message": str(e)})
+
+def generate_docker_compose(data, session):
+    settings = SettingsModule.get_settings()
+    ok = SettingsModule.generate_docker_compose(settings)
+    return jsonify({"status": "success" if ok else "error"})
+
+def run_compose(data, session):
+    settings = SettingsModule.get_settings()
+    ok = SettingsModule.run_compose(settings)
+    return jsonify({"status": "success" if ok else "error"})
+
+</code>
+
+##starter_files\web\templates\sections\settings\index.html
+<code>
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('settings_title') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button class="btn btn-sm btn-outline-secondary" data-action="refreshSettings">
+                <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-gear me-2"></i> {{ t('project_settings') }}
+                </div>
+                <div class="card-body">
+                    <form id="settingsForm">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="projectPath" class="form-label">{{ t('project_path') }}</label>
+                                <input type="text" class="form-control" id="projectPath"
+                                       name="project_path" value="{{ settings.project_path }}">
+                                <div class="form-text">{{ t('project_path_help') }}</div>
+                                <div id="projectPathValidation" class="mt-1"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="dockerFiles" class="form-label">{{ t('docker_files') }}</label>
+                                <input type="text" class="form-control" id="dockerFiles"
+                                       name="docker_files" value="{{ settings.docker_files }}">
+                                <div class="form-text">{{ t('docker_files_help') }}</div>
+                                <div id="dockerPathValidation" class="mt-1"></div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="projectType" class="form-label">{{ t('project_type') }}</label>
+                                <select class="form-select" id="projectType" name="project_type">
+                                    <option value="client" {{ 'selected' if settings.project_type == 'client' }}>Client</option>
+                                    <option value="laravel" {{ 'selected' if settings.project_type == 'laravel' }}>Laravel</option>
+                                    <option value="symfony" {{ 'selected' if settings.project_type == 'symfony' }}>Symfony</option>
+                                    <option value="custom" {{ 'selected' if settings.project_type == 'custom' }}>Custom</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="environment" class="form-label">{{ t('environment') }}</label>
+                                <select class="form-select" id="environment" name="environment">
+                                    <option value="production" {{ 'selected' if settings.environment == 'production' }}>Production</option>
+                                    <option value="staging" {{ 'selected' if settings.environment == 'staging' }}>Staging</option>
+                                    <option value="development" {{ 'selected' if settings.environment == 'development' }}>Development</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="button" class="btn btn-secondary me-md-2" data-action="validatePaths">
+                                <i class="bi bi-check-circle"></i> {{ t('validate_paths') }}
+                            </button>
+                            <button type="button" class="btn btn-primary" data-action="saveSettings">
+                                <i class="bi bi-save"></i> {{ t('save_settings') }}
+                            </button>
+                            <button type="button" class="btn btn-success" data-action="generateDockerCompose">
+                                <i class="bi bi-file-earmark-code"></i> {{ t('generate_docker_compose') }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-info-circle me-2"></i> {{ t('project_validation') }}
+                </div>
+                <div class="card-body">
+                    <div id="projectValidationResult">
+                        <p class="text-muted">{{ t('run_validation_to_see_results') }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-info-circle me-2"></i> {{ t('docker_validation') }}
+                </div>
+                <div class="card-body">
+                    <div id="dockerValidationResult">
+                        <p class="text-muted">{{ t('run_validation_to_see_results') }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Обновление
+    $('[data-action="refreshSettings"]').on('click', function() {
+        $('#mainMenu a[data-section="settings"]').click();
+    });
+
+    // Валидация путей
+    $('[data-action="validatePaths"]').on('click', function() {
+        const projectPath = $('#projectPath').val();
+        const dockerFiles = $('#dockerFiles').val();
+
+        $.post('/', {
+            section: 'settings',
+            action: 'validate_project_path',
+            path: projectPath
+        }, function(response) {
+            if (response.status === 'success') {
+                const validation = response.validation;
+                const $result = $('#projectValidationResult');
+
+                let html = '<ul class="list-group list-group-flush">';
+                html += `<li class="list-group-item"><strong>Exists:</strong> ${validation.exists ? 'Yes' : 'No'}</li>`;
+                html += `<li class="list-group-item"><strong>Is Directory:</strong> ${validation.is_dir ? 'Yes' : 'No'}</li>`;
+                html += `<li class="list-group-item"><strong>Valid:</strong> ${validation.valid ? 'Yes' : 'No'}</li>`;
+                html += `<li class="list-group-item"><strong>Message:</strong> ${validation.message}</li>`;
+                html += '</ul>';
+
+                $result.html(html);
+
+                $('#projectPathValidation').html(validation.valid
+                    ? '<span class="text-success"><i class="bi bi-check-circle"></i> Valid path</span>'
+                    : '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ' + validation.message + '</span>');
+            }
+        });
+
+        $.post('/', {
+            section: 'settings',
+            action: 'validate_docker_path',
+            path: dockerFiles
+        }, function(response) {
+            if (response.status === 'success') {
+                const validation = response.validation;
+                const $result = $('#dockerValidationResult');
+
+                let html = '<ul class="list-group list-group-flush">';
+                html += `<li class="list-group-item"><strong>Exists:</strong> ${validation.exists ? 'Yes' : 'No'}</li>`;
+                html += `<li class="list-group-item"><strong>Is Directory:</strong> ${validation.is_dir ? 'Yes' : 'No'}</li>`;
+                html += `<li class="list-group-item"><strong>Has Compose:</strong> ${validation.has_compose ? 'Yes' : 'No'}</li>`;
+                html += `<li class="list-group-item"><strong>Valid:</strong> ${validation.valid ? 'Yes' : 'No'}</li>`;
+                html += `<li class="list-group-item"><strong>Message:</strong> ${validation.message}</li>`;
+                html += '</ul>';
+
+                $result.html(html);
+
+                $('#dockerPathValidation').html(validation.valid
+                    ? '<span class="text-success"><i class="bi bi-check-circle"></i> Valid path</span>'
+                    : '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ' + validation.message + '</span>');
+            }
+        });
+    });
+
+    // Сохранение
+    $('[data-action="saveSettings"]').on('click', function() {
+        const formData = {
+            project_path: $('#projectPath').val(),
+            docker_files: $('#dockerFiles').val(),
+            project_type: $('#projectType').val(),
+            environment: $('#environment').val()
+        };
+
+        $.post('/', {
+            section: 'settings',
+            action: 'save_settings',
+            settings: JSON.stringify(formData)
+        }, function(response) {
+            if (response.status === 'success') {
+                alert('{{ t("settings_saved_successfully") }}');
+            } else {
+                alert('{{ t("settings_save_failed") }}: ' + response.message);
+            }
+        }).fail(function() {
+            alert('{{ t("request_failed") }}');
+        });
+    });
+
+    // Генерация docker-compose
+    $('[data-action="generateDockerCompose"]').on('click', function() {
+        if (confirm('{{ t("confirm_generate_docker_compose") }}')) {
+            $.post('/', {
+                section: 'settings',
+                action: 'generate_docker_compose'
+            }, function(response) {
+                if (response.status === 'success') {
+                    alert('{{ t("docker_compose_generated_successfully") }}');
+                } else {
+                    alert('{{ t("docker_compose_generation_failed") }}: ' + response.message);
+                }
+            }).fail(function() {
+                alert('{{ t("request_failed") }}');
+            });
+        }
+    });
+});
+</script>
+
+{% include 'sections/settings/env_editor.html' %}
+
+</code>
 
 
-Смотри вот тут у меня старая версия! Как я генерировал! И с env работал!
+Error: 'env_vars' is undefined
+
+При загрузке раздела настроек! Это новый вариант! Вот старый
 ##starter_files\interactive\docker_management.py
 <code>
 import subprocess
@@ -784,3915 +1666,5 @@ def copy_environment_variables(projects_updates,projects_folders):
             print(f"Ошибка обновления переменных: {str(e)}")
 </code>
 
-
-
-Вот суть в том, чтоб бы он начал так же генерировать! Учитывая что все файлы в указанной папке которая в настройках! ВОт мои новая версия модуля и секция для настроек через web! Нужно сделать еще роуты! Я тебе в пример добавил dashboard
-
-##starter.py
-<code>
-import argparse
-import os
-import platform
-import subprocess
-import sys
-import textwrap
-from pathlib import Path
-
-from starter_files.core.utils import venv_utils
-from starter_files.core.utils.globalVars_utils import get_global
-from starter_files.core.oss.default.system import SystemModule
-from starter_files.core.utils.log_utils import LogManager
-
-# Устанавливает глобальные переменные
-SystemModule.collect_basic_system_info()
-
-def parse_args():
-    """Парсит аргументы командной строки"""
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--service', action='store_true', help='Запуск в сервисном режиме')
-    parser.add_argument('--debug', action='store_true', help='Запуск в режиме отладки')
-    return parser.parse_args()
-
-def start_service_mode():
-    """Запускает сервисный режим"""
-    logger = get_global('logger')
-    logger.info("Запуск в сервисном режиме...")
-    sys.exit(0)
-
-def start_interactive_mode():
-    # Обычный режим
-    from starter_files.core.utils.configurateApp_utils import configure_app
-    from starter_files.core.utils.ssl_utils import get_ssl_context
-    from starter_files.core.utils.firstSetup_utils import open_browser
-    from dotenv import load_dotenv
-
-    env_file = Path(get_global('script_path')) / '.env'
-    load_dotenv(env_file)
-    print(f"[DEBUG] Переменные окружения загружены из {env_file}")
-
-    # Для отладки: проверка переменных окружения
-    env_vars = ["APP_SECRET_KEY", "ADMIN_LOGIN", "ADMIN_PASSWORD_HASH"]
-    for var in env_vars:
-        print(f"{var} = {os.environ.get(var, 'NOT_SET')}")
-
-    app = configure_app()
-    ssl_context = get_ssl_context()
-    open_browser()
-    app.run(
-        host='0.0.0.0',
-        port=8000,
-        ssl_context=ssl_context,
-        debug=True
-    )
-
-if __name__ == '__main__':
-    # Первым делом проверяем/создаем venv фыв ыф
-    if venv_utils.ensure_venv():
-        sys.exit(0)
-
-    # Проверка установки зависимостей
-    try:
-        import flask
-        import dotenv
-    except ImportError:
-        from starter_files.core.utils.requirements_utils import install_and_restart
-        install_and_restart()
-    
-
-    args = parse_args()
-    
-    # Инициализируем логгер
-    LogManager.initialize(
-        debug_mode=args.debug,
-        service_mode=args.service
-    )
-    logger = LogManager.get_logger("main")
-
-    # Устанавливаем глобальный обработчик исключений
-    from starter_files.core.utils.exceptionHandler_utils import ExceptionHandler
-    handler = ExceptionHandler()
-    sys.excepthook = handler.handle_unhandled_exception
-    logger.debug("Exception handler initialized")
-
-    # Проверка на настроенность
-    from starter_files.core.utils.firstSetup_utils import first_run_setup
-    is_first_run, credentials = first_run_setup()
-    if is_first_run and credentials:
-        logger.info("First run setup completed")
-        print("\n=== Первичная настройка завершена ===")
-        print(f"Логин: {credentials['login']}")
-        print(f"Пароль: {credentials['password']}")
-        print("Сохраните эти данные!")
-        print("="*50 + "\n")
-
-    print("=== ПРОВЕРКА ОБНОВЛЕНИЙ === ")
-    from starter_files.core.utils.loader_utils import get
-    seconds = get('updates','seconds_since_last_update')
-    print(f"Секунд с последнего обновления ${seconds}")
-    print("=========================== ")
-
-    # Собираем информацию о фаерволе
-    from starter_files.core.oss.default.firewall import FirewallModule
-    print("=== ПРОВЕРКА ПОРТОВ ===")
-    firewall_info = FirewallModule.collect_firewall_info()
-    
-    if firewall_info['is_available']:
-        print(f"Активный фаервол: {firewall_info['active_firewall']}")
-    else:
-        print("⚠️  Не обнаружен активный фаервол!")
-    
-    # Разрешенные порты в фаерволе
-    if firewall_info['all_ports_open']:
-        print("\n✅ Все порты разрешены")
-        if firewall_info['open_ports']:
-            print(f"Причина: {firewall_info['open_ports'][0]['service']}")
-    elif firewall_info['open_ports']:
-        print("\nРазрешенные порты в фаерволе:")
-        for port_info in firewall_info['open_ports']:
-            service_info = f" ({port_info.get('service', '')})" if port_info.get('service') else ""
-            print(f"  - Порт {port_info['port']}/{port_info['protocol']}{service_info}")
-    else:
-        print("\nНет явно разрешенных портов в фаерволе")
-    
-    # Слушающие порты
-    if firewall_info['listening_ports']:
-        print("\nСлушающие порты:")
-        for port_info in firewall_info['listening_ports']:
-            print(f"  - Порт {port_info['port']}/{port_info['protocol']} ({port_info.get('state', 'LISTEN')})")
-    else:
-        print("\nНет слушающих портов")
-    
-    print("===========================")
-
-    logger.debug(f"Command line arguments: service={args.service}, debug={args.debug}")
-    # Сервисный режим
-    if args.service:
-        logger.info("Starting service mode")
-        start_service_mode()
-
-    # Обычный режим
-    logger.info("Starting interactive mode")
-    start_interactive_mode()
-</code>
-
-##starter_files\core\base_module.py
-<code>
-import abc
-
-class BaseModule(abc.ABC):
-    pass
-</code>
-
-##starter_files\core\oss\default\service.py
-<code>
-from starter_files.core.base_module import BaseModule
-
-import os
-import platform
-import subprocess
-import sys
-import time
-
-from datetime import datetime
-from pathlib import Path
-from typing import Dict, Any
-
-from starter_files.core.utils.globalVars_utils import get_global, set_global
-from starter_files.core.utils.loader_utils import get
-
-SERVICE_NAME = "starter-service"
-
-from starter_files.core.utils.log_utils import LogManager
-logger = LogManager.get_logger('service')
-
-class ServiceModule(BaseModule):
-    """Модуль для работы с системными сервисами"""
-
-    # SYSTEMD
-
-    @staticmethod
-    def is_systemd_installed():
-        """Проверяет, установлен ли systemd"""
-        try:
-            subprocess.run(
-                ['systemctl', '--version'],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=5
-            )
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-            return False
-
-    @staticmethod
-    def install_systemd(log_file_path: str) -> Dict[str, Any]:
-        """Устанавливает systemd и записывает логи в указанный файл"""
-        result = {'status': 'success', 'message': '', 'logs': []}
-        
-        try:
-            log_dir = Path(log_file_path).parent
-            log_dir.mkdir(parents=True, exist_ok=True)
-            
-            with open(log_file_path, 'w') as log_file:
-                def log(message):
-                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    log_entry = f"[{timestamp}] {message}"
-                    log_file.write(log_entry + '\n')
-                    log_file.flush()
-                    result['logs'].append(log_entry)
-                    logger.info(log_entry)
-                
-                log("Starting systemd installation...")
-
-                # Определяем команды установки в зависимости от ОС
-                os_family = get_global('os_family')
-                if os_family == 'debian':
-                    commands = [
-                        'apt-get update',
-                        'apt-get install -y systemd'
-                    ]
-                elif os_family == 'rhel':
-                    commands = [
-                        'yum install -y systemd'
-                    ]
-                else:
-                    result['status'] = 'error'
-                    result['message'] = f'Unsupported OS family: {os_family}'
-                    return result
-
-                for cmd in commands:
-                    log(f"Executing: {cmd}")
-                    process = subprocess.Popen(
-                        cmd,
-                        shell=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        bufsize=1,
-                        universal_newlines=True
-                    )
-                    
-                    for line in iter(process.stdout.readline, ''):
-                        if line:
-                            log(line.strip())
-                    
-                    return_code = process.wait()
-                    if return_code != 0:
-                        log(f"Command failed with exit code {return_code}")
-                        result['status'] = 'error'
-                        result['message'] = f"Command failed: {cmd}"
-                        return result
-                
-                time.sleep(2)
-                if ServiceModule.is_systemd_installed():
-                    log("systemd installed successfully!")
-                    result['message'] = "systemd installed successfully!"
-                else:
-                    log("Installation completed but systemd not detected.")
-                    result['status'] = 'warning'
-                    result['message'] = "Installation completed but systemd not detected."
-        
-        except Exception as e:
-            error_msg = f"Installation failed: {str(e)}"
-            result['status'] = 'error'
-            result['message'] = error_msg
-            logger.exception("systemd installation error")
-        
-        return result
-
-    # SERVICE
-
-    @staticmethod
-    def install_service(log_file_path: str) -> Dict[str, Any]:
-        """Устанавливает и настраивает сервис starter-service"""
-        result = {'status': 'success', 'message': '', 'logs': []}
-        
-        try:
-            log_dir = Path(log_file_path).parent
-            log_dir.mkdir(parents=True, exist_ok=True)
-            
-            with open(log_file_path, 'w') as log_file:
-                def log(message):
-                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    log_entry = f"[{timestamp}] {message}"
-                    log_file.write(log_entry + '\n')
-                    log_file.flush()
-                    result['logs'].append(log_entry)
-                    logger.info(log_entry)
-                
-                log("Starting starter-service installation...")
-
-                # Определяем путь к Python в виртуальном окружении
-                script_path = get_global('script_path')
-                python_path = sys.executable
-                
-                # Если мы в виртуальном окружении, используем его Python
-                if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
-                    python_path = sys.executable
-                    log(f"Using virtual environment Python: {python_path}")
-                else:
-                    venv_path = script_path / 'venv' / 'bin' / 'python'
-                    if venv_path.exists():
-                        python_path = str(venv_path)
-                        log(f"Using found venv Python: {python_path}")
-                    else:
-                        log("WARNING: No virtual environment found, using system Python")
-
-                # Создаем systemd service file
-                service_content = f"""[Unit]
-Description=Starter Service
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory={script_path}
-Environment=PATH={os.environ.get('PATH', '')}
-ExecStart={python_path} {script_path}/main.py --service
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-"""
-
-                service_path = "/etc/systemd/system/starter-service.service"
-                
-                log(f"Creating service file: {service_path}")
-                with open(service_path, 'w') as f:
-                    f.write(service_content)
-                
-                # Reload systemd and enable service
-                commands = [
-                    'systemctl daemon-reload',
-                    'systemctl enable starter-service',
-                    'systemctl start starter-service'
-                ]
-
-                for cmd in commands:
-                    log(f"Executing: {cmd}")
-                    process = subprocess.Popen(
-                        cmd,
-                        shell=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        bufsize=1,
-                        universal_newlines=True
-                    )
-                    
-                    for line in iter(process.stdout.readline, ''):
-                        if line:
-                            log(line.strip())
-                    
-                    return_code = process.wait()
-                    if return_code != 0:
-                        log(f"Command failed with exit code {return_code}")
-                        # Не прерываем выполнение полностью, а только записываем ошибку
-                        result['status'] = 'warning'
-                        result['message'] = f"Command completed with warnings: {cmd}"
-                
-                # Wait for service to start and verify installation
-                log("Waiting for service to start...")
-                time.sleep(3)
-                
-                # Verify service is installed and running
-                status = ServiceModule.get_service_status()
-                if status['installed']:
-                    log("starter-service installed successfully!")
-                    if status['running']:
-                        log("starter-service is running!")
-                        result['message'] = "starter-service installed and running successfully!"
-                    else:
-                        log("starter-service installed but not running")
-                        result['message'] = "starter-service installed but not running"
-                else:
-                    log("starter-service installation failed")
-                    result['status'] = 'error'
-                    result['message'] = "starter-service installation failed"
-        
-        except Exception as e:
-            error_msg = f"Installation failed: {str(e)}"
-            result['status'] = 'error'
-            result['message'] = error_msg
-            logger.exception("starter-service installation error")
-        
-        return result
-
-    @staticmethod
-    def get_service_status() -> Dict[str, Any]:
-        """Получает статус сервиса для текущей ОС"""
-        system = platform.system().lower()
-        status = {
-            'installed': False,
-            'running': False,
-            'enabled': False,
-            'os': system
-        }
-
-        try:
-            if system == 'linux':
-                # Проверяем, существует ли файл сервиса
-                service_path = "/etc/systemd/system/starter-service.service"
-                status['installed'] = os.path.exists(service_path)
-                
-                if status['installed']:
-                    # Проверяем статус сервиса
-                    result = subprocess.run(
-                        ['systemctl', 'is-active', SERVICE_NAME],
-                        capture_output=True,
-                        text=True,
-                        check=False
-                    )
-                    status['running'] = result.returncode == 0
-
-                    result = subprocess.run(
-                        ['systemctl', 'is-enabled', SERVICE_NAME],
-                        capture_output=True,
-                        text=True,
-                        check=False
-                    )
-                    status['enabled'] = result.returncode == 0
-
-        except Exception as e:
-            logger.error(f"Error checking service status: {str(e)}")
-
-        return status
-
-    @staticmethod
-    def uninstall_service(log_file_path: str) -> Dict[str, Any]:
-        """Удаляет сервис starter-service"""
-        result = {'status': 'success', 'message': '', 'logs': []}
-        
-        try:
-            log_dir = Path(log_file_path).parent
-            log_dir.mkdir(parents=True, exist_ok=True)
-            
-            with open(log_file_path, 'w') as log_file:
-                def log(message):
-                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    log_entry = f"[{timestamp}] {message}"
-                    log_file.write(log_entry + '\n')
-                    log_file.flush()
-                    result['logs'].append(log_entry)
-                    logger.info(log_entry)
-                
-                log("Starting starter-service uninstallation...")
-
-                # Останавливаем и отключаем сервис
-                commands = [
-                    'systemctl stop starter-service',
-                    'systemctl disable starter-service',
-                    'systemctl daemon-reload'
-                ]
-
-                for cmd in commands:
-                    log(f"Executing: {cmd}")
-                    process = subprocess.Popen(
-                        cmd,
-                        shell=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        bufsize=1,
-                        universal_newlines=True
-                    )
-                    
-                    for line in iter(process.stdout.readline, ''):
-                        if line:
-                            log(line.strip())
-                    
-                    process.wait()
-                    # Не проверяем код возврата, так как сервис может быть уже остановлен
-
-                # Удаляем файл сервиса
-                service_path = "/etc/systemd/system/starter-service.service"
-                if os.path.exists(service_path):
-                    os.remove(service_path)
-                    log(f"Removed service file: {service_path}")
-                else:
-                    log(f"Service file not found: {service_path}")
-
-                log("starter-service uninstalled successfully!")
-                result['message'] = "starter-service uninstalled successfully!"
-        
-        except Exception as e:
-            error_msg = f"Uninstallation failed: {str(e)}"
-            result['status'] = 'error'
-            result['message'] = error_msg
-            logger.exception("starter-service uninstallation error")
-        
-        return result
-
-    @staticmethod
-    def is_service_installed() -> bool:
-        """Проверяет, установлен ли сервис starter-service"""
-        status = ServiceModule.get_service_status()
-        return status['installed']
-
-    @staticmethod
-    def service_action(data: Dict[str, Any]) -> Dict[str, Any]:
-        """Выполняет действие с сервисом"""
-        action = data.get('action')
-        status = ServiceModule.get_service_status()
-        system = status['os']
-
-        try:
-            if system == 'linux':
-                if action in ('start', 'stop', 'restart', 'enable', 'disable'):
-                    subprocess.run(['systemctl', action, SERVICE_NAME], check=True)
-                    return {'status': 'success', 'message': f'Service {action} successfully'}
-                else:
-                    return {'status': 'error', 'message': f'Unknown action: {action}'}
-
-        except subprocess.CalledProcessError as e:
-            return {'status': 'error', 'message': f'Failed to {action} service: {str(e)}'}
-
-    @staticmethod
-    def set_globals():
-        """Устанавливает глобальные переменные для SERVICE"""
-        systemd_installed = ServiceModule.is_systemd_installed()
-        service_installed = ServiceModule.is_service_installed()
-        service_status = ServiceModule.get_service_status()
-
-        set_global('systemd_installed', systemd_installed)
-        set_global('service_installed', service_installed)
-        set_global('service_status', service_status)
-</code>
-
-##starter_files\core\oss\default\system.py
-<code>
-from starter_files.core.base_module import BaseModule
-import os
-import platform
-import re
-import socket
-import subprocess
-import sys
-import ctypes
-
-from datetime import datetime, timedelta
-from typing import Dict, Any
-from pathlib import Path
-
-from starter_files.core.utils.globalVars_utils import set_global, get_global
-
-class SystemModule(BaseModule):
-
-    @staticmethod
-    def check() -> bool:
-        return True
-
-    @staticmethod
-    def collect_basic_system_info() -> Dict[str, Any]:
-        """Собирает базовую информацию о системе (без зависимостей от внешних утилит)"""
-
-        # Проверякем где запущен скрипт в докере или нет
-        set_global('running_in_docker', SystemModule.running_in_docker())
-
-        privilege_info = SystemModule.get_privilege_info()
-        set_global('is_root', privilege_info['is_root'])
-        set_global('has_sudo', privilege_info['has_sudo'])
-        set_global('use_sudo', privilege_info['use_sudo'])
-
-        cpu_info = SystemModule.get_cpu_info()
-        set_global('cpu_model', cpu_info.get('name', 'N/A'))
-        set_global('cpu_cores', cpu_info.get('cores', 'N/A'))
-        set_global('cpu_logical_cores', cpu_info.get('logical_cores', 'N/A'))
-        set_global('cpu_usage', cpu_info.get('usage', 'N/A'))
-
-        memory_info = SystemModule.get_memory_info()
-        set_global('memory_total', memory_info.get('total', 'N/A'))
-        set_global('memory_used', memory_info.get('used', 'N/A'))
-        set_global('memory_percent', memory_info.get('percent', 'N/A'))
-        set_global('memory_available', memory_info.get('available', 'N/A'))
-
-        disk_info = SystemModule.get_disk_info()
-        set_global('disk_total', disk_info.get('total', 'N/A'))
-        set_global('disk_used', disk_info.get('used', 'N/A'))
-        set_global('disk_percent', disk_info.get('percent', 'N/A'))
-        set_global('disk_free', disk_info.get('free', 'N/A'))
-
-        os_name, os_version = SystemModule.detect_os_name_version()
-        sys_info = {
-            # Ядро
-            'core': platform.system(),
-            'core_version': platform.version(),
-            'core_release': platform.release(),
-
-            # ОС
-            'os': os_name,
-            'os_version': os_version,
-            'os_family': SystemModule.get_os_family(),
-            'os_type': SystemModule.get_os_type(),
-
-            'architecture': platform.machine(),
-            'hostname': socket.gethostname(),
-            'username': os.getenv('USER') or os.getenv('USERNAME') or 'N/A',
-            'current_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'python_info': {
-                'version': platform.python_version(),
-                'implementation': platform.python_implementation(),
-                'compiler': platform.python_compiler(),
-                'executable': sys.executable
-            },
-            'is_service': '--service' in sys.argv,
-            'environment_vars': {
-                'PATH': os.getenv('PATH'),
-                'LANG': os.getenv('LANG'),
-                'HOME': os.getenv('HOME')
-            },
-            'script_path': Path(sys.argv[0]).absolute().parent,
-            'privilege_info': privilege_info,
-            'uptime': SystemModule.get_system_uptime(),
-            'timezone': SystemModule.get_timezone_info(),
-        }
-
-        for key, value in sys_info.items():
-            set_global(key, value)
-        return sys_info
-
-    @staticmethod
-    def get_privilege_info() -> Dict[str, bool]:
-        """Возвращает информацию о привилегиях пользователя"""
-        is_root = False
-        try:
-            # Linux/MacOS
-            if hasattr(os, 'getuid'):
-                is_root = os.getuid() == 0
-            # Windows
-            else:
-                is_root = ctypes.windll.shell32.IsUserAnAdmin() != 0
-        except Exception as e:
-            is_root = False
-        
-        has_sudo = False
-        if not is_root:
-            try:
-                # Проверяем доступность sudo
-                result = subprocess.run(
-                    ['sudo', '-n', 'true'],
-                    check=False,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    timeout=2
-                )
-                has_sudo = result.returncode == 0
-            except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
-                has_sudo = False
-            except Exception as e:
-                has_sudo = False
-        
-        return {
-            'is_root': is_root,
-            'has_sudo': has_sudo,
-            'use_sudo': not is_root and has_sudo
-        }
-
-    @staticmethod
-    def check_sudo() -> bool:
-        """Проверяет, нужно ли использовать sudo для выполнения команд"""
-        priv_info = SystemModule.get_privilege_info()
-        return priv_info['use_sudo']
-
-    @staticmethod
-    def check_python_version() -> bool:
-        """Проверяет соответствие версии Python требованиям"""
-        version_info = sys.version_info
-        if version_info < (3, 8):
-            return False
-        return True
-
-    @staticmethod
-    def detect_os_name():
-        try:
-            with open("/etc/os-release") as f:
-                data = dict(line.strip().split("=", 1) for line in f if "=" in line)
-            return data.get("PRETTY_NAME") or data.get("NAME")
-        except Exception:
-            return "Unknown"
-
-    @staticmethod
-    def detect_os_name_version():
-        """
-        Определяет ОС и версию ОС из /etc/os-release.
-        Возвращает кортеж (os, os_version):
-            os: первое слово в нижнем регистре
-            os_version: версия до первого пробела
-        """
-        name = "unknown"
-        version = "unknown"
-        
-        try:
-            with open("/etc/os-release") as f:
-                data = dict(line.strip().split("=", 1) for line in f if "=" in line)
-            pretty_name = data.get("PRETTY_NAME") or data.get("NAME") or "unknown"
-            pretty_name = pretty_name.strip().strip('"')
-            
-            parts = pretty_name.split(" ", 1)
-            name = parts[0].lower()
-            version = parts[1].split(" ")[0] if len(parts) > 1 else "unknown"
-        except Exception:
-            pass
-        
-        return name, version
-
-    @staticmethod
-    def get_os_family() -> str:
-        """
-        Определяет семейство операционной системы.
-        Возвращает: 'debian', 'rhel', 'arch', 'suse', 'macos', 'windows' или 'unknown'
-        """
-        system = platform.system().lower()
-        
-        # Для Windows и macOS сразу возвращаем результат
-        if system == 'windows':
-            return 'windows'
-        elif system == 'darwin':
-            return 'macos'
-        
-        # Для Linux определяем дистрибутив
-        try:
-            # Пробуем прочитать /etc/os-release
-            with open('/etc/os-release', 'r') as f:
-                content = f.read()
-            
-            # Ищем ID_LIKE или ID
-            id_like_match = re.search(r'ID_LIKE="?([^"\n]+)"?', content)
-            id_match = re.search(r'ID="?([^"\n]+)"?', content)
-            
-            if id_like_match:
-                ids = id_like_match.group(1).lower()
-            elif id_match:
-                ids = id_match.group(1).lower()
-            else:
-                return 'unknown'
-            
-            # Определяем семейство по известным меткам
-            if 'debian' in ids or 'ubuntu' in ids:
-                return 'debian'
-            elif 'rhel' in ids or 'fedora' in ids or 'centos' in ids:
-                return 'rhel'
-            elif 'arch' in ids:
-                return 'arch'
-            elif 'suse' in ids or 'opensuse' in ids:
-                return 'suse'
-            else:
-                return 'unknown'
-                
-        except FileNotFoundError:
-            # Если файла нет, пробуем определить через менеджер пакетов
-            try:
-                # Проверяем apt (Debian/Ubuntu)
-                subprocess.run(['apt', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                return 'debian'
-            except:
-                try:
-                    # Проверяем yum/dnf (RHEL/CentOS/Fedora)
-                    subprocess.run(['yum', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                    return 'rhel'
-                except:
-                    try:
-                        # Проверяем pacman (Arch)
-                        subprocess.run(['pacman', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                        return 'arch'
-                    except:
-                        try:
-                            # Проверяем zypper (SUSE)
-                            subprocess.run(['zypper', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                            return 'suse'
-                        except:
-                            return 'unknown'
-
-    def get_os_type() -> str:
-        """
-        Определяет тип операционной системы.
-        Возвращает: 'linux', 'windows', 'macos' или 'unknown'
-        """
-        system = platform.system().lower()
-        
-        if system == 'linux':
-            return 'linux'
-        elif system == 'windows':
-            return 'windows'
-        elif system == 'darwin':
-            return 'macos'
-        else:
-            return 'unknown'
-
-    @staticmethod
-    def check_docker_compose_installed() -> bool:
-        """Проверяет, установлен ли Docker Compose (POSIX-совместимый метод)"""
-        try:
-            result = subprocess.run(
-                ['docker-compose', '--version'],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            return result.returncode == 0
-        except (FileNotFoundError, PermissionError):
-            return False
-        except Exception as e:
-            return False
-
-    @staticmethod
-    def get_cpu_info() -> Dict[str, Any]:
-        """Возвращает информацию о процессоре (POSIX-совместимый метод)"""
-        try:
-            cpu_info = {
-                'name': 'N/A',
-                'cores': 'N/A',
-                'logical_cores': 'N/A',
-                'usage': 'N/A'
-            }
-            
-            # Получаем количество ядер
-            if platform.system() == "Darwin":
-                # macOS
-                cpu_info['logical_cores'] = int(subprocess.check_output(
-                    ['sysctl', '-n', 'hw.logicalcpu']).decode().strip())
-                cpu_info['cores'] = int(subprocess.check_output(
-                    ['sysctl', '-n', 'hw.physicalcpu']).decode().strip())
-            elif platform.system() == "Linux":
-                # Linux
-                cpu_info['logical_cores'] = os.cpu_count()
-                with open('/proc/cpuinfo', 'r') as f:
-                    cores = set()
-                    for line in f:
-                        if line.startswith('physical id'):
-                            cores.add(line.split(':')[1].strip())
-                    cpu_info['cores'] = len(cores) if cores else os.cpu_count()
-            
-            # Получаем модель процессора
-            if platform.system() == "Darwin":
-                cpu_info['name'] = subprocess.check_output(
-                    ['sysctl', '-n', 'machdep.cpu.brand_string']).decode().strip()
-            elif platform.system() == "Linux":
-                with open('/proc/cpuinfo', 'r') as f:
-                    for line in f:
-                        if line.startswith('model name'):
-                            cpu_info['name'] = line.split(':')[1].strip()
-                            break
-            
-            # Получаем загрузку CPU
-            if platform.system() in ["Linux", "Darwin"]:
-                try:
-                    # Читаем первую строку /proc/stat
-                    with open('/proc/stat', 'r') as f:
-                        stat_line = f.readline().split()[1:]
-                    # Конвертируем в числа
-                    times = [int(x) for x in stat_line]
-                    # Суммируем все время CPU
-                    total_time = sum(times)
-                    # Вычисляем время простоя
-                    idle_time = times[3]
-                    # Рассчитываем загрузку
-                    cpu_info['usage'] = f"{100 * (1 - idle_time / total_time):.1f}%"
-                except Exception:
-                    cpu_info['usage'] = 'N/A'
-            
-            return cpu_info
-        except Exception as e:
-            return {
-                'name': 'N/A',
-                'cores': 'N/A',
-                'logical_cores': 'N/A',
-                'usage': 'N/A'
-            }
-
-    @staticmethod
-    def get_memory_info() -> Dict[str, Any]:
-        """Возвращает информацию о памяти (POSIX-совместимый метод)"""
-        try:
-            mem_info = {
-                'total': 'N/A',
-                'used': 'N/A',
-                'percent': 'N/A',
-                'available': 'N/A'
-            }
-            
-            if platform.system() == "Linux":
-                with open('/proc/meminfo', 'r') as f:
-                    mem_data = {}
-                    for line in f:
-                        parts = line.split(':')
-                        if len(parts) == 2:
-                            key = parts[0].strip()
-                            value = parts[1].strip().split()[0]
-                            mem_data[key] = int(value) * 1024  # kB to bytes
-                
-                total = mem_data.get('MemTotal')
-                free = mem_data.get('MemFree')
-                buffers = mem_data.get('Buffers', 0)
-                cached = mem_data.get('Cached', 0)
-                sreclaimable = mem_data.get('SReclaimable', 0)
-                
-                if total is not None and free is not None:
-                    available = free + buffers + cached + sreclaimable
-                    used = total - free - buffers - cached - sreclaimable
-                    percent = (used / total) * 100
-                    
-                    mem_info = {
-                        'total': f"{total / (1024**3):.2f} GB",
-                        'used': f"{used / (1024**3):.2f} GB",
-                        'percent': f"{percent:.1f}%",
-                        'available': f"{available / (1024**3):.2f} GB"
-                    }
-            
-            elif platform.system() == "Darwin":
-                # Используем sysctl для macOS
-                total = int(subprocess.check_output(
-                    ['sysctl', '-n', 'hw.memsize']).decode().strip())
-                
-                # Используем vm_stat для получения информации об использованной памяти
-                vm_stat = subprocess.check_output(['vm_stat']).decode().split('\n')
-                stats = {}
-                for line in vm_stat:
-                    if ':' in line:
-                        key, value = line.split(':', 1)
-                        stats[key.strip()] = int(value.strip().rstrip('.'))
-                
-                # Рассчитываем свободную память
-                free = (stats['Pages free'] + stats['Pages inactive']) * 4096
-                used = total - free
-                percent = (used / total) * 100
-                
-                mem_info = {
-                    'total': f"{total / (1024**3):.2f} GB",
-                    'used': f"{used / (1024**3):.2f} GB",
-                    'percent': f"{percent:.1f}%",
-                    'available': f"{free / (1024**3):.2f} GB"
-                }
-            
-            return mem_info
-        except Exception as e:
-            return {
-                'total': 'N/A',
-                'used': 'N/A',
-                'percent': 'N/A',
-                'available': 'N/A'
-            }
-
-    @staticmethod
-    def get_disk_info() -> Dict[str, Any]:
-        """Возвращает информацию о дисках (POSIX-совместимый метод)"""
-        try:
-            disk_info = {
-                'total': 'N/A',
-                'used': 'N/A',
-                'percent': 'N/A',
-                'free': 'N/A'
-            }
-            
-            if platform.system() == "Linux":
-                # Используем df для получения информации о корневой файловой системе
-                df_output = subprocess.check_output(
-                    ['df', '-B1', '/']).decode().split('\n')[1]
-                parts = df_output.split()
-                if len(parts) >= 5:
-                    total = int(parts[1])
-                    used = int(parts[2])
-                    free = int(parts[3])
-                    percent = parts[4].rstrip('%')
-                    
-                    disk_info = {
-                        'total': f"{total / (1024**3):.2f} GB",
-                        'used': f"{used / (1024**3):.2f} GB",
-                        'percent': f"{percent}%",
-                        'free': f"{free / (1024**3):.2f} GB"
-                    }
-            
-            elif platform.system() == "Darwin":
-                # Используем df для macOS
-                df_output = subprocess.check_output(
-                    ['df', '/']).decode().split('\n')[1]
-                parts = [p for p in df_output.split(' ') if p]
-                if len(parts) >= 9:
-                    total = int(parts[8])
-                    used = int(parts[9])
-                    free = int(parts[10])
-                    percent = parts[4].rstrip('%')
-                    
-                    disk_info = {
-                        'total': f"{total / (1024**3):.2f} GB",
-                        'used': f"{used / (1024**3):.2f} GB",
-                        'percent': f"{percent}%",
-                        'free': f"{free / (1024**3):.2f} GB"
-                    }
-            
-            return disk_info
-        except Exception as e:
-            return {
-                'total': 'N/A',
-                'used': 'N/A',
-                'percent': 'N/A',
-                'free': 'N/A'
-            }
-
-    @staticmethod
-    def get_load_average() -> Dict[str, str]:
-        """Возвращает среднюю загрузку системы (POSIX-совместимый метод)"""
-        try:
-            if platform.system() == "Linux":
-                with open('/proc/loadavg', 'r') as f:
-                    load_avg = f.read().split()[:3]
-                return {
-                    '1min': load_avg[0],
-                    '5min': load_avg[1],
-                    '15min': load_avg[2]
-                }
-            elif platform.system() == "Darwin":
-                # Используем sysctl для macOS
-                load_avg = subprocess.check_output(
-                    ['sysctl', '-n', 'vm.loadavg']).decode().split()[1:4]
-                return {
-                    '1min': load_avg[0].rstrip(','),
-                    '5min': load_avg[1].rstrip(','),
-                    '15min': load_avg[2]
-                }
-            else:
-                return {
-                    '1min': 'N/A',
-                    '5min': 'N/A',
-                    '15min': 'N/A'
-                }
-        except Exception as e:
-            return {
-                '1min': 'N/A',
-                '5min': 'N/A',
-                '15min': 'N/A'
-            }
-
-    @staticmethod
-    def get_timezone_info() -> Dict[str, str]:
-        """Возвращает информацию о временной зоне (POSIX-совместимый метод)"""
-        try:
-            if platform.system() == "Linux":
-                # Читаем симлинк /etc/localtime
-                tz_path = os.path.realpath('/etc/localtime')
-                if 'zoneinfo' in tz_path:
-                    # Извлекаем название зоны
-                    tz_name = tz_path.split('zoneinfo/')[-1]
-                    return {'timezone': tz_name}
-                
-                # Альтернативный метод: через /etc/timezone
-                if os.path.exists('/etc/timezone'):
-                    with open('/etc/timezone', 'r') as f:
-                        tz_name = f.read().strip()
-                    return {'timezone': tz_name}
-            
-            elif platform.system() == "Darwin":
-                # Используем systemsetup для macOS
-                tz_name = subprocess.check_output(
-                    ['systemsetup', '-gettimezone']).decode().split(': ')[1].strip()
-                return {'timezone': tz_name}
-            
-            # Возвращаем значение переменной окружения как запасной вариант
-            tz_name = os.environ.get('TZ', 'UTC')
-            return {'timezone': tz_name}
-        except Exception as e:
-            return {'timezone': 'UTC'}
-
-    @staticmethod
-    def get_system_uptime() -> str:
-        """Возвращает время работы системы"""
-        try:
-            if platform.system() == "Windows":
-                # Windows implementation
-                tick_count = ctypes.windll.kernel32.GetTickCount64()
-                uptime_seconds = tick_count / 1000
-            else:
-                # Linux/MacOS implementation
-                with open('/proc/uptime', 'r') as f:
-                    uptime_seconds = float(f.readline().split()[0])
-            
-            uptime = str(timedelta(seconds=uptime_seconds))
-            return uptime.split('.')[0]  # Remove microseconds
-        except Exception as e:
-            return "N/A"
-
-    def running_in_docker() -> bool:
-        """Проверяет запущен в докере или нет"""
-        return Path('/.dockerenv').exists() or any(
-            'docker' in line for line in open('/proc/1/cgroup', 'r')
-        )
-
-    @staticmethod
-    def set_globals():
-        """Возвращает время работы системы"""
-        set_global("path_log_install",get_global('script_path') / 'starter_files' / 'logs' / 'install')
-        set_global("path_log_web",get_global('script_path') / 'starter_files' / 'logs' / 'web')
-
-</code>
-
-##starter_files\core\software\default\docker.py
-<code>
-from starter_files.core.base_module import BaseModule
-import json
-import logging
-import platform
-import subprocess
-import re
-from pathlib import Path
-import os
-import time
-from typing import Dict, List, Optional
-from starter_files.core.utils.loader_utils import get
-from starter_files.core.utils.globalVars_utils import get_global, set_global
-from datetime import datetime
-
-logger = logging.getLogger('docker_oss')
-
-class DockerModule(BaseModule):
-    """Реализация Docker утилит"""
-
-    @staticmethod
-    def check_docker_installed() -> bool:
-        """Проверяет установлен ли Docker и возвращает статус"""
-        try:
-            result = subprocess.run(
-                ['docker', '--version'],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            return False
-
-    @staticmethod
-    def check_docker_compose_installed():
-        """Проверка наличия Docker Compose (v1 и v2)"""
-        try:
-            # Проверка новой версии (v2)
-            subprocess.check_output(["docker", "compose", "version"], stderr=subprocess.DEVNULL)
-            return True
-        except (FileNotFoundError, subprocess.CalledProcessError):
-            try:
-                # Проверка старой версии (v1)
-                subprocess.check_output(["docker-compose", "--version"], stderr=subprocess.DEVNULL)
-                return True
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                return False
-
-    @staticmethod
-    def install_docker(log_file_path: str) -> Dict[str, str]:
-        """Устанавливает Docker и записывает логи в указанный файл"""
-        result = {'status': 'success', 'message': '', 'logs': []}
-        
-        try:
-            # Создаем директорию для логов, если нужно
-            log_dir = Path(log_file_path).parent
-            log_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Открываем файл для записи логов один раз на весь процесс установки
-            with open(log_file_path, 'w') as log_file:
-                def log(message):
-                    """Вспомогательная функция для записи в лог и в результат"""
-                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    log_entry = f"[{timestamp}] {message}"
-                    log_file.write(log_entry + '\n')
-                    log_file.flush()  # Обеспечиваем немедленную запись
-                    result['logs'].append(log_entry)
-                    logger.info(log_entry)
-                
-                log("Starting Docker installation...")
-
-                commands = get("docker","return_commands_install_docker")
-
-                # Выполняем команды установки
-                for cmd in commands:
-                    log(f"Executing: {cmd}")
-                    process = subprocess.Popen(
-                        cmd,
-                        shell=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,  # Объединяем stdout и stderr
-                        text=True,
-                        bufsize=1,  # Построчный буфер
-                        universal_newlines=True
-                    )
-                    
-                    # Читаем вывод в реальном времени
-                    for line in iter(process.stdout.readline, ''):
-                        if line:
-                            log(line.strip())
-                    
-                    # Проверяем статус завершения
-                    return_code = process.wait()
-                    if return_code != 0:
-                        log(f"Command failed with exit code {return_code}")
-                        result['status'] = 'error'
-                        result['message'] = f"Command failed: {cmd}"
-                        return result
-                
-                # Проверяем успешность установки
-                time.sleep(2)
-                if get('docker','check_docker_installed'):
-                    log("Docker installed successfully! Please restart your session.")
-                    result['message'] = "Docker installed successfully! Please restart your session."
-                else:
-                    log("Installation completed but Docker not detected. Try restarting your system.")
-                    result['status'] = 'warning'
-                    result['message'] = "Installation completed but Docker not detected. Try restarting your system."
-        
-        except Exception as e:
-            # Записываем ошибку в лог
-            error_msg = f"Installation failed: {str(e)}"
-            try:
-                with open(log_file_path, 'a') as f:
-                    f.write(error_msg + '\n')
-            except:
-                logger.exception("Failed to write error to log file")
-            
-            result['status'] = 'error'
-            result['message'] = error_msg
-            logger.exception("Docker installation error")
-        
-        return result
-
-    @staticmethod
-    def install_docker_сompose(log_file_path: str) -> Dict[str, str]:
-        """Устанавливает Docker Compose и записывает логи в указанный файл"""
-        result = {'status': 'success', 'message': '', 'logs': []}
-        
-        try:
-            # Создаем директорию для логов, если нужно
-            log_dir = Path(log_file_path).parent
-            log_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Открываем файл для записи логов один раз на весь процесс установки
-            with open(log_file_path, 'w') as log_file:
-                def log(message):
-                    """Вспомогательная функция для записи в лог и в результат"""
-                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    log_entry = f"[{timestamp}] {message}"
-                    log_file.write(log_entry + '\n')
-                    log_file.flush()  # Обеспечиваем немедленную запись
-                    result['logs'].append(log_entry)
-                    logger.info(log_entry)
-                
-                log("Starting Docker Compose installation...")
-
-                commands = get("docker","return_commands_install_compose")
-
-                # Выполняем команды установки
-                for cmd in commands:
-                    log(f"Executing: {cmd}")
-                    process = subprocess.Popen(
-                        cmd,
-                        shell=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,  # Объединяем stdout и stderr
-                        text=True,
-                        bufsize=1,  # Построчный буфер
-                        universal_newlines=True
-                    )
-                    
-                    # Читаем вывод в реальном времени
-                    for line in iter(process.stdout.readline, ''):
-                        if line:
-                            log(line.strip())
-                    
-                    # Проверяем статус завершения
-                    return_code = process.wait()
-                    if return_code != 0:
-                        log(f"Command failed with exit code {return_code}")
-                        result['status'] = 'error'
-                        result['message'] = f"Command failed: {cmd}"
-                        return result
-                
-                # Проверяем успешность установки
-                time.sleep(2)
-                if get('docker','check_docker_compose_installed'):
-                    log("Docker Compose installed successfully! Please restart your session.")
-                    result['message'] = "Docker Compose installed successfully! Please restart your session."
-                else:
-                    log("Installation completed but Docker not detected. Try restarting your system.")
-                    result['status'] = 'warning'
-                    result['message'] = "Installation completed but Docker not detected. Try restarting your system."
-        
-        except Exception as e:
-            # Записываем ошибку в лог
-            error_msg = f"Installation failed: {str(e)}"
-            try:
-                with open(log_file_path, 'a') as f:
-                    f.write(error_msg + '\n')
-            except:
-                logger.exception("Failed to write error to log file")
-            
-            result['status'] = 'error'
-            result['message'] = error_msg
-            logger.exception("Docker installation error")
-        
-        return result
-
-    @staticmethod
-    def check_dockerfiles(docker_dir: str) -> bool:
-        """Проверка наличия необходимых Dockerfile"""
-        required = [
-            os.path.join("dockerfiles", "Dockerfile_other"),
-            os.path.join("dockerfiles", "Dockerfile_php")
-        ]
-        for path in required:
-            if not (Path(docker_dir) / path).exists():
-                return False
-        return True
-
-    @staticmethod
-    def replace_env_variables(content: str, env_vars: Dict[str, str]) -> str:
-        """Заменяет ${PROJECTNAME} на значение из env_vars"""
-        def replace_match(match):
-            return env_vars.get("PROJECTNAME", match.group(0))
-        
-        return re.sub(
-            r'\$\{PROJECTNAME\}',
-            replace_match,
-            content
-        )
-
-    @staticmethod
-    def process_service_blocks(content: str, enabled_services: List[str], env_vars: Dict[str, str]) -> str:
-        """Обрабатывает блоки сервисов, оставляя только разрешенные"""
-        pattern = re.compile(
-            r'### START (.+?) ###(.*?)### END \1 ###',
-            re.DOTALL
-        )
-        
-        def replace_block(match):
-            service_name = match.group(1).strip().upper()
-            block_content = match.group(2)
-            
-            if service_name in enabled_services:
-                replaced_content = DockerModule.replace_env_variables(block_content, env_vars)
-                return f"### START {service_name} ###{replaced_content}### END {service_name} ###"
-            return ''
-        
-        return pattern.sub(replace_block, content)
-
-    @staticmethod
-    def generate_compose(docker_dir: str, env_vars: Dict[str, str], pull_from_registry: bool = False) -> bool:
-        """Генерирует docker-compose.yml на основе примера"""
-        docker_dir = Path(docker_dir)
-        compose_example = docker_dir / "docker-compose.example"
-        compose_output = docker_dir / "docker-compose.yml"
-        
-        try:
-            content = compose_example.read_text(encoding='utf-8')
-            if pull_from_registry:
-                content = re.sub(
-                    r'\n\s+build:.?dockerfile:.?\n',
-                    '\n',
-                    content,
-                    flags=re.DOTALL
-                )
-            enabled_services = [
-                s.strip().upper() 
-                for s in env_vars.get("ENABLED_SERVICES", "").split(",") 
-                if s.strip()
-            ]
-            content = DockerModule.process_service_blocks(content, enabled_services, env_vars)
-            content = DockerModule.replace_env_variables(content, env_vars)
-            compose_output.write_text(content, encoding='utf-8')
-            return True
-        except Exception as e:
-            logger.error(f"Error generating compose: {str(e)}")
-            return False
-
-    @staticmethod
-    def get_container_status(container_name: str) -> Optional[Dict]:
-        """Получение статуса контейнера"""
-        try:
-            result = subprocess.run(
-                ['docker', 'inspect', '--format', '{{json .}}', container_name],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            return json.loads(result.stdout)
-        except Exception as e:
-            logger.error(f"Error getting container status: {str(e)}")
-            return None
-        
-    @staticmethod
-    def manage_container(container_name: str, action: str) -> bool:
-        """Управление контейнером (start/stop/restart)"""
-        try:
-            subprocess.run(
-                ['docker', action, container_name],
-                check=True
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Error managing container: {str(e)}")
-            return False
-
-    @staticmethod
-    def get_docker_info() -> Dict:
-        """Собирает информацию о Docker"""
-
-        info = {
-            'version': 'N/A',
-            'containers': {
-                'total': 0,
-                'running': 0,
-                'paused': 0,
-                'stopped': 0
-            },
-            'images': 0,
-            'system': {
-                'cpu_usage': 'N/A',
-                'memory_usage': 'N/A',
-                'disk_usage': 'N/A'
-            },
-            'compose': {
-                'projects': 0,
-                'services': 0
-            }
-        }
-
-        try:
-            # Версия Docker
-            result = subprocess.run(['docker', '--version'], capture_output=True, text=True)
-            if result.returncode == 0:
-                info['version'] = result.stdout.strip()
-
-            # Статистика контейнеров
-            result = subprocess.run(['docker', 'ps', '-a', '--format', '{{.State}}'], capture_output=True, text=True)
-            if result.returncode == 0:
-                states = result.stdout.splitlines()
-                info['containers']['total'] = len(states)
-                info['containers']['running'] = states.count('running')
-                info['containers']['paused'] = states.count('paused')
-                info['containers']['stopped'] = states.count('exited') + states.count('created')
-
-            # Количество образов
-            result = subprocess.run(['docker', 'images', '-q'], capture_output=True, text=True)
-            if result.returncode == 0:
-                info['images'] = len(result.stdout.splitlines())
-
-            # Статистика системы Docker
-            result = subprocess.run(['docker', 'system', 'df', '--format', '{{json .}}'], capture_output=True, text=True)
-            if result.returncode == 0:
-                try:
-                    system_data = json.loads(result.stdout)
-                    info['system']['disk_usage'] = system_data.get('Size', 'N/A')
-                except json.JSONDecodeError:
-                    pass
-
-            # Статистика использования ресурсов
-            result = subprocess.run(['docker', 'stats', '--no-stream', '--format', '{{json .}}'], capture_output=True, text=True)
-            if result.returncode == 0 and result.stdout.strip():
-                cpu_total = 0.0
-                mem_total = 0.0
-                count = 0
-                for line in result.stdout.splitlines():
-                    try:
-                        stats = json.loads(line)
-                        cpu_total += float(stats['CPUPerc'].replace('%', ''))
-                        mem_total += float(stats['MemPerc'].replace('%', ''))
-                        count += 1
-                    except (json.JSONDecodeError, KeyError, ValueError):
-                        continue
-                if count > 0:
-                    info['system']['cpu_usage'] = f"{cpu_total/count:.1f}%"
-                    info['system']['memory_usage'] = f"{mem_total/count:.1f}%"
-
-            # Информация о Docker Compose
-            try:
-                result = subprocess.run(['docker-compose', 'ls', '--format', 'json'], capture_output=True, text=True)
-                if result.returncode == 0 and result.stdout.strip():
-                    projects = json.loads(result.stdout)
-                    info['compose']['projects'] = len(projects)
-                    info['compose']['services'] = sum(len(p.get('Services', [])) for p in projects)
-            except Exception:
-                pass
-
-        except Exception as e:
-            logger.error(f"Error collecting Docker info: {str(e)}")
-
-        return info
-
-    @staticmethod
-    def get_containers(all: bool = False) -> List[Dict]:
-        """Получает список контейнеров"""
-
-        containers = []
-        try:
-            format_str = '{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}|{{.RunningFor}}|{{.Size}}'
-            cmd = ['docker', 'ps', '--format', format_str]
-            if all:
-                cmd.append('-a')
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode == 0:
-                for line in result.stdout.splitlines():
-                    parts = line.split('|')
-                    if len(parts) >= 7:
-                        containers.append({
-                            'id': parts[0],
-                            'name': parts[1],
-                            'image': parts[2],
-                            'status': parts[3],
-                            'ports': parts[4],
-                            'running_for': parts[5],
-                            'size': parts[6]
-                        })
-        except Exception as e:
-            logger.error(f"Error getting containers: {str(e)}")
-        return containers
-
-    @staticmethod
-    def get_images() -> List[Dict]:
-        """Получает список образов"""
-        images = []
-        try:
-            format_str = '{{.ID}}|{{.Repository}}|{{.Tag}}|{{.CreatedSince}}|{{.CreatedAt}}|{{.Size}}'
-            result = subprocess.run(['docker', 'images', '--format', format_str], 
-                                capture_output=True, text=True)
-            if result.returncode == 0:
-                for line in result.stdout.splitlines():
-                    parts = line.split('|')
-                    if len(parts) >= 6:
-                        images.append({
-                            'id': parts[0],
-                            'repository': parts[1],
-                            'tag': parts[2],
-                            'created_since': parts[3],
-                            'created_at': parts[4],
-                            'size': parts[5]
-                        })
-        except Exception as e:
-            logger.error(f"Error getting images: {str(e)}")
-        return images
-
-    @staticmethod
-    def get_logs(container_id: str, tail: int = 100) -> str:
-        """Получает логи контейнера"""
-        try:
-            result = subprocess.run(['docker', 'logs', '--tail', str(tail), container_id], 
-                                capture_output=True, text=True)
-            if result.returncode == 0:
-                return result.stdout
-        except Exception as e:
-            logger.error(f"Error getting logs: {str(e)}")
-        return ""
-
-    @staticmethod
-    def get_networks() -> List[Dict]:
-        """Получает список сетей"""
-        networks = []
-        try:
-            format_str = '{{.ID}}|{{.Name}}|{{.Driver}}|{{.Scope}}|{{.IPv6}}|{{.Internal}}|{{.Created}}'
-            result = subprocess.run(['docker', 'network', 'ls', '--format', format_str], 
-                                capture_output=True, text=True)
-            if result.returncode == 0:
-                for line in result.stdout.splitlines():
-                    parts = line.split('|')
-                    if len(parts) >= 7:
-                        networks.append({
-                            'id': parts[0],
-                            'name': parts[1],
-                            'driver': parts[2],
-                            'scope': parts[3],
-                            'ipv6': parts[4],
-                            'internal': parts[5],
-                            'created': parts[6]
-                        })
-        except Exception as e:
-            logger.error(f"Error getting networks: {str(e)}")
-        return networks
-
-    @staticmethod
-    def get_volumes() -> List[Dict]:
-        """Получает список томов"""
-        volumes = []
-        try:
-            format_str = '{{.Name}}|{{.Driver}}|{{.Scope}}|{{.Mountpoint}}|{{.Labels}}|{{.CreatedAt}}'
-            result = subprocess.run(['docker', 'volume', 'ls', '--format', format_str], 
-                                capture_output=True, text=True)
-            if result.returncode == 0:
-                for line in result.stdout.splitlines():
-                    parts = line.split('|')
-                    if len(parts) >= 6:
-                        volumes.append({
-                            'name': parts[0],
-                            'driver': parts[1],
-                            'scope': parts[2],
-                            'mountpoint': parts[3],
-                            'labels': parts[4],
-                            'created_at': parts[5]
-                        })
-        except Exception as e:
-            logger.error(f"Error getting volumes: {str(e)}")
-        return volumes
-
-    @staticmethod
-    def container_action(data: Dict) -> Dict:
-        """Выполняет действие с контейнером (старт/стоп и т.д.)"""
-        action = data.get('action')
-        container_id = data.get('container_id')
-        
-        if not action or not container_id:
-            return {'status': 'error', 'message': 'Invalid parameters'}
-        
-        try:
-            if action == 'start':
-                subprocess.run(['docker', 'start', container_id], check=True)
-                return {'status': 'success', 'message': 'Container started'}
-            elif action == 'stop':
-                subprocess.run(['docker', 'stop', container_id], check=True)
-                return {'status': 'success', 'message': 'Container stopped'}
-            elif action == 'restart':
-                subprocess.run(['docker', 'restart', container_id], check=True)
-                return {'status': 'success', 'message': 'Container restarted'}
-            elif action == 'remove':
-                subprocess.run(['docker', 'rm', container_id], check=True)
-                return {'status': 'success', 'message': 'Container removed'}
-            else:
-                return {'status': 'error', 'message': 'Invalid action'}
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Container action failed: {str(e)}")
-            return {'status': 'error', 'message': f"Action failed: {str(e)}"}
-
-    @staticmethod
-    def image_action(data: Dict) -> Dict:
-        """Выполняет действие с образом (удаление и т.д.)"""
-        action = data.get('action')
-        image_id = data.get('image_id')
-        
-        if not action or not image_id:
-            return {'status': 'error', 'message': 'Invalid parameters'}
-        
-        try:
-            if action == 'remove':
-                subprocess.run(['docker', 'rmi', image_id], check=True)
-                return {'status': 'success', 'message': 'Image removed'}
-            else:
-                return {'status': 'error', 'message': 'Invalid action'}
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Image action failed: {str(e)}")
-            return {'status': 'error', 'message': f"Action failed: {str(e)}"}
-
-    @staticmethod
-    def restart_docker() -> Dict:
-        """Перезапускает Docker сервис"""
-        try:
-            if platform.system() == 'Windows':
-                subprocess.run(['net', 'stop', 'docker'], check=True)
-                subprocess.run(['net', 'start', 'docker'], check=True)
-            else:
-                subprocess.run(['sudo', 'systemctl', 'restart', 'docker'], check=True)
-            return {'status': 'success', 'message': 'Docker restarted successfully'}
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to restart Docker: {str(e)}")
-            return {'status': 'error', 'message': f"Failed to restart Docker: {str(e)}"}
-
-    @staticmethod
-    def prune_system() -> Dict:
-        """Очищает неиспользуемые объекты Docker"""
-
-        try:
-            subprocess.run(['docker', 'system', 'prune', '-f'], check=True)
-            return {'status': 'success', 'message': 'System pruned successfully'}
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to prune system: {str(e)}")
-            return {'status': 'error', 'message': f"Failed to prune system: {str(e)}"}
-
-    @staticmethod
-    def set_globals():
-        """Устанавливает глобальные для DOCKER"""
-        docker_installed = get('docker',"check_docker_installed")
-        logger.info("Переменная docker_installed")
-        logger.info(docker_installed)
-
-        docker_compose_installed = get('docker',"check_docker_compose_installed")
-        logger.info("Переменная docker_compose_installed")
-        logger.info(docker_compose_installed)
-
-        
-        # Устанавливаем глобальные переменные
-        set_global('docker_installed', docker_installed)
-        set_global('docker_compose_installed', docker_compose_installed)
-</code>
-
-##starter_files\core\software\default\settings.py
-<code>
-# core/modules/settings.py
-import json
-import os
-from pathlib import Path
-from typing import Dict, Any, Optional
-
-from starter_files.core.base_module import BaseModule
-from starter_files.core.utils.globalVars_utils import get_global, set_global
-from starter_files.core.utils.log_utils import LogManager
-
-logger = LogManager.get_logger('settings')
-
-class SettingsModule(BaseModule):
-    """Модуль для управления настройками проекта"""
-    
-    # Путь к файлу настроек по умолчанию
-    DEFAULT_SETTINGS_PATH = "/app/config/settings.json"
-    
-    # Настройки по умолчанию
-    DEFAULT_SETTINGS = {
-        "project_path": "/app/laravel",
-        "docker_path": "/app/docker",
-        "docker_compose_path": "/app/docker/docker-compose.yml",
-        "project_type": "laravel",  # laravel, symfony, custom
-        "environment": "production",  # production, development, staging
-    }
-    
-    @staticmethod
-    def get_settings() -> Dict[str, Any]:
-        """Получает текущие настройки проекта"""
-        settings_path = SettingsModule._get_settings_path()
-        
-        # Если файл настроек существует, загружаем его
-        if os.path.exists(settings_path):
-            try:
-                with open(settings_path, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.error(f"Error loading settings: {str(e)}")
-                return SettingsModule.DEFAULT_SETTINGS.copy()
-        
-        # Если файла нет, возвращаем настройки по умолчанию
-        return SettingsModule.DEFAULT_SETTINGS.copy()
-    
-    @staticmethod
-    def save_settings(settings: Dict[str, Any]) -> bool:
-        """Сохраняет настройки проекта"""
-        try:
-            settings_path = SettingsModule._get_settings_path()
-            
-            # Создаем директорию, если её нет
-            os.makedirs(os.path.dirname(settings_path), exist_ok=True)
-            
-            # Сохраняем настройки
-            with open(settings_path, 'w') as f:
-                json.dump(settings, f, indent=4)
-            
-            logger.info("Settings saved successfully")
-            return True
-        except Exception as e:
-            logger.error(f"Error saving settings: {str(e)}")
-            return False
-    
-    @staticmethod
-    def validate_project_path(path: str) -> Dict[str, Any]:
-        """Проверяет путь к проекту на валидность"""
-        result = {
-            "valid": False,
-            "exists": False,
-            "is_dir": False,
-            "message": ""
-        }
-        
-        try:
-            path_obj = Path(path)
-            result["exists"] = path_obj.exists()
-            result["is_dir"] = path_obj.is_dir()
-            
-            if not result["exists"]:
-                result["message"] = "Path does not exist"
-            elif not result["is_dir"]:
-                result["message"] = "Path is not a directory"
-            else:
-                # Проверяем, содержит ли путь файлы проекта
-                project_files = list(path_obj.glob('*'))
-                result["valid"] = len(project_files) > 0
-                result["message"] = "Valid project path" if result["valid"] else "Directory is empty"
-                
-        except Exception as e:
-            result["message"] = f"Validation error: {str(e)}"
-        
-        return result
-    
-    @staticmethod
-    def validate_docker_path(path: str) -> Dict[str, Any]:
-        """Проверяет путь к Docker на валидность"""
-        result = {
-            "valid": False,
-            "exists": False,
-            "is_dir": False,
-            "has_compose": False,
-            "message": ""
-        }
-        
-        try:
-            path_obj = Path(path)
-            result["exists"] = path_obj.exists()
-            result["is_dir"] = path_obj.is_dir()
-            
-            if not result["exists"]:
-                result["message"] = "Path does not exist"
-            elif not result["is_dir"]:
-                result["message"] = "Path is not a directory"
-            else:
-                # Проверяем наличие docker-compose.yml
-                compose_path = path_obj / "docker-compose.yml"
-                result["has_compose"] = compose_path.exists()
-                result["valid"] = result["has_compose"]
-                result["message"] = "Valid Docker path" if result["valid"] else "Missing docker-compose.yml"
-                
-        except Exception as e:
-            result["message"] = f"Validation error: {str(e)}"
-        
-        return result
-    
-    @staticmethod
-    def generate_docker_compose(settings: Dict[str, Any]) -> bool:
-        pass
-    
-    @staticmethod
-    def _generate_compose_content(settings: Dict[str, Any]) -> str:
-        pass
-    
-    @staticmethod
-    def _get_settings_path() -> str:
-        """Возвращает путь к файлу настроек"""
-        # Можно добавить логику для определения пути к файлу настроек
-        # Например, из переменных окружения или глобальных настроек
-        return os.environ.get('APP_SETTINGS_PATH', SettingsModule.DEFAULT_SETTINGS_PATH)
-    
-    @staticmethod
-    def set_globals():
-        """Устанавливает глобальные переменные для настроек"""
-        settings = SettingsModule.get_settings()
-        set_global('project_settings', settings)
-        set_global('project_path', settings.get('project_path', '/app/laravel'))
-        set_global('docker_path', settings.get('docker_path', '/app/docker'))
-</code>
-
-##starter_files\core\utils\loader_utils.py
-<code>
-import sys
-import importlib.util
-import inspect
-import logging
-import time
-from pathlib import Path
-from starter_files.core.utils.globalVars_utils import set_global, get_global
-from typing import List, Dict, Any, Tuple, Optional
-from starter_files.core.utils.log_utils import LogManager
-
-LogManager.register_log_dir('modules', 'modules')
-logger = LogManager.get_logger('modules')
-
-_modules_cache = {}  # Формат: {module_name: [impl1, impl2, impl3]}
-
-def load_modules(refresh: bool = False):
-    """
-    Сканирует все модули под текущую ОС и создаёт кеш функций с приоритетами.
-    """
-    global _modules_cache
-    logger.info("\n=== ЗАГРУЗКА МОДУЛЕЙ ===")
-    if _modules_cache and not refresh:
-        return _modules_cache
-
-    script_path = Path(get_global("script_path"))
-    os_name = get_global("os")
-    os_version = get_global("os_version")
-    logger.info(f"Текущая ОС: {os_name} {os_version}")
-
-    base_categories = [
-        ("oss", script_path / "starter_files" / "core" / "oss"),
-        ("software", script_path / "starter_files" / "core" / "software")
-    ]
-
-    # Словарь для сбора всех реализаций
-    all_implementations = {}
-
-    for category_name, base_dir in base_categories:
-        logger.info(f"\nПоиск модулей в категории: {category_name.upper()}")
-        
-        search_paths = [
-            base_dir / os_name / os_version,      # 1. Самая специфичная
-            base_dir / os_name / "default",       # 2. Общая для ОС
-            base_dir / "default",                 # 3. Общая реализация
-        ]
-
-        logger.info("Пути поиска (в порядке приоритета):")
-        for i, base in enumerate(search_paths):
-            priority = i + 1
-            level = i  # Уровень приоритета
-            exists = "НАЙДЕНА" if base.exists() else "не найдена"
-            logger.info(f" {priority}. {base} [{exists}] (уровень {level})")
-
-            if not base.exists():
-                continue
-
-            logger.info(f"  Сканирование файлов в: {base}")
-            for py_file in base.glob("*.py"):
-                module_name = py_file.stem  # Добавляем префикс категории
-                
-                # Инициализируем список для модуля, если нужно
-                if module_name not in all_implementations:
-                    all_implementations[module_name] = []
-                    
-                # Проверяем, есть ли уже реализация с таким же путем
-                existing_paths = [impl["path"] for impl in all_implementations[module_name]]
-                if py_file in existing_paths:
-                    logger.info(f"      Пропуск (уже загружен ранее)")
-                    continue
-
-                try:
-                    logger.info(f"      Попытка загрузки модуля...")
-                    module_class = load_module_from_path(py_file, py_file.stem)
-
-                    if module_class is None:
-                        logger.info("      ❌ Не удалось загрузить класс модуля")
-                        continue
-
-                    funcs = {}
-                    logger.info("      Поиск функций в классе:")
-                    for name, member in inspect.getmembers(module_class):
-                        if name.startswith("__"):
-                            continue
-                        if inspect.isfunction(member) or inspect.ismethod(member):
-                            funcs[name] = member
-                            logger.info(f"        - {name}")
-
-                    # Добавляем реализацию в список
-                    all_implementations[module_name].append({
-                        "class": module_class,
-                        "functions": funcs,
-                        "path": py_file,
-                        "level": level,
-                        #"category": category_name
-                    })
-                    logger.info(f"      ✅ Реализация модуля '{module_name}' успешно загружена (уровень {level})")
-                except Exception as e:
-                    error_msg = f"      ❌ Ошибка загрузки: {str(e)}"
-                    logger.info(error_msg)
-                    logger.warning(f"[WARN] Не удалось загрузить {py_file}: {e}")
-
-    # Сортируем реализации по приоритету для каждого модуля
-    for module_name in all_implementations:
-        all_implementations[module_name].sort(key=lambda x: x["level"])
-    
-    # Обновляем глобальный кеш
-    _modules_cache = all_implementations
-
-    # Выводим детальную информацию о загруженных модулях
-    logger.info("\n=== ИТОГИ ЗАГРУЗКИ ===")
-    logger.info(f"Всего модулей: {len(_modules_cache)}")
-    
-    priority_names = {
-        0: "ВЕРСИЯ ОС (наивысший приоритет)",
-        1: "ОС DEFAULT",
-        2: "GLOBAL DEFAULT (низший приоритет)"
-    }
-    
-    for module_name, implementations in _modules_cache.items():
-        logger.info(f"\nМодуль: {module_name}")
-        logger.info(f"Количество реализаций: {len(implementations)}")
-        
-        for impl in implementations:
-            level_name = priority_names.get(impl["level"], f"Неизвестный уровень ({impl['level']})")
-            logger.info(f"\n  Реализация (уровень {impl['level']} - {level_name}):")
-            logger.info(f"    Путь: {impl['path']}")
-            logger.info(f"    Функции ({len(impl['functions'])}):")
-            
-            # Выводим функции группами по 5
-            funcs = list(impl["functions"].keys())
-            for i in range(0, len(funcs), 5):
-                logger.info("      " + ", ".join(funcs[i:i+5]))
-    
-    return _modules_cache
-
-def get(module_name: str, func_name: str = None, *args, **kwargs):
-    """
-    Прокладка для вызова функции из модуля с fallback по уровням приоритета.
-    """
-    global _modules_cache
-    
-    logger.info(f"\n=== DEBUG: get({module_name}, {func_name}) ===")
-    if not _modules_cache:
-        logger.info("Кеш модулей пуст, выполняем загрузку...")
-        load_modules()
-        initialize_global_modules()
-    else:
-        logger.info("Кеш модулей уже загружен")
-    
-    # Диагностика: вывод всех реализаций модуля
-    if module_name in _modules_cache:
-        logger.info(f"Найдено реализаций модуля '{module_name}': {len(_modules_cache[module_name])}")
-        for i, impl in enumerate(_modules_cache[module_name]):
-            level_name = ["OS_VERSION", "OS_DEFAULT", "GLOBAL_DEFAULT"][impl["level"]]
-            logger.info(f" Реализация #{i+1} ({level_name}):")
-            logger.info(f"   Путь: {impl['path']}")
-            logger.info(f"   Функции: {list(impl['functions'].keys())}")
-    else:
-        logger.info(f"⚠️ Модуль '{module_name}' не найден в кеше!")
-        logger.error(f"[ERROR] Модуль {module_name} не найден!")
-        return None
-    
-    # Если запрошен класс модуля - возвращаем самую специфичную реализацию
-    if not func_name:
-        logger.info("Возвращаем класс самой специфичной реализации")
-        return _modules_cache[module_name][0]["class"]
-    
-    # Пытаемся найти и выполнить функцию по приоритету
-    for impl in _modules_cache[module_name]:
-        func = impl["functions"].get(func_name)
-        if func:
-            logger.info(f"Найдена функция '{func_name}' в реализации ({impl['path']})")
-            try:
-                logger.info(f"Выполнение функции...")
-                return func(*args, **kwargs)
-            except Exception as e:
-                logger.info(f"❌ Ошибка выполнения: {str(e)}")
-                logger.error(f"[ERROR] Ошибка в {module_name}.{func_name}: {e}")
-                # Пробуем следующую реализацию
-                continue
-    
-    logger.info(f"⚠️ Функция '{func_name}' не найдена ни в одной реализации!")
-    logger.error(f"[ERROR] Функция {func_name} не найдена в модуле {module_name}")
-    return None
-
-def load_module_from_path(path: Path, module_name: str) -> object:
-    """Загружает модуль из указанного пути"""
-    logger.info(f"    [DEBUG] Загрузка модуля: {module_name} из {path}")
-    
-    try:
-        module_spec = importlib.util.spec_from_file_location(
-            f"oss.{module_name}", 
-            str(path)
-        )
-        
-        if module_spec is None:
-            logger.info(f"    ❌ Не удалось создать spec для {path}")
-            return None
-            
-        module = importlib.util.module_from_spec(module_spec)
-        sys.modules[module_spec.name] = module
-        module_spec.loader.exec_module(module)
-        
-        class_name = f"{module_name.capitalize()}Module"
-        logger.info(f"    [DEBUG] Поиск класса: {class_name}")
-        
-        if not hasattr(module, class_name):
-            logger.info(f"    ❌ Класс {class_name} не найден в модуле")
-            return None
-            
-        module_class = getattr(module, class_name)
-        logger.info(f"    ✅ Класс {class_name} найден")
-        return module_class    
-
-    except Exception as e:
-        error_msg = f"    ❌ Критическая ошибка загрузки: {str(e)}"
-        logger.info(error_msg)
-        logger.error(f"Error loading module from {path}: {str(e)}", exc_info=True)
-        return None
-
-def initialize_global_modules():
-    """
-    Вызывает set_globals для всех модулей в порядке от общего к специфичному
-    (GLOBAL DEFAULT -> OS DEFAULT -> OS VERSION)
-    """
-    global _modules_cache
-    logger.info("=====ПЕРВОНАЧАЛЬНАЯ УСТАНОВКА ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ ОТ МОДУЛЕЙ=====")
-    if not _modules_cache:
-        logger.info("Кеш модулей пуст, сначала выполните load_modules()")
-        return
-        
-    logger.info("\n=== ИНИЦИАЛИЗАЦИЯ GLOBAL MODULES ===")
-    
-    # Собираем все реализации (уровни 0-2)
-    all_impls = []
-    for module_name, implementations in _modules_cache.items():
-        all_impls.extend(implementations)
-    
-    # Сортируем по уровню ОБРАТНО приоритету (от общего к специфичному)
-    # Уровень 2 (GLOBAL DEFAULT) -> Уровень 1 (OS DEFAULT) -> Уровень 0 (OS VERSION)
-    all_impls.sort(key=lambda x: x["level"], reverse=True)
-    
-    # Словарь для человеко-читаемых имен уровней
-    level_names = {
-        0: "OS_VERSION (самый специфичный)",
-        1: "OS_DEFAULT",
-        2: "GLOBAL DEFAULT (самый общий)"
-    }
-    
-    logger.info("Порядок инициализации: от общего к специфичному")
-    for impl in all_impls:
-        module_name = impl["path"].stem
-        module_class = impl["class"]
-        level = impl["level"]
-        level_name = level_names.get(level, f"Неизвестный уровень ({level})")
-        
-        try:
-            if hasattr(module_class, 'set_globals') and callable(module_class.set_globals):
-                logger.info(f"  [{level_name}] {module_name}:")
-                logger.info(f"      Путь: {impl['path']}")
-                module_class.set_globals()
-                logger.info(f"      ✅ set_globals успешно выполнена")
-        except Exception as e:
-            error_msg = f"      ❌ Ошибка при вызове set_globals: {str(e)}"
-            logger.info(error_msg)
-            logger.error(f"Error calling set_globals for {module_name} ({impl['path']}): {e}")
-    logger.info("=====ПЕРВОНАЧАЛЬНАЯ УСТАНОВКА ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ ЗАКОНЧЕНА=====")
-
-#===== Это уже касаеться сюорки комментариев и прочего для раздела разработчиков#
-
-def _get_oss_tree() -> List[Tuple[Path, str, Optional[str], int]]:
-    """
-    Возвращает все файлы реализации в дереве OSS с их метаданными.
-    Формат: (путь_к_файлу, os_name, os_version, уровень)
-    """
-    script_path = Path(get_global('script_path'))
-    base_dir = script_path / 'starter_files' / 'core' / 'oss'
-    items = []
-    
-    # Глобальные реализации по умолчанию
-    default_dir = base_dir / 'default'
-    if default_dir.exists():
-        for py_file in default_dir.glob("*.py"):
-            items.append((py_file, None, None, 2))  # Уровень 2
-    
-    # Реализации для конкретных ОС
-    for os_dir in base_dir.iterdir():
-        if os_dir.is_dir() and os_dir.name != 'default':
-            os_name = os_dir.name
-            
-            # Версия по умолчанию для ОС
-            os_default_dir = os_dir / 'default'
-            if os_default_dir.exists():
-                for py_file in os_default_dir.glob("*.py"):
-                    items.append((py_file, os_name, None, 1))  # Уровень 1
-            
-            # Специфичные версии ОС
-            for version_dir in os_dir.iterdir():
-                if version_dir.is_dir() and version_dir.name != 'default':
-                    os_version = version_dir.name
-                    for py_file in version_dir.glob("*.py"):
-                        items.append((py_file, os_name, os_version, 0))  # Уровень 0
-    return items
-
-def collect_modules_info(refresh: bool = False) -> List[Dict[str, Any]]:
-    """
-    Собирает полную информацию о всех модулях для всех ОС и реализаций.
-    """
-    script_path = str(Path(get_global('script_path'))).lower()
-    cache = get_global('modules_info_cache') or {}
-    files = _get_oss_tree()
-    
-    # Подпись кеша: хеш всех путей + mtime
-    files_state = {str(p): p.stat().st_mtime for p, _, _, _ in files}
-    sig = {
-        "script_path": script_path,
-        "files_hash": hash(tuple(sorted(files_state.keys()))),
-        "files_count": len(files_state)
-    }
-
-    if (not refresh
-        and cache.get("sig") == sig
-        and cache.get("files_state") == files_state
-        and "items" in cache):
-        return cache["items"]
-
-    items: List[Dict[str, Any]] = []
-    
-    for py_file, os_name, os_version, level in files:
-        module_name = py_file.stem
-        try:
-            logger.debug(f"Processing module: {module_name} from {py_file}")
-            module_class = load_module_from_path(py_file, module_name)
-            if not module_class:
-                logger.warning(f"Failed to load class for module: {module_name}")
-                continue
-
-            class_name = module_class.__name__
-            funcs = []
-            
-            for name, member in inspect.getmembers(module_class):
-                if name.startswith("__"):
-                    continue
-                if inspect.isfunction(member) or inspect.ismethod(member):
-                    doc = inspect.getdoc(member) or ""
-                    inline_comment = _extract_inline_comment_after_signature(member)
-                    kind = _method_kind(module_class, name)
-                    
-                    logger.debug(f"  Found function: {name} ({kind})")
-                    
-                    funcs.append({
-                        "name": name,
-                        "kind": kind,
-                        "doc": doc,
-                        "comment": inline_comment,
-                        "signature": str(inspect.signature(member))
-                    })
-
-            items.append({
-                "module_name": module_name,
-                "class_name": class_name,
-                "path": str(py_file),
-                "os": os_name,
-                "os_version": os_version,
-                "level": level,
-                "functions": funcs,
-            })
-        except Exception as e:
-            logger.error(f"Error processing {py_file}: {str(e)}", exc_info=True)
-
-    cache = {
-        "sig": sig,
-        "files_state": files_state,
-        "items": items,
-        "cached_at": int(time.time()),
-    }
-    set_global('modules_info_cache', cache)
-    logger.info(f"Collected {len(items)} module implementations")
-    return items
-
-def _extract_inline_comment_after_signature(func) -> str:
-    """
-    Извлекает однострочный комментарий, следующий сразу после сигнатуры функции.
-    Возвращает строку без символов комментария. Если комментария нет, возвращает пустую строку.
-    """
-    try:
-        # Получаем исходный код функции
-        source_lines = inspect.getsourcelines(func)[0]
-        
-        # Находим строку с определением функции (def ...)
-        def_line_index = -1
-        for i, line in enumerate(source_lines):
-            if line.strip().startswith('def '):
-                def_line_index = i
-                break
-        
-        if def_line_index == -1:
-            return ""
-        
-        # Смотрим следующую строку после определения функции
-        next_line_index = def_line_index + 1
-        if next_line_index >= len(source_lines):
-            return ""
-        
-        next_line = source_lines[next_line_index].strip()
-        
-        # Проверяем, является ли следующая строка комментарием
-        if next_line.startswith('#'):
-            # Убираем символ комментария и ведущие пробелы
-            return next_line[1:].strip()
-        else:
-            return ""
-    except Exception as e:
-        logger.debug(f"Could not extract inline comment for {func.__name__}: {str(e)}")
-        return ""
-
-def _method_kind(cls, method_name: str) -> str:
-    """
-    Определяет тип метода: 'instance', 'class' или 'static'
-    """
-    method = getattr(cls, method_name)
-    
-    if isinstance(method, staticmethod):
-        return "static"
-    elif isinstance(method, classmethod):
-        return "class"
-    else:
-        return "instance"
-</code>
-
-##starter_files\service_mode.py
-<code>
-import os
-import sys
-import platform
-import subprocess
-import shutil
-
-from pathlib import Path
-from typing import Tuple, Optional
-import getpass
-
-from starter_files.core.utils.log_utils import logger
-
-class ServiceManager:
-    def __init__(self, script_path: str, service_name: str = "starter-service"):
-        self.script_path = Path(script_path).absolute()
-        self.service_name = service_name
-        self.system = platform.system()
-        self.username = getpass.getuser()
-        
-        # Определяем команду для запуска скрипта фывы
-        self.exec_cmd = f'"{sys.executable}" "{self.script_path}"'
-        
-    def is_installed(self) -> bool:
-        """Проверяет, установлена ли служба"""
-        if self.system == "Windows":
-            return self._check_windows_service()
-        elif self.system in ["Linux", "Darwin"]:
-            return self._check_unix_service()
-        return False
-    
-    def install(self) -> bool:
-        """Устанавливает службу"""
-        print(f"\n{'='*40}")
-        print(f"Установка службы {self.service_name} для {self.system}")
-        
-        if self.system == "Windows":
-            return self._install_windows_service()
-        elif self.system in ["Linux", "Darwin"]:
-            return self._install_unix_service()
-        return False
-    
-    def uninstall(self) -> bool:
-        """Удаляет службу"""
-        print(f"\n{'='*40}")
-        print(f"Удаление службы {self.service_name} ({self.system})")
-        
-        if not self.is_installed():
-            print("⚠️ Служба не установлена")
-            return False
-            
-        if self.system == "Windows":
-            return self._uninstall_windows_service()
-        elif self.system in ["Linux", "Darwin"]:
-            return self._uninstall_unix_service()
-        return False
-    
-    def _check_windows_service(self) -> bool:
-        """Проверяет наличие службы в Windows (более надежная версия)"""
-        try:
-            # Способ 1: через sc query
-            result = subprocess.run(
-                ['sc', 'query', self.service_name],
-                capture_output=True,
-                text=True,
-                check=False
-            )
-            if "RUNNING" in result.stdout or "STOPPED" in result.stdout:
-                return True
-            
-            # Способ 2: через PowerShell
-            ps_cmd = f"Get-Service -Name {self.service_name} -ErrorAction SilentlyContinue"
-            result = subprocess.run(
-                ['powershell', '-Command', ps_cmd],
-                capture_output=True,
-                text=True,
-                check=False
-            )
-            return result.returncode == 0
-            
-        except Exception:
-            return False
-
-    def _install_windows_service(self) -> bool:
-        """Устанавливает службу в Windows с помощью NSSM"""
-        try:
-            nssm_path = self._get_nssm_path()
-            if not nssm_path:
-                if not self._install_nssm():
-                    return False
-                nssm_path = self._get_nssm_path()
-
-            service_name = self.service_name
-            working_dir = str(self.script_path.parent)
-            log_file = str(Path(working_dir) / 'service.log')
-
-            # Создаем UTF-8 файл с BOM маркером
-            with open(log_file, 'wb') as f:
-                f.write(b'\xef\xbb\xbf')  # UTF-8 BOM
-                f.write(f"Service log started at {datetime.now()}\n".encode('utf-8'))
-
-            # Установка службы с перенаправлением вывода
-            subprocess.run(
-                [nssm_path, 'install', service_name, sys.executable, str(self.script_path), '--service-run'],
-                check=True
-            )
-
-            # Настройка параметров
-            subprocess.run([nssm_path, 'set', service_name, 'AppDirectory', working_dir], check=True)
-            subprocess.run([nssm_path, 'set', service_name, 'AppStdout', log_file], check=True)
-            subprocess.run([nssm_path, 'set', service_name, 'AppStderr', log_file], check=True)
-            subprocess.run([nssm_path, 'set', service_name, 'Start', 'SERVICE_AUTO_START'], check=True)
-
-            # Альтернативный способ установки кодировки - через переменную окружения
-            subprocess.run(
-                [nssm_path, 'set', service_name, 'AppEnvironmentExtra', 'PYTHONIOENCODING=utf-8'],
-                check=True
-            )
-
-            print(f"✅ Служба {service_name} успешно установлена")
-            print(f"Логи будут записываться в: {log_file} (UTF-8)")
-            return True
-
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Ошибка установки службы: {str(e)}")
-            return False
-    
-    def _get_nssm_path(self) -> Optional[Path]:
-        """Ищет NSSM в системе"""
-        paths = [
-            Path("C:\\nssm\\nssm.exe"),
-            Path("C:\\Program Files\\nssm\\nssm.exe"),
-            Path("C:\\Program Files (x86)\\nssm\\nssm.exe"),
-            Path(os.environ.get('ProgramFiles', '')) / 'nssm' / 'nssm.exe',
-            Path(os.environ.get('ProgramFiles(x86)', '')) / 'nssm' / 'nssm.exe'
-        ]
-        
-        for path in paths:
-            if path.exists():
-                return path
-        return None
-    
-    def _install_nssm(self) -> bool:
-        """Устанавливает NSSM (Non-Sucking Service Manager)"""
-        try:
-            temp_dir = Path(os.environ['TEMP'])
-            nssm_url = "https://nssm.cc/release/nssm-2.24.zip"
-            zip_path = temp_dir / "nssm.zip"
-            
-            # Скачиваем NSSM
-            print("Скачивание NSSM...")
-            subprocess.run(
-                ['curl', '-L', nssm_url, '-o', str(zip_path)],
-                check=True
-            )
-            
-            # Распаковываем в поддиректорию
-            extract_dir = temp_dir / "nssm_extracted"
-            extract_dir.mkdir(exist_ok=True)
-            
-            print("Распаковка архива...")
-            import zipfile
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(extract_dir)
-            
-            # Ищем nssm.exe в распакованных файлах
-            nssm_exe = None
-            for root, _, files in os.walk(extract_dir):
-                if "nssm.exe" in files:
-                    nssm_exe = Path(root) / "nssm.exe"
-                    break
-            
-            if not nssm_exe or not nssm_exe.exists():
-                raise FileNotFoundError("nssm.exe не найден в распакованном архиве")
-            
-            # Копируем в Program Files\nssm
-            nssm_dir = Path(os.environ['ProgramFiles']) / 'nssm'
-            nssm_dir.mkdir(exist_ok=True)
-            
-            dest_path = nssm_dir / "nssm.exe"
-            shutil.copy(nssm_exe, dest_path)
-            
-            # Добавляем в PATH
-            os.environ['PATH'] += os.pathsep + str(nssm_dir)
-            
-            # Удаляем временные файлы
-            print("Очистка временных файлов...")
-            zip_path.unlink(missing_ok=True)
-            shutil.rmtree(extract_dir, ignore_errors=True)
-            
-            print("✅ NSSM успешно установлен!")
-            return True
-        except Exception as e:
-            print(f"❌ Ошибка установки NSSM: {str(e)}")
-            return False
-    
-    def _check_unix_service(self) -> bool:
-        """Проверяет наличие службы в Unix-системах"""
-        if self.system == "Linux":
-            # Проверка systemd
-            systemd_dir = Path("/etc/systemd/system")
-            service_file = systemd_dir / f"{self.service_name}.service"
-            
-            if service_file.exists():
-                return True
-            
-            # Проверка init.d
-            initd_file = Path(f"/etc/init.d/{self.service_name}")
-            if initd_file.exists():
-                return True
-        
-        # Общая проверка для всех Unix-систем
-        try:
-            subprocess.run(
-                ['service', self.service_name, 'status'],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=True
-            )
-            return True
-        except subprocess.CalledProcessError:
-            return False
-    
-    def _install_unix_service(self) -> bool:
-        """Устанавливает службу в Unix-системах"""
-        try:
-            if self.system == "Linux":
-                # Предпочтительный способ - systemd
-                systemd_dir = Path("/etc/systemd/system")
-                systemd_dir.mkdir(parents=True, exist_ok=True)
-                
-                service_content = f"""[Unit]
-Description={self.service_name}
-After=network.target
-
-[Service]
-Type=simple
-User={self.username}
-ExecStart={self.exec_cmd}
-WorkingDirectory={self.script_path.parent}
-Restart=on-failure
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-"""
-                service_file = systemd_dir / f"{self.service_name}.service"
-                with open(service_file, 'w') as f:
-                    f.write(service_content)
-                
-                # Обновляем systemd и включаем службу
-                subprocess.run(['systemctl', 'daemon-reload'], check=True)
-                subprocess.run(['systemctl', 'enable', self.service_name], check=True)
-                
-                print("✅ Служба установлена как systemd unit")
-                return True
-            
-            # Для других Unix-систем (включая macOS)
-            initd_content = f"""#!/bin/sh
-### BEGIN INIT INFO
-# Provides:          {self.service_name}
-# Required-Start:    $remote_fs $syslog
-# Required-Stop:     $remote_fs $syslog
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
-# Short-Description: {self.service_name}
-# Description:       {self.service_name}
-### END INIT INFO
-
-case "$1" in
-    start)
-        {self.exec_cmd} &
-        ;;
-    stop)
-        pkill -f "{self.script_path}"
-        ;;
-    restart)
-        $0 stop
-        $0 start
-        ;;
-    *)
-        echo "Usage: $0 {{start|stop|restart}}"
-        exit 1
-        ;;
-esac
-
-exit 0
-"""
-            initd_file = Path(f"/etc/init.d/{self.service_name}")
-            with open(initd_file, 'w') as f:
-                f.write(initd_content)
-            
-            # Даем права на выполнение
-            initd_file.chmod(0o755)
-            
-            # Добавляем в автозагрузку
-            if self.system == "Linux":
-                subprocess.run(['update-rc.d', self.service_name, 'defaults'], check=True)
-            elif self.system == "Darwin":
-                plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>{self.service_name}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>{sys.executable}</string>
-        <string>{self.script_path}</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>WorkingDirectory</key>
-    <string>{self.script_path.parent}</string>
-</dict>
-</plist>
-"""
-                plist_file = Path(f"/Library/LaunchDaemons/{self.service_name}.plist")
-                with open(plist_file, 'w') as f:
-                    f.write(plist_content)
-                
-                subprocess.run(['launchctl', 'load', str(plist_file)], check=True)
-            
-            print("✅ Служба установлена")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Ошибка установки службы: {str(e)}")
-            return False
-    
-    def _uninstall_unix_service(self) -> bool:
-        """Удаляет службу в Unix-системах"""
-        try:
-            if self.system == "Linux":
-                # Удаляем systemd unit
-                systemd_file = Path(f"/etc/systemd/system/{self.service_name}.service")
-                if systemd_file.exists():
-                    subprocess.run(['systemctl', 'stop', self.service_name], check=False)
-                    subprocess.run(['systemctl', 'disable', self.service_name], check=True)
-                    systemd_file.unlink()
-                    subprocess.run(['systemctl', 'daemon-reload'], check=True)
-                    print("✅ Systemd unit удален")
-                
-                # Удаляем init.d скрипт
-                initd_file = Path(f"/etc/init.d/{self.service_name}")
-                if initd_file.exists():
-                    subprocess.run(['service', self.service_name, 'stop'], check=False)
-                    subprocess.run(['update-rc.d', '-f', self.service_name, 'remove'], check=True)
-                    initd_file.unlink()
-                    print("✅ Init.d скрипт удален")
-            
-            elif self.system == "Darwin":
-                plist_file = Path(f"/Library/LaunchDaemons/{self.service_name}.plist")
-                if plist_file.exists():
-                    subprocess.run(['launchctl', 'unload', str(plist_file)], check=True)
-                    plist_file.unlink()
-                    print("✅ LaunchDaemon удален")
-            
-            else:
-                initd_file = Path(f"/etc/init.d/{self.service_name}")
-                if initd_file.exists():
-                    subprocess.run(['service', self.service_name, 'stop'], check=False)
-                    initd_file.unlink()
-                    print("✅ Init скрипт удален")
-            
-            return True
-        except Exception as e:
-            print(f"❌ Ошибка удаления службы: {str(e)}")
-            return False
-
-    def _uninstall_windows_service(self) -> bool:
-        """Удаляет службу Windows с помощью NSSM"""
-        try:
-            # 1. Получаем путь к NSSM
-            nssm_path = self._get_nssm_path()
-            if not nssm_path:
-                print("❌ NSSM не найден, удаление невозможно")
-                return False
-
-            # 2. Останавливаем службу
-            try:
-                subprocess.run(
-                    ['sc', 'stop', self.service_name],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-                print("✅ Служба остановлена")
-            except subprocess.CalledProcessError:
-                pass  # Служба уже остановлена или не существует
-
-            # 3. Удаляем службу через NSSM
-            subprocess.run(
-                [nssm_path, 'remove', self.service_name, 'confirm'],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            
-            # 4. Дополнительно удаляем через sc (на случай если NSSM не сработал)
-            try:
-                subprocess.run(
-                    ['sc', 'delete', self.service_name],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-            except subprocess.CalledProcessError:
-                pass
-
-            print(f"✅ Служба {self.service_name} успешно удалена")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Ошибка удаления службы: {str(e)}")
-            return False
-
-def manage_service(script_path: str):
-    """Основная функция управления службой"""
-    service_name = "starter-service"
-    manager = ServiceManager(script_path, service_name)
-    
-    print("\n" + "="*50)
-    print("⚙️ Управление службой".center(50))
-    print("="*50)
-    print(f"\nСкрипт: {script_path}")
-    print(f"ОС: {platform.system()}")
-    print(f"Имя службы: {service_name}")
-    
-    if manager.is_installed():
-        print("Текущий статус: ✅ Служба установлена")
-    else:
-        print("Текущий статус: ❌ Служба не установлена")
-
-    print("\nОпции:")
-    print("1. Установить службу")
-    print("2. Удалить службу (если установлена)")
-    print("3. Пропустить")
-    
-    while True:
-        choice = input("\nВаш выбор [1-3]: ").strip()
-        
-        if choice == '1':
-            if manager.is_installed():
-                print("\n⚠️ Служба уже установлена")
-            else:
-                if manager.install():
-                    print("\n✅ Служба успешно установлена!")
-                    # Запускаем службу после установки
-                    try:
-                        if platform.system() == "Windows":
-                            subprocess.run(['sc', 'start', service_name], check=True)
-                        else:
-                            subprocess.run(['service', service_name, 'start'], check=True)
-                        print("✅ Служба запущена")
-                    except Exception as e:
-                        print(f"⚠️ Не удалось запустить службу: {str(e)}")
-                    return True
-        elif choice == '2':
-            if not manager.is_installed():
-                print("\n⚠️ Служба не установлена")
-            elif manager.uninstall():
-                print("\n✅ Служба успешно удалена!")
-                return True
-        elif choice == '3':
-            print("\n⏭ Пропускаем управление службой")
-            return False
-        else:
-            print("⚠️ Неверный выбор, попробуйте снова")
-</code>
-
-##starter_files\web\routes.py
-<code>
-
-from flask import Blueprint, current_app, g, jsonify, render_template, request, session, Response
-from importlib import import_module
-from pathlib import Path
-from typing import List, Dict, Any
-
-from starter_files.core.utils.i18n_utils import get_available_languages, t, set_language, get_current_language, return_basic
-from starter_files.core.utils.globalVars_utils import get_global
-from starter_files.core.utils.log_utils import LogManager
-logger = LogManager.get_logger()
-
-from starter_files.core.utils.loader_utils import get, collect_modules_info
-
-routes = Blueprint('routes', __name__)
-
-# Для раздела разработчикам
-def get_modules_index(refresh: bool = False) -> List[Dict[str, Any]]:
-    return collect_modules_info(refresh=refresh)
-
-# Функция получения секций для панель управления
-def get_current_sections_in_panel():
-    sections_in_control_panel = []
-    
-    starter_path = get_global('script_path')
-
-    sections_dir = starter_path / 'starter_files' / 'web' / 'sections'
-    
-    for section_file in sections_dir.glob('*.py'):
-        if section_file.stem == '__init__':
-            continue
-            
-        section_slug = section_file.stem
-
-        try:
-            section = import_module(f'starter_files.web.sections.{section_slug}')
-            
-            if getattr(section, 'this_section_in_control_panel', False):
-                # Получаем мета-информацию через функцию t()
-                section_title = t(f'sections.{section_slug}.basic.title', default=getattr(section, 'section_name', section_slug.replace('_', ' ').title()))
-
-                section_info = {
-                    'section_slug': section_slug,
-                    'section_name': return_basic(section_slug, 'title', getattr(section, 'section_name', section_slug.replace('_', ' ').title())),
-                    'section_icon': getattr(section, 'section_icon', 'bi-box'),
-                    'section_order': getattr(section, 'section_order', 99)
-                }
-                sections_in_control_panel.append(section_info)
-                
-        except Exception as e:
-            logger.exception(f"Error loading section {section_slug}")
-            raise
-    
-    return sorted(sections_in_control_panel, key=lambda x: x['section_order'])
-
-@routes.context_processor
-def inject_variables():
-    return {
-        'languages': get_available_languages(),
-        'current_language': get_current_language(),
-        'sections_in_control_panel': get_current_sections_in_panel()
-    }
-
-@routes.route('/', methods=['GET'])
-def index():
-
-    # Получаем текущий язык
-    lang = get_current_language()
-    # Устанавливаем текущий язык
-    set_language(lang)
-    # Получаем список доступных языков
-    languages = get_available_languages()
-    
-    return render_template('index.html', current_language=lang, languages=languages, t=t, logged_in='username' in session)
-
-@routes.route('/', methods=['POST'])
-def handle_sections():
-    section_name = request.form.get('section')
-    action_name = request.form.get('action')
-    
-    if not section_name or not action_name:
-        return jsonify({'status': 'error', 'message': 'Section and action required'}), 400
-    
-    # Сохраняем в глобальном контексте, чтобы функция t() могла определить модуль и файл
-    g.current_section = section_name
-    g.current_function = action_name
-    
-    try:
-        section = import_module(f'starter_files.web.sections.{section_name}')
-        
-        if not hasattr(section, action_name):
-            return jsonify({'status': 'error', 'message': 'Action not found'}), 404
-        
-        data = {k: v for k, v in request.form.items() if k not in ['section', 'action']}
-        result = getattr(section, action_name)(data, session)
-
-        # Добавленная проверка типа результата
-        if isinstance(result, Response):
-            return result  # Возвращаем Response как есть
-
-        # Обработка результата с учётом Accept заголовка
-        if 'text/html' in request.accept_mimetypes:
-            if isinstance(result, str):
-                return result
-            elif isinstance(result, dict) and 'html' in result:
-                return result['html']
-            else:
-                return jsonify({'status': 'error', 'message': 'HTML response not available'}), 406
-        else:
-            return jsonify(result)
-        
-    except Exception as e:
-        if 'text/html' in request.accept_mimetypes:
-            return f"Error: {str(e)}", 500
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-</code>
-
-##starter_files\web\sections\dashboard.py
-<code>
-import os
-import platform
-import socket
-import sys
-import uuid
-import threading
-
-from datetime import datetime, timedelta
-from flask import render_template, jsonify
-
-from starter_files.core.utils.i18n_utils import t
-from starter_files.core.utils.globalVars_utils import get_global
-from starter_files.core.utils.loader_utils import get
-
-from starter_files.core.utils.log_utils import LogManager
-logger = LogManager.get_logger()
-
-this_section_in_control_panel = True
-section_icon = "bi-speedometer2"
-section_name = "Dashboard"
-section_order = 1
-
-# Конфигурация компонентов для универсальной установки
-COMPONENT_CONFIG = {
-    'docker': {
-        'module': 'docker',
-        'check': 'check_docker_installed',
-        'install': 'install_docker'
-    },
-    'docker-compose': {
-        'module': 'docker',
-        'check': 'check_docker_compose_installed',
-        'install': 'install_docker_сompose'
-    },
-    'port-knocking': {
-        'module': 'knocking',
-        'check': 'is_knocking_installed',
-        'install': 'install_port_knocking'
-    },
-    'git': {
-        'module': 'git',
-        'check': 'check_git_installed',
-        'install': 'install_git'
-    },
-    'systemd': {
-        'module': 'service',
-        'check': 'is_systemd_installed',
-        'install': 'install_systemd'
-    },
-    'starter-service': {
-        'module': 'service',
-        'check': 'is_service_installed',
-        'install': 'install_service'
-    },
-    'vpnEther': {
-        'module': 'softether',
-        'check': 'check_softether_installed',
-        'install': 'install_softether'
-    },
-}
-
-# Путь к директории логов установки
-INSTALL_LOGS_DIR = get_global('path_log_install')
-INSTALL_LOGS_DIR.mkdir(parents=True, exist_ok=True)
-
-def index(data, session):
-    # Get system info from global variables with proper fallbacks
-    sys_info = {
-        'os': get_global('os', platform.system()),
-        'os_version': get_global('os_version', platform.version()),
-        'os_release': get_global('os_release', platform.release()),
-        'architecture': get_global('architecture', platform.machine()),
-        'hostname': get_global('hostname', socket.gethostname()),
-        'username': get_global('username', os.getenv('USER') or os.getenv('USERNAME') or 'N/A'),
-        'current_time': get_global('current_time', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
-        'uptime': get_global('uptime', 'N/A'),
-        'python_info': {
-            'version': get_global('python_version', platform.python_version()),
-            'implementation': get_global('python_implementation', platform.python_implementation()),
-            'compiler': get_global('python_compiler', platform.python_compiler()),
-            'executable': get_global('python_executable', sys.executable)
-        },
-        'cpu': {
-            'name': get_global('cpu_model', 'N/A'),
-            'cores': get_global('cpu_cores', 'N/A'),
-            'logical_cores': get_global('cpu_logical_cores', 'N/A'),
-            'usage': get_global('cpu_usage', 'N/A')
-        },
-        'memory': {
-            'total': get_global('memory_total', 'N/A'),
-            'used': get_global('memory_used', 'N/A'),
-            'percent': get_global('memory_percent', 'N/A'),
-            'available': get_global('memory_available', 'N/A')
-        },
-        'disk': {
-            'total': get_global('disk_total', 'N/A'),
-            'used': get_global('disk_used', 'N/A'),
-            'percent': get_global('disk_percent', 'N/A'),
-            'free': get_global('disk_free', 'N/A')
-        },
-        'docker':{
-            "docker_installed": get_global('docker_installed',False),
-            "docker_compose_installed": get_global('docker_compose_installed',False)
-        },
-        'knocking':{
-            "knocking_installed ": get_global('knocking_installed',False),
-        },
-        'git':{
-            'git_installed': get_global('git_installed',False),
-            'git_authentication': get_global('git_authentication', 'N/A'),
-        },
-        'systemd':{
-            'systemd_installed': get_global('systemd_installed', False),
-            'service_installed': get_global('service_installed', False),
-            'service_status': get_global('service_status', 'unknown')
-        },
-        'vpnEther':{
-            'vpnEther_installed': get_global('vpnEther_installed',False)
-        },
-    }
-
-    return render_template(
-        'sections/dashboard/index.html',
-        sys_info=sys_info,
-        hostname=sys_info['hostname'],
-        username=sys_info['username'],
-        current_time=sys_info['current_time'],
-        uptime=sys_info['uptime'],
-        python_info=sys_info['python_info'],
-        cpu_info=sys_info['cpu'],
-        memory_info=sys_info['memory'],
-        disk_info=sys_info['disk'],
-        docker_info = sys_info['docker'],
-        t=t
-    )
-# ===================УСТАНОВКА ===============================
-
-def install_package(data, session):
-    """Универсальный обработчик установки пакетов"""
-    package = data.get('package')
-    
-    if not package or package not in COMPONENT_CONFIG:
-        return jsonify({'status': 'error', 'message': 'Invalid package name'})
-    
-    config = COMPONENT_CONFIG[package]
-    
-    try:
-        # Проверка установлен ли компонент
-        check = get(config['module'], config['check'])
-        if check:
-            return jsonify({'status': 'info', 'message': f'{package} is already installed'})
-    except Exception as e:
-        logger.error(f"Component check failed: {str(e)}")
-        return jsonify({'status': 'error', 'message': f'Installation check failed: {str(e)}'})
-    
-    # Создание уникального ID установки
-    install_id = str(uuid.uuid4())
-    log_file_path = INSTALL_LOGS_DIR / f"install_{package}_{install_id}.log"
-    
-    # Запуск установки в отдельном потоке
-    def run_installation():
-        try:
-            result = get(config['module'], config['install'], log_file_path=str(log_file_path))
-            
-            # Проверка результата установки
-            if result['status'] == 'error':
-                raise Exception(result['message'])
-
-            # Проверка результата установки
-            if result.get('status') == 'error':
-                raise Exception(result.get('message', 'Unknown error'))
-            
-            # Дополнительная проверка через API-вызов
-            if not get(config['module'], config['check']):
-                raise Exception(f"Verification failed after installation")
-                
-            # Запись успешного завершения
-            with open(log_file_path, 'a') as f:
-                f.write("\nInstallation completed and verified successfully!\n")
-                
-        except Exception as e:
-            with open(log_file_path, 'a') as f:
-                f.write(f"\nFATAL ERROR: {str(e)}\n")
-            logger.error(f"{package} installation failed: {str(e)}")
-    
-    thread = threading.Thread(target=run_installation)
-    thread.daemon = True
-    thread.start()
-    
-    return jsonify({
-        'status': 'started',
-        'message': f'{package} installation started',
-        'install_id': install_id
-    })
-
-def download_install_logs(data, session):
-    """Отправка файла логов для скачивания"""
-    package = data.get('package')
-    install_id = data.get('install_id')
-    if not install_id:
-        return "Installation ID required", 400
-    
-    log_file_path = INSTALL_LOGS_DIR / f"install_{package}_{install_id}.log"
-    
-    if not log_file_path.exists():
-        return "Log file not found", 404
-    
-    try:
-        from flask import send_file
-        return send_file(
-            log_file_path,
-            as_attachment=True,
-            download_name=f"install_{install_id}.log",
-            mimetype='text/plain'
-        )
-    except Exception as e:
-        return str(e), 500
-
-def get_install_logs(data, session):
-    """Возвращает содержимое лог-файла установки"""
-    package = data.get('package')
-    install_id = data.get('install_id')
-    if not install_id:
-        return jsonify({
-            'status': 'error',
-            'message': 'Installation ID required',
-            'logs': ''
-        })
-    
-    log_file_path = INSTALL_LOGS_DIR / f"install_{package}_{install_id}.log"
-    
-    if not log_file_path.exists():
-        return jsonify({
-            'status': 'error',
-            'message': 'Log file not found',
-            'logs': ''
-        })
-    
-    try:
-        with open(log_file_path, 'r') as f:
-            logs = f.read()
-        
-        return jsonify({
-            'status': 'success',
-            'logs': logs
-        })
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e),
-            'logs': ''
-        })
-</code>
-
-##starter_files\web\sections\settings.py
-<code>
-
-</code>
-
-##starter_files\web\templates\sections\dashboard\index.html
-<code>
-<!-- Модальное окно установки -->
-{% include 'sections/dashboard/modal.html' %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-end pt-3 pb-2 mb-3 border-bottom">
-        <div class="btn-toolbar">
-            <div class="btn-group">
-                <button class="btn btn-sm btn-outline-secondary" id="refreshDashboardBtn">
-                    <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Карточки с общей информацией -->
-    <div class="row mb-4">
-        <!-- OS -->
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-header bg-primary text-white">
-                    <i class="bi bi-pc-display me-2"></i> {{ t('system') }}
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>{{ t('hostname') }}:</strong> {{ hostname }}</p>
-                    <p class="card-text"><strong>{{ t('username') }}:</strong> {{ username }}</p>
-                    <p class="card-text"><strong>{{ t('os') }}:</strong> {{ sys_info.os }} {{ sys_info.os_release }} ({{ sys_info.architecture }})</p>
-                    <p class="card-text"><strong>{{ t('version') }}:</strong> {{ sys_info.os_version }}</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- CPU -->
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-header bg-danger text-white">
-                    <i class="bi bi-cpu me-2"></i> {{ t('cpu') }}
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>{{ t('processor') }}:</strong> {{ cpu_info.name }}</p>
-                    <p class="card-text"><strong>{{ t('cores') }}:</strong> {{ cpu_info.cores }} ({{ cpu_info.logical_cores }} {{ t('logical') }})</p>
-                    <p class="card-text"><strong>{{ t('usage') }}:</strong> {{ cpu_info.usage }}</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Memory -->
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-header bg-secondary text-white">
-                    <i class="bi bi-memory me-2"></i> {{ t('memory') }}
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>{{ t('total') }}:</strong> {{ memory_info.total }}</p>
-                    <p class="card-text"><strong>{{ t('used') }}:</strong> {{ memory_info.used }} ({{ memory_info.percent }})</p>
-                    <p class="card-text"><strong>{{ t('available') }}:</strong> {{ memory_info.available }}</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- DISK -->
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-header bg-warning text-dark">
-                    <i class="bi bi-hdd me-2"></i> {{ t('disk') }}
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>{{ t('total') }}:</strong> {{ disk_info.total }}</p>
-                    <p class="card-text"><strong>{{ t('used') }}:</strong> {{ disk_info.used }} ({{ disk_info.percent }})</p>
-                    <p class="card-text"><strong>{{ t('free') }}:</strong> {{ disk_info.free }}</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- UP TIME -->
-        <div class="col-md-3 mt-2">
-            <div class="card h-100">
-                <div class="card-header bg-success text-white">
-                    <i class="bi bi-clock me-2"></i> {{ t('uptime') }}
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>{{ t('current_time') }}:</strong> {{ current_time }}</p>
-                    <p class="card-text"><strong>{{ t('system_uptime') }}:</strong> {{ uptime }}</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- PYTHON -->
-        <div class="col-md-3 mt-2">
-            <div class="card h-100">
-                <div class="card-header bg-info text-white">
-                    <i class="bi bi-file-code me-2"></i> Python
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>{{ t('version') }}:</strong> {{ python_info.version }}</p>
-                    <p class="card-text"><strong>{{ t('implementation') }}:</strong> {{ python_info.implementation }}</p>
-                    <p class="card-text"><strong>{{ t('compiler') }}:</strong> {{ python_info.compiler }}</p>
-                </div>
-            </div>
-        </div>
-        <hr class="mt-3"/>
-
-        <h1>Обязательный софт</h1>
-
-        <!-- Docker -->
-        <div class="col-md-3 mt-2">
-            <div class="card h-100">
-                <div class="card-header bg-dark text-white">
-                    <i class="bi bi-docker me-2"></i> Docker
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
-                        {% if sys_info.docker.docker_installed %}
-                            <span class="badge bg-success">{{ t('installed') }}</span>
-                        {% else %}
-                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
-                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="docker">
-                                <i class="bi bi-download"></i> {{ t('install') }}
-                            </button>
-                        {% endif %}
-                    </p>
-                    <p class="card-text"><strong>Compose:</strong> 
-                        {% if sys_info.docker.docker_compose_installed %}
-                            <span class="badge bg-success">{{ t('installed') }}</span>
-                        {% else %}
-                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
-                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="docker-compose">
-                                <i class="bi bi-download"></i> {{ t('install') }}
-                            </button>
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Port Knocking -->
-        <div class="col-md-3 mt-2">
-            <div class="card h-100">
-                <div class="card-header bg-dark text-white">
-                    <i class="bi bi-shield-lock me-2"></i> Port Knocking
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
-                        {% if sys_info.knocking.port_knocking_installed %}
-                            <span class="badge bg-success">{{ t('installed') }}</span>
-                        {% else %}
-                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
-                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="port-knocking">
-                                <i class="bi bi-download"></i> {{ t('install') }}
-                            </button>
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-        </div>        
-
-        <!-- Git -->
-        <div class="col-md-3 mt-2">
-            <div class="card h-100">
-                <div class="card-header bg-dark text-white">
-                    <i class="bi bi-git me-2"></i> Git
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
-                        {% if sys_info.git.git_installed %}
-                            <span class="badge bg-success">{{ t('installed') }}</span>
-                        {% else %}
-                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
-                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="git">
-                                <i class="bi bi-download"></i> {{ t('install') }}
-                            </button>
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        <!-- VPN -->
-        <div class="col-md-3 mt-2">
-            <div class="card h-100">
-                <div class="card-header bg-dark text-white">
-                    <i class="bi bi-cpu me-2"></i> vpnEther
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
-                        {% if sys_info.vpnEther.vpnEther_installed %}
-                            <span class="badge bg-success">{{ t('installed') }}</span>
-                        {% else %}
-                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
-                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="vpnEther">
-                                <i class="bi bi-download"></i> {{ t('install') }}
-                            </button>
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Starter Service and SYSTEMD -->
-        <div class="col-md-3 mt-2">
-            <div class="card h-100">
-                <div class="card-header bg-dark text-white">
-                    <i class="bi bi-gear me-2"></i> Starter Service
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>Systemd:</strong> 
-                        {% if sys_info.systemd.systemd_installed %}
-                            <span class="badge bg-success">{{ t('installed') }}</span>
-                        {% else %}
-                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
-                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="systemd">
-                                <i class="bi bi-download"></i> {{ t('install') }}
-                            </button>
-                        {% endif %}
-                    </p>
-                    <p class="card-text"><strong>Service:</strong> 
-                        {% if sys_info.systemd.service_installed %}
-                            <span class="badge bg-success">{{ t('installed') }}</span>
-                            <span class="badge bg-info">{{ sys_info.systemd.service_status }}</span>
-                        {% else %}
-                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
-                            {% if sys_info.systemd.systemd_installed %}
-                                <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="starter-service">
-                                    <i class="bi bi-download"></i> {{ t('install') }}
-                                </button>
-                            {% else %}
-                                <small class="text-muted">Install systemd first</small>
-                            {% endif %}
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Пример для другой утилиты -->
-        <div class="col-md-3 mt-2">
-            <div class="card h-100">
-                <div class="card-header bg-info text-white">
-                    <i class=""></i> EXAMPLE
-                </div>
-                <div class="card-body">
-                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
-                        {% if sys_info.git_installed %}
-                            <span class="badge bg-success">{{ t('installed') }}</span>
-                        {% else %}
-                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
-                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="git">
-                                <i class="bi bi-download"></i> {{ t('install') }}
-                            </button>
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-$(document).ready(function() {
-    // Обработчик кнопки обновления
-    $('#refreshDashboardBtn').on('click', function() {
-        location.reload();
-    });
-});
-</script>
-</code>
-
-##starter_files\web\templates\sections\dashboard\modal.html
-<code>
-<!-- Добавляем модальное окно установки в конец общего шаблона -->
-<!-- Модальное окно установки (универсальное) -->
-<div class="modal fade" id="installModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-fullscreen">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title" id="installModalTitle">{{ t('package_installation') }}</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="{{ t('close') }}"></button>
-            </div>
-            <div class="modal-body">
-                <div class="d-flex justify-content-center mb-3">
-                    <div class="spinner-border text-primary" role="status" id="installSpinner">
-                        <span class="visually-hidden">{{ t('loading') }}...</span>
-                    </div>
-                </div>
-                
-                <div class="alert alert-info" id="installStatus">
-                    {{ t('preparing_installation') }}
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        {{ t('installation_logs') }}
-                        <button class="btn btn-sm btn-outline-secondary float-end" id="refreshLogsBtn">
-                            <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
-                        </button>
-                    </div>
-                    <div class="card-body bg-dark text-white" style="height: 50vh; overflow-y: auto;">
-                        <pre id="installLogs" class="mb-0"></pre>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeInstallBtn">
-                    {{ t('close') }}
-                </button>
-                <button type="button" class="btn btn-success" id="finishInstallBtn" style="display: none;">
-                    <i class="bi bi-check-circle me-1"></i> {{ t('finish') }}
-                </button>
-                <button type="button" class="btn btn-outline-primary" id="downloadLogsBtn" style="display: none;">
-                    <i class="bi bi-download me-1"></i> {{ t('download_logs') }}
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-$(document).ready(function() {
-    // Обработчик для всех кнопок установки
-    $(document).on('click', '.install-btn', function() {
-        const packageName = $(this).data('pkg');
-        const displayNames = {
-            'docker': 'Docker',
-            'docker-compose': 'Docker Compose',
-            'port-knocking': 'Port Knocking',
-            'git': 'Git'
-        };
-        const displayName = displayNames[packageName] || packageName;
-        
-        if (confirm('{{ t("confirm_install_package") }}: ' + displayName + '?')) {
-            const $btn = $(this);
-            $btn.prop('disabled', true);
-            
-            // Показать модальное окно
-            const installModal = new bootstrap.Modal('#installModal');
-            installModal.show();
-            
-            // Установить заголовок
-            $('#installModalTitle').text('{{ t("package_installation") }}: ' + displayName);
-            
-            // Сбросить состояние модального окна
-            $('#installLogs').text('');
-            $('#installStatus').removeClass('alert-success alert-danger alert-warning')
-                               .addClass('alert-info')
-                               .text('{{ t("starting_installation") }}');
-            $('#installSpinner').show();
-            $('#finishInstallBtn').hide();
-            $('#downloadLogsBtn').hide();
-            
-            // Начать установку
-            fetch('/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Accept': 'application/json'
-                },
-                body: new URLSearchParams({
-                    'section': 'dashboard',
-                    'action': 'install_package',
-                    'package': packageName
-                })
-            })
-            .then(response => response.json())
-            .then(response => {
-                if (response.status === 'started') {
-                    const installId = response.install_id;
-                    
-                    // Сохраняем ID установки и имя пакета
-                    $('#installModal').data('install-id', installId);
-                    $('#installModal').data('package', packageName);
-                    
-                    // Функция обновления логов
-                    function updateLogs() {
-                        fetch('/', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                                'Accept': 'application/json'
-                            },
-                            body: new URLSearchParams({
-                                'section': 'dashboard',
-                                'action': 'get_install_logs',
-                                'install_id': installId,
-                                'package': packageName
-                            })
-                        })
-                        .then(response => response.json())
-                        .then(logResponse => {
-                            if (logResponse.status === 'success') {
-                                $('#installLogs').text(logResponse.logs);
-                                
-                                // Автоскролл к последней записи
-                                const logContainer = $('#installLogs').parent();
-                                logContainer.scrollTop(logContainer[0].scrollHeight);
-                                
-                                // Проверяем завершение установки
-                                if (logResponse.completed) {
-                                    clearInterval(logInterval);
-                                    $('#installSpinner').hide();
-                                    $('#finishInstallBtn').show();
-                                    $('#downloadLogsBtn').show();
-                                    
-                                    if (logResponse.installed) {
-                                        $('#installStatus').removeClass('alert-info')
-                                                          .addClass('alert-success')
-                                                          .text('{{ t("installation_completed_success") }}');
-                                    } else {
-                                        $('#installStatus').removeClass('alert-info')
-                                                          .addClass('alert-danger')
-                                                          .text('{{ t("installation_failed") }}');
-                                    }
-                                }
-                            } else {
-                                $('#installStatus').append('<br>' + logResponse.message);
-                            }
-                        })
-                        .catch(error => {
-                            $('#installStatus').append('<br>{{ t("log_request_failed") }}');
-                        });
-                    }
-                    
-                    // Первое обновление
-                    updateLogs();
-                    
-                    // Обновляем логи каждые 2 секунды
-                    const logInterval = setInterval(updateLogs, 2000);
-                    
-                    // Обработчик кнопки обновления логов
-                    $('#refreshLogsBtn').off('click').on('click', updateLogs);
-                    
-                    // Обработчик кнопки завершения
-                    $('#finishInstallBtn').off('click').on('click', function() {
-                        installModal.hide();
-                        location.reload(); // Перезагружаем страницу после установки
-                    });
-                    
-                    // Обработчик кнопки скачивания логов
-                    $('#downloadLogsBtn').off('click').on('click', function() {
-                        const installId = $('#installModal').data('install-id');
-                        const packageName = $('#installModal').data('package');
-                        
-                        // Создаем временную форму для скачивания
-                        const form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = '/';
-                        form.style.display = 'none';
-                        
-                        const params = {
-                            'section': 'dashboard',
-                            'action': 'download_install_logs',
-                            'install_id': installId,
-                            'package': packageName
-                        };
-                        
-                        for (const [key, value] of Object.entries(params)) {
-                            const input = document.createElement('input');
-                            input.type = 'hidden';
-                            input.name = key;
-                            input.value = value;
-                            form.appendChild(input);
-                        }
-                        
-                        document.body.appendChild(form);
-                        form.submit();
-                        document.body.removeChild(form);
-                    });
-                    
-                    // Сохраняем interval ID
-                    $('#installModal').data('log-interval', logInterval);
-                } else {
-                    $('#installStatus').removeClass('alert-info')
-                                      .addClass('alert-danger')
-                                      .text(response.message || '{{ t("start_install_failed") }}');
-                    $btn.prop('disabled', false);
-                }
-            })
-            .catch(error => {
-                $('#installStatus').removeClass('alert-info')
-                                  .addClass('alert-danger')
-                                  .text('{{ t("request_failed") }}');
-                $btn.prop('disabled', false);
-            });
-        }
-    });
-
-    // Очистка интервала при закрытии модального окна
-    $('#installModal').on('hidden.bs.modal', function() {
-        const logInterval = $(this).data('log-interval');
-        if (logInterval) {
-            clearInterval(logInterval);
-        }
-        $('.install-btn').prop('disabled', false);
-    });
-});
-</script>
-</code>
-
-##starter_files\web\templates\sections\settings\index.html
-<code>
-<!-- templates/settings/index.html -->
-<div class="container-fluid">
-    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-        <h1 class="h2">{{ t('settings_title') }}</h1>
-        <div class="btn-toolbar mb-2 mb-md-0">
-            <button class="btn btn-sm btn-outline-secondary" data-action="refreshSettings">
-                <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
-            </button>
-        </div>
-    </div>
-
-    <div class="row">
-        <div class="col-md-12">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-gear me-2"></i> {{ t('project_settings') }}
-                </div>
-                <div class="card-body">
-                    <form id="settingsForm">
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="projectPath" class="form-label">{{ t('project_path') }}</label>
-                                <input type="text" class="form-control" id="projectPath" 
-                                       name="project_path" value="{{ settings.project_path }}">
-                                <div class="form-text">{{ t('project_path_help') }}</div>
-                                <div id="projectPathValidation" class="mt-1"></div>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="dockerPath" class="form-label">{{ t('docker_path') }}</label>
-                                <input type="text" class="form-control" id="dockerPath" 
-                                       name="docker_path" value="{{ settings.docker_path }}">
-                                <div class="form-text">{{ t('docker_path_help') }}</div>
-                                <div id="dockerPathValidation" class="mt-1"></div>
-                            </div>
-                        </div>
-
-                        <div class="row mb-3">
-                            <div class="col-md-4">
-                                <label for="projectType" class="form-label">{{ t('project_type') }}</label>
-                                <select class="form-select" id="projectType" name="project_type">
-                                    <option value="laravel" {{ 'selected' if settings.project_type == 'laravel' }}>Laravel</option>
-                                    <option value="symfony" {{ 'selected' if settings.project_type == 'symfony' }}>Symfony</option>
-                                    <option value="custom" {{ 'selected' if settings.project_type == 'custom' }}>Custom</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="environment" class="form-label">{{ t('environment') }}</label>
-                                <select class="form-select" id="environment" name="environment">
-                                    <option value="production" {{ 'selected' if settings.environment == 'production' }}>Production</option>
-                                    <option value="staging" {{ 'selected' if settings.environment == 'staging' }}>Staging</option>
-                                    <option value="development" {{ 'selected' if settings.environment == 'development' }}>Development</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="composePath" class="form-label">{{ t('docker_compose_path') }}</label>
-                                <input type="text" class="form-control" id="composePath" 
-                                       name="docker_compose_path" value="{{ settings.docker_compose_path }}" readonly>
-                                <div class="form-text">{{ t('compose_path_help') }}</div>
-                            </div>
-                        </div>
-
-                        <h5 class="mt-4 mb-3">{{ t('database_settings') }}</h5>
-                        <div class="row mb-3">
-                            <div class="col-md-3">
-                                <label for="dbHost" class="form-label">{{ t('db_host') }}</label>
-                                <input type="text" class="form-control" id="dbHost" 
-                                       name="database.host" value="{{ settings.database.host }}">
-                            </div>
-                            <div class="col-md-2">
-                                <label for="dbPort" class="form-label">{{ t('db_port') }}</label>
-                                <input type="number" class="form-control" id="dbPort" 
-                                       name="database.port" value="{{ settings.database.port }}">
-                            </div>
-                            <div class="col-md-3">
-                                <label for="dbName" class="form-label">{{ t('db_name') }}</label>
-                                <input type="text" class="form-control" id="dbName" 
-                                       name="database.name" value="{{ settings.database.name }}">
-                            </div>
-                            <div class="col-md-2">
-                                <label for="dbUser" class="form-label">{{ t('db_user') }}</label>
-                                <input type="text" class="form-control" id="dbUser" 
-                                       name="database.user" value="{{ settings.database.user }}">
-                            </div>
-                            <div class="col-md-2">
-                                <label for="dbPassword" class="form-label">{{ t('db_password') }}</label>
-                                <input type="password" class="form-control" id="dbPassword" 
-                                       name="database.password" value="{{ settings.database.password }}">
-                            </div>
-                        </div>
-
-                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <button type="button" class="btn btn-secondary me-md-2" data-action="validatePaths">
-                                <i class="bi bi-check-circle"></i> {{ t('validate_paths') }}
-                            </button>
-                            <button type="button" class="btn btn-primary" data-action="saveSettings">
-                                <i class="bi bi-save"></i> {{ t('save_settings') }}
-                            </button>
-                            <button type="button" class="btn btn-success" data-action="generateDockerCompose">
-                                <i class="bi bi-file-earmark-code"></i> {{ t('generate_docker_compose') }}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <i class="bi bi-info-circle me-2"></i> {{ t('project_validation') }}
-                </div>
-                <div class="card-body">
-                    <div id="projectValidationResult">
-                        <p class="text-muted">{{ t('run_validation_to_see_results') }}</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <i class="bi bi-info-circle me-2"></i> {{ t('docker_validation') }}
-                </div>
-                <div class="card-body">
-                    <div id="dockerValidationResult">
-                        <p class="text-muted">{{ t('run_validation_to_see_results') }}</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-$(document).ready(function() {
-    // Обработчик кнопки обновления
-    $('[data-action="refreshSettings"]').on('click', function() {
-        $('#mainMenu a[data-section="settings"]').click();
-    });
-
-    // Обработчик валидации путей
-    $('[data-action="validatePaths"]').on('click', function() {
-        const projectPath = $('#projectPath').val();
-        const dockerPath = $('#dockerPath').val();
-
-        // Валидация пути проекта
-        $.post('/', {
-            section: 'settings',
-            action: 'validate_project_path',
-            path: projectPath
-        }, function(response) {
-            if (response.status === 'success') {
-                const validation = response.validation;
-                const $result = $('#projectValidationResult');
-                
-                let html = '<ul class="list-group list-group-flush">';
-                html += `<li class="list-group-item"><strong>Exists:</strong> ${validation.exists ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Is Directory:</strong> ${validation.is_dir ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Valid:</strong> ${validation.valid ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Message:</strong> ${validation.message}</li>`;
-                html += '</ul>';
-                
-                $result.html(html);
-                
-                // Обновляем индикатор валидации
-                const $indicator = $('#projectPathValidation');
-                if (validation.valid) {
-                    $indicator.html('<span class="text-success"><i class="bi bi-check-circle"></i> Valid path</span>');
-                } else {
-                    $indicator.html('<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ' + validation.message + '</span>');
-                }
-            }
-        });
-
-        // Валидация Docker пути
-        $.post('/', {
-            section: 'settings',
-            action: 'validate_docker_path',
-            path: dockerPath
-        }, function(response) {
-            if (response.status === 'success') {
-                const validation = response.validation;
-                const $result = $('#dockerValidationResult');
-                
-                let html = '<ul class="list-group list-group-flush">';
-                html += `<li class="list-group-item"><strong>Exists:</strong> ${validation.exists ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Is Directory:</strong> ${validation.is_dir ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Has Compose:</strong> ${validation.has_compose ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Valid:</strong> ${validation.valid ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Message:</strong> ${validation.message}</li>`;
-                html += '</ul>';
-                
-                $result.html(html);
-                
-                // Обновляем индикатор валидации
-                const $indicator = $('#dockerPathValidation');
-                if (validation.valid) {
-                    $indicator.html('<span class="text-success"><i class="bi bi-check-circle"></i> Valid path</span>');
-                } else {
-                    $indicator.html('<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ' + validation.message + '</span>');
-                }
-            }
-        });
-    });
-
-    // Обработчик сохранения настроек
-    $('[data-action="saveSettings"]').on('click', function() {
-        const formData = {
-            project_path: $('#projectPath').val(),
-            docker_path: $('#dockerPath').val(),
-            project_type: $('#projectType').val(),
-            environment: $('#environment').val(),
-            docker_compose_path: $('#composePath').val(),
-            database: {
-                host: $('#dbHost').val(),
-                port: $('#dbPort').val(),
-                name: $('#dbName').val(),
-                user: $('#dbUser').val(),
-                password: $('#dbPassword').val()
-            }
-        };
-
-        $.post('/', {
-            section: 'settings',
-            action: 'save_settings',
-            settings: JSON.stringify(formData)
-        }, function(response) {
-            if (response.status === 'success') {
-                alert('{{ t("settings_saved_successfully") }}');
-            } else {
-                alert('{{ t("settings_save_failed") }}: ' + response.message);
-            }
-        }).fail(function() {
-            alert('{{ t("request_failed") }}');
-        });
-    });
-
-    // Обработчик генерации Docker Compose
-    $('[data-action="generateDockerCompose"]').on('click', function() {
-        if (confirm('{{ t("confirm_generate_docker_compose") }}')) {
-            $.post('/', {
-                section: 'settings',
-                action: 'generate_docker_compose'
-            }, function(response) {
-                if (response.status === 'success') {
-                    alert('{{ t("docker_compose_generated_successfully") }}');
-                } else {
-                    alert('{{ t("docker_compose_generation_failed") }}: ' + response.message);
-                }
-            }).fail(function() {
-                alert('{{ t("request_failed") }}');
-            });
-        }
-    });
-});
-</script>
-</code>
-
-##starter_files\web\templates\sections\settings\info.html
-<code>
-<div class="container-fluid">
-    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-        <h1 class="h2">{{ t('updates_info_title') }}</h1>
-    </div>
-
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <i class="bi bi-info-circle me-2"></i> {{ t('updates_information') }}
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-info">
-                        <h5><i class="bi bi-exclamation-circle"></i> {{ t('updates_not_available') }}</h5>
-                        <p>{{ message }}</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-</code>
+я хотел все функции перенести в settings связанные с env генерацией и прочее.
+И при загрузке секции Error: 'env_vars' is undefined

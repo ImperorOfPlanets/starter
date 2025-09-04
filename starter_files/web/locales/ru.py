@@ -530,7 +530,19 @@ translations = {
                 "docker_compose_generated_successfully": "Файл docker-compose.yml успешно сгенерирован",
                 "docker_compose_generation_failed": "Ошибка генерации docker-compose.yml",
                 "request_failed": "Ошибка запроса",
-                "confirm_generate_docker_compose": "Вы уверены, что хотите сгенерировать docker-compose.yml?"
+                "confirm_generate_docker_compose": "Вы уверены, что хотите сгенерировать docker-compose.yml?",
+
+                # env editor
+                "env_editor_title": "Редактор переменных окружения",
+                "environment_variables": "Переменные окружения",
+                "variable_name": "Имя переменной",
+                "variable_value": "Значение переменной",
+                "actions": "Действия",
+                "add_variable": "Добавить переменную",
+                "save_env": "Сохранить .env",
+                "generate_docker_compose": "Сгенерировать docker-compose.yml",
+                "env_saved_successfully": "Файл .env успешно сохранён",
+                "env_save_failed": "Ошибка сохранения файла .env"
             }
         }
     }

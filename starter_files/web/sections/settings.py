@@ -1,8 +1,10 @@
 import json
+from pathlib import Path
 from flask import render_template, jsonify, request
 from starter_files.core.utils.i18n_utils import t
 from starter_files.core.utils.log_utils import LogManager
 from starter_files.core.software.default.settings import SettingsModule
+from starter_files.core.utils.globalVars_utils import get_global
 
 logger = LogManager.get_logger()
 
@@ -11,14 +13,23 @@ section_icon = "bi-gear"
 section_name = "Settings"
 section_order = 2   # после dashboard
 
+
 def index(data, session):
     """Главная страница настроек"""
     settings = SettingsModule.get_settings()
+
+    # путь к docker/.env из глобальной переменной
+    docker_path = Path(get_global("docker_path", settings.get("docker_files", "/app/docker")))
+    env_path = docker_path / ".env"
+    env_vars = SettingsModule.read_env_file(env_path)
+
     return render_template(
         "sections/settings/index.html",
         settings=settings,
-        t=t
+        env_vars=env_vars,
+        t=t,
     )
+
 
 def validate_project_path(data, session):
     path = data.get("path")
@@ -27,6 +38,7 @@ def validate_project_path(data, session):
     result = SettingsModule.validate_project_path(path)
     return jsonify({"status": "success", "validation": result})
 
+
 def validate_docker_path(data, session):
     path = data.get("path")
     if not path:
@@ -34,12 +46,15 @@ def validate_docker_path(data, session):
     result = SettingsModule.validate_docker_path(path)
     return jsonify({"status": "success", "validation": result})
 
+
 def save_settings(data, session):
     try:
         raw = data.get("settings")
         settings = json.loads(raw) if isinstance(raw, str) else raw
         ok = SettingsModule.save_settings(settings)
         if ok:
+            # обновим globals после сохранения
+            SettingsModule.set_globals()
             return jsonify({"status": "success"})
         else:
             return jsonify({"status": "error", "message": "Save failed"})
@@ -47,10 +62,12 @@ def save_settings(data, session):
         logger.error(f"Error saving settings: {e}")
         return jsonify({"status": "error", "message": str(e)})
 
+
 def generate_docker_compose(data, session):
     settings = SettingsModule.get_settings()
     ok = SettingsModule.generate_docker_compose(settings)
     return jsonify({"status": "success" if ok else "error"})
+
 
 def run_compose(data, session):
     settings = SettingsModule.get_settings()
