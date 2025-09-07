@@ -1,8 +1,9 @@
+import json
+import logging
+
 from flask import render_template, jsonify, request
 from datetime import datetime
 from pathlib import Path
-import json
-import logging
 
 from starter_files.core.utils.i18n_utils import t
 from starter_files.core.oss.default.updates import UpdatesModule
@@ -84,16 +85,18 @@ def update_project(data, session):
         # Получаем конфиг с правильным путем к файлу состояния
         config = get_updates_config()
         
-        success = UpdatesModule.check_and_update_project(
-            project_name=project_name,
-            projects_config=PROJECTS,
+        # Запускаем обновление и получаем update_id
+        timestamp, updates, folders = UpdatesModule.start_updates_projects(
+            projects_config={project_name: PROJECTS[project_name]},
             module_config=config,
             force=True
         )
-        if success:
-            return jsonify({'success': True, 'message': t('update_success')})
-        else:
-            return jsonify({'success': False, 'message': t('update_failed')})
+        
+        return jsonify({
+            'success': True, 
+            'message': t('update_success'),
+            'update_id': f"update_{timestamp}"
+        })
     except Exception as e:
         logger.error(f"Error updating project {project_name}: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -132,18 +135,25 @@ def get_updates_config():
     """Получение конфигурации с правильным путем к файлу состояния"""
     config = UpdatesModule.DEFAULT_CONFIG.copy()
     
-    # Устанавливаем правильный путь к файлу состояния
+    # Устанавливаем правильные пути к файлам
     script_path = Path(__file__).resolve().parent.parent.parent.parent
     state_file_path = script_path / 'starter_files' / 'update_state.json'
+    history_file_path = script_path / 'starter_files' / 'update_history.json'
+    
     config['STATE_FILE'] = str(state_file_path)
+    config['HISTORY_FILE'] = str(history_file_path)
     
     # Создаем директорию, если она не существует
     state_file_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # Создаем файл состояния, если он не существует
+    # Создаем файлы, если они не существуют
     if not state_file_path.exists():
         with open(state_file_path, 'w') as f:
             json.dump({}, f)
+    
+    if not history_file_path.exists():
+        with open(history_file_path, 'w') as f:
+            json.dump([], f)
     
     return config
 
@@ -203,20 +213,13 @@ def get_project_history(data, session):
     """Получение истории обновлений проекта"""
     project_name = data.get('project')
     
+    # Обработка значения 'all' для получения всей истории
+    if project_name == 'all':
+        project_name = None
+    
     try:
         config = get_updates_config()
-        
-        # Если project_name = 'all', возвращаем историю всех проектов
-        if project_name == 'all':
-            history = UpdatesModule.get_update_history(None, config)
-        elif project_name and project_name in PROJECTS:
-            history = UpdatesModule.get_update_history(project_name, config)
-        else:
-            return jsonify({
-                'success': False, 
-                'message': 'Project not found or invalid project name'
-            })
-        
+        history = UpdatesModule.get_update_history(project_name, config)
         return jsonify({'success': True, 'history': history})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
