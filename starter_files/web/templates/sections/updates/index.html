@@ -397,6 +397,9 @@ $(document).ready(function() {
         e.preventDefault();
         var project = $(this).data('project');
         console.log('Update project button clicked:', project);
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("updating") }}');
         
         // Устанавливаем название проекта в заголовок
         $('#logProjectName').text(project);
@@ -408,70 +411,84 @@ $(document).ready(function() {
         // Показываем модальное окно
         updateLogModal.show();
         
-        // Запускаем обновление и мониторинг лога
-        var updateInterval;
-        var checkUpdateStatus = function() {
-            postFormData('update_project', { project: project })
-                .then(function(data) {
-                    console.log('Update project response:', data);
-                    if (data.success) {
-                        // Обновление завершено, останавливаем интервал
-                        clearInterval(updateInterval);
-                        $('#logLoadingSpinner').hide();
-                        
-                        // Загружаем лог обновления
+        // Запускаем обновление
+        postFormData('update_project', { project: project })
+            .then(function(data) {
+                console.log('Update project response:', data);
+                if (data.success) {
+                    // Сохраняем ID обновления для последующего получения логов
+                    window.currentUpdateId = data.update_id;
+                    
+                    // Функция для получения и обновления лога
+                    var updateLog = function() {
                         postFormData('get_update_log', { update_id: data.update_id })
                             .then(function(logData) {
                                 if (logData.success) {
                                     $('#updateLogContent pre').text(logData.log);
                                     $('#updateLogContent').show();
+                                    
+                                    // Автоскролл к последней записи
+                                    var logPre = $('#updateLogContent pre');
+                                    logPre.scrollTop(logPre[0].scrollHeight);
+                                    
+                                    // Если обновление еще продолжается, продолжаем обновлять лог
+                                    if (logData.log.includes('=== Процесс обновления завершен ===') || 
+                                        logData.log.includes('FATAL ERROR') ||
+                                        logData.log.includes('Ошибка обновления')) {
+                                        // Обновление завершено, останавливаем интервал
+                                        clearInterval(logInterval);
+                                        $('#logLoadingSpinner').hide();
+                                        $btn.prop('disabled', false);
+                                        $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
+                                    }
                                 } else {
                                     $('#updateLogContent pre').text('Ошибка загрузки лога: ' + logData.message);
                                     $('#updateLogContent').show();
+                                    $('#logLoadingSpinner').hide();
+                                    clearInterval(logInterval);
+                                    $btn.prop('disabled', false);
+                                    $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
                                 }
                             })
                             .catch(function(error) {
                                 $('#updateLogContent pre').text('Ошибка загрузки лога: ' + error);
                                 $('#updateLogContent').show();
+                                $('#logLoadingSpinner').hide();
+                                clearInterval(logInterval);
+                                $btn.prop('disabled', false);
+                                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
                             });
-                    } else {
-                        // Показываем ошибку
-                        clearInterval(updateInterval);
-                        $('#logLoadingSpinner').hide();
-                        $('#updateLogContent pre').text('Ошибка обновления: ' + data.message);
-                        $('#updateLogContent').show();
-                    }
-                })
-                .catch(function(error) {
-                    console.error('Update project error:', error);
-                    // Показываем ошибку сети
-                    clearInterval(updateInterval);
-                    $('#logLoadingSpinner').hide();
-                    $('#updateLogContent pre').text('Ошибка сети: ' + error);
-                    $('#updateLogContent').show();
-                });
-        };
-        
-        // Запускаем проверку статуса сразу и затем каждые 2 секунды
-        checkUpdateStatus();
-        updateInterval = setInterval(checkUpdateStatus, 2000);
-        
-        // Обработчик кнопки обновления лога
-        $('#refreshLogBtn').off('click').on('click', function() {
-            if (window.currentUpdateId) {
-                postFormData('get_update_log', { update_id: window.currentUpdateId })
-                    .then(function(logData) {
-                        if (logData.success) {
-                            $('#updateLogContent pre').text(logData.log);
-                        } else {
-                            $('#updateLogContent pre').text('Ошибка загрузки лога: ' + logData.message);
-                        }
-                    })
-                    .catch(function(error) {
-                        $('#updateLogContent pre').text('Ошибка загрузки лога: ' + error);
+                    };
+                    
+                    // Первое обновление лога
+                    updateLog();
+                    
+                    // Обновляем лог каждые 2 секунды
+                    var logInterval = setInterval(updateLog, 2000);
+                    
+                    // Обработчик кнопки обновления лога
+                    $('#refreshLogBtn').off('click').on('click', updateLog);
+                    
+                    // Останавливаем интервал при закрытии модального окна
+                    $('#updateLogModal').on('hidden.bs.modal', function() {
+                        clearInterval(logInterval);
+                        $btn.prop('disabled', false);
+                        $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
                     });
-            }
-        });
+                } else {
+                    alert('Error updating ' + project + ': ' + data.message);
+                    $btn.prop('disabled', false);
+                    $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
+                    updateLogModal.hide();
+                }
+            })
+            .catch(function(error) {
+                console.error('Update project error:', error);
+                alert('Network error: ' + error);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
+                updateLogModal.hide();
+            });
     });
     
     console.log('Update section initialized successfully');
