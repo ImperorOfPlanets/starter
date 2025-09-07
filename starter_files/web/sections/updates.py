@@ -19,12 +19,44 @@ section_order = 10
 
 def index(data, session):
     """Главная страница модуля обновлений"""
-    update_status = get_update_status()
+    update_status = get_update_status_list()  # Changed here
     return render_template(
         'sections/updates/index.html',
         t=t,
         update_status=update_status
     )
+
+def get_update_status_list():
+    """Получение статуса обновлений для всех проектов"""
+    status = []
+    config = get_updates_config()
+    
+    for project_name in PROJECTS.keys():
+        last_update = UpdatesModule.get_last_update_time(project_name, config)
+        seconds_passed = UpdatesModule.seconds_since_last_update(project_name, config)
+        
+        if last_update:
+            if seconds_passed < 3600:  # Менее часа назад
+                status_text = t('up_to_date')
+                status_color = 'success'
+            elif seconds_passed < 86400:  # Менее суток назад
+                status_text = t('recently_updated')
+                status_color = 'warning'
+            else:
+                status_text = t('update_available')
+                status_color = 'danger'
+        else:
+            status_text = t('never_updated')
+            status_color = 'secondary'
+        
+        status.append({
+            'name': project_name,
+            'last_update': last_update,
+            'status': status_text,
+            'status_color': status_color
+        })
+    
+    return status
 
 def check_all(data, session):
     """Проверка всех обновлений"""
@@ -96,38 +128,6 @@ def get_project_details(data, session):
     
     return jsonify({'success': True, 'project_info': project_info})
 
-def get_update_status():
-    """Получение статуса обновлений для всех проектов"""
-    status = []
-    config = get_updates_config()
-    
-    for project_name in PROJECTS.keys():
-        last_update = UpdatesModule.get_last_update_time(project_name, config)
-        seconds_passed = UpdatesModule.seconds_since_last_update(project_name, config)
-        
-        if last_update:
-            if seconds_passed < 3600:  # Менее часа назад
-                status_text = t('up_to_date')
-                status_color = 'success'
-            elif seconds_passed < 86400:  # Менее суток назад
-                status_text = t('recently_updated')
-                status_color = 'warning'
-            else:
-                status_text = t('update_available')
-                status_color = 'danger'
-        else:
-            status_text = t('never_updated')
-            status_color = 'secondary'
-        
-        status.append({
-            'name': project_name,
-            'last_update': last_update,
-            'status': status_text,
-            'status_color': status_color
-        })
-    
-    return status
-
 def get_updates_config():
     """Получение конфигурации с правильным путем к файлу состояния"""
     config = UpdatesModule.DEFAULT_CONFIG.copy()
@@ -146,3 +146,81 @@ def get_updates_config():
             json.dump({}, f)
     
     return config
+
+def get_update_logs(data, session):
+    """Получение логов процесса обновления"""
+    update_id = data.get('update_id')
+    if not update_id:
+        return jsonify({'success': False, 'message': 'Update ID required'})
+    
+    try:
+        logs = UpdatesModule.get_update_logs(update_id)
+        return jsonify({'success': True, 'logs': logs})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+def get_update_status(data, session):
+    """Получение статуса процесса обновления"""
+    update_id = data.get('update_id')
+    if not update_id:
+        return jsonify({'success': False, 'message': 'Update ID required'})
+    
+    try:
+        status = UpdatesModule.get_update_status(update_id)
+        return jsonify({'success': True, 'status': status})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+def start_update_all_async(data, session):
+    """Асинхронный запуск обновления всех проектов"""
+    try:
+        from starter_files.configs.configs import PROJECTS
+        update_id = UpdatesModule.start_update_in_thread(
+            projects_config=PROJECTS,
+            force_check=True
+        )
+        return jsonify({'success': True, 'update_id': update_id})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+def start_update_project_async(data, session):
+    """Асинхронный запуск обновления конкретного проекта"""
+    project_name = data.get('project')
+    if project_name not in PROJECTS:
+        return jsonify({'success': False, 'message': 'Project not found'})
+    
+    try:
+        project_config = {project_name: PROJECTS[project_name]}
+        update_id = UpdatesModule.start_update_in_thread(
+            projects_config=project_config,
+            force_check=True
+        )
+        return jsonify({'success': True, 'update_id': update_id, 'project': project_name})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+def get_project_history(data, session):
+    """Получение истории обновлений проекта"""
+    project_name = data.get('project')
+    if not project_name or project_name not in PROJECTS:
+        return jsonify({'success': False, 'message': 'Project not found'})
+    
+    try:
+        config = get_updates_config()
+        history = UpdatesModule.get_update_history(project_name, config)
+        return jsonify({'success': True, 'history': history})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+def get_update_log(data, session):
+    """Получение лога конкретного обновления"""
+    update_id = data.get('update_id')
+    if not update_id:
+        return jsonify({'success': False, 'message': 'Update ID required'})
+    
+    try:
+        config = get_updates_config()
+        log_content = UpdatesModule.get_update_log(update_id, config)
+        return jsonify({'success': True, 'log': log_content})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})

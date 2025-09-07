@@ -89,6 +89,142 @@
     </div>
 </div>
 
+<!-- Добавьте эту секцию после таблицы статуса обновлений -->
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-clock-history me-2"></i> История обновлений
+                <button class="btn btn-sm btn-outline-primary float-end" id="refresh-history-btn">
+                    <i class="bi bi-arrow-repeat"></i> Обновить
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm" id="history-table">
+                        <thead>
+                            <tr>
+                                <th>Проект</th>
+                                <th>Время</th>
+                                <th>Статус</th>
+                                <th>Сообщение</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- История будет загружена через JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Добавьте этот JavaScript для загрузки истории обновлений
+function loadProjectHistory(projectName) {
+    $.ajax({
+        url: '/',
+        method: 'POST',
+        data: {
+            'section': 'updates',
+            'action': 'get_project_history',
+            'project': projectName
+        },
+        success: function(response) {
+            if (response.success) {
+                const historyTable = $('#history-table tbody');
+                historyTable.empty();
+                
+                response.history.forEach(item => {
+                    const row = `
+                        <tr>
+                            <td>${item.project}</td>
+                            <td>${new Date(item.timestamp).toLocaleString()}</td>
+                            <td><span class="badge bg-${getStatusColor(item.status)}">${item.status}</span></td>
+                            <td>${item.message}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-info view-log-btn" data-update-id="${item.timestamp}">
+                                    <i class="bi bi-file-text"></i> Лог
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                    historyTable.append(row);
+                });
+            } else {
+                alert('Ошибка загрузки истории: ' + response.message);
+            }
+        }
+    });
+}
+
+function getStatusColor(status) {
+    switch(status) {
+        case 'success': return 'success';
+        case 'error': return 'danger';
+        case 'no_changes': return 'info';
+        case 'new_installation': return 'primary';
+        default: return 'secondary';
+    }
+}
+
+// Обработчик для кнопки просмотра лога
+$(document).on('click', '.view-log-btn', function() {
+    const updateId = $(this).data('update-id');
+    
+    $.ajax({
+        url: '/',
+        method: 'POST',
+        data: {
+            'section': 'updates',
+            'action': 'get_update_log',
+            'update_id': updateId
+        },
+        success: function(response) {
+            if (response.success) {
+                // Показываем лог в модальном окне
+                $('#logModal .modal-body').text(response.log);
+                $('#logModal').modal('show');
+            } else {
+                alert('Ошибка загрузки лога: ' + response.message);
+            }
+        }
+    });
+});
+
+// Обработчик для кнопки обновления истории
+$('#refresh-history-btn').on('click', function() {
+    const projectName = $('#project-selector').val(); // Предполагаем, что есть селектор проектов
+    loadProjectHistory(projectName);
+});
+
+// Загружаем историю при открытии страницы
+$(document).ready(function() {
+    loadProjectHistory('all'); // или выбранный проект
+});
+</script>
+
+<!-- Добавьте модальное окно для просмотра логов -->
+<div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Лог обновления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <pre class="bg-dark text-white p-3" style="max-height: 60vh; overflow-y: auto;"></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 $(document).ready(function() {
     console.log('DOM loaded, initializing update section...');

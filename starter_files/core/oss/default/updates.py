@@ -9,11 +9,9 @@ import hashlib
 import sys
 import subprocess
 import logging
-
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, Tuple, List, Optional
-from starter_files.core.utils.log_utils import LogManager
 
 class UpdatesModule(BaseModule):
     """
@@ -33,17 +31,20 @@ class UpdatesModule(BaseModule):
         'LOG_DIR': 'update_logs',                # Логи обновлений
         'CLEANUP_DAYS': 7,                       # Дней хранения временных файлов
         'MAX_RETRIES': 3,                        # Попыток скачивания
-        'TIMEOUT': 30 ,                          # Таймаут соединения (сек)
+        'TIMEOUT': 30,                           # Таймаут соединения (сек)
         'STATE_FILE': 'update_state.json',       # Файл хранения состояния обновлений
-        'MIN_CHECK_INTERVAL': 30                 # Минимальный интервал между проверками в секундах 
+        'MIN_CHECK_INTERVAL': 30,                # Минимальный интервал между проверками в секундах
+        'HISTORY_FILE': 'update_history.json'    # Файл истории обновлений
     }
     
-    @classmethod
+    # Словарь для хранения активных процессов обновления
+    _active_updates = {}
+    
+    @staticmethod
     def start_updates_projects(
-        cls, 
         projects_config: Dict,
         module_config: Dict = None,
-        force_check: bool = False  # Принудительная проверка
+        force_check: bool = False
     ) -> Tuple[str, Dict, Dict]:
         """
         Основной процесс обновления проектов с контролем интервалов
@@ -53,12 +54,10 @@ class UpdatesModule(BaseModule):
         :return: (Метка времени, Данные обновлений, Пути к файлам)
         """
         # Объединяем конфиги с настройками по умолчанию
-        config = {**cls.DEFAULT_CONFIG, **(module_config or {})}
+        config = {**UpdatesModule.DEFAULT_CONFIG, **(module_config or {})}
         
         # Инициализация системы логирования
-        LogManager.register_log_dir('updates', config['LOG_DIR'])
-        logger = LogManager.get_logger('updates')
-        logger.info("=== Начало процесса обновления ===")
+        UpdatesModule._init_logging(config)
         
         # Создаем базовые каталоги
         base_temp_dir = Path(config['BASE_TEMP_DIR'])
@@ -67,25 +66,32 @@ class UpdatesModule(BaseModule):
         
         # Метка времени для уникальных путей
         launch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        update_id = f"update_{launch_timestamp}"
         projects_updates = {}
         projects_folders = {}
+        
+        # Начинаем запись в лог
+        UpdatesModule._log_update(update_id, "=== Начало процесса обновления ===")
+        UpdatesModule._log_update(update_id, f"Время начала: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
         # Обработка каждого проекта
         for project_name, project_config in projects_config.items():
             try:
-                logger.info(f"Обработка проекта: {project_name}")
+                UpdatesModule._log_update(update_id, f"Обработка проекта: {project_name}")
                 
                 # Проверка необходимости обновления
-                last_update_seconds = cls.seconds_since_last_update(project_name, config)
+                last_update_seconds = UpdatesModule.seconds_since_last_update(project_name, config)
                 
-                if not force_check and not cls.should_check_updates(project_name, config):
-                    logger.info(f"Проверка пропущена: {project_name} "
-                                f"(обновлялся {last_update_seconds:.0f} сек назад, "
-                                f"интервал: {config['MIN_CHECK_INTERVAL']} сек)")
+                if not force_check and not UpdatesModule.should_check_updates(project_name, config):
+                    message = (f"Проверка пропущена: {project_name} "
+                              f"(обновлялся {last_update_seconds:.0f} сек назад, "
+                              f"интервал: {config['MIN_CHECK_INTERVAL']} сек)")
+                    UpdatesModule._log_update(update_id, message)
                     continue
                     
-                logger.info(f"Начало проверки: {project_name} "
-                            f"(последняя проверка: {last_update_seconds:.0f} сек назад)")
+                message = (f"Начало проверки: {project_name} "
+                          f"(последняя проверка: {last_update_seconds:.0f} сек назад)")
+                UpdatesModule._log_update(update_id, message)
                 
                 # Формирование путей для проекта
                 project_paths = {
@@ -101,29 +107,34 @@ class UpdatesModule(BaseModule):
 
                 # Скачивание и распаковка архива
                 projects_updates[project_name] = {}
-                projects_updates[project_name]['EXTRACTED_HASHES'] = cls._download_and_extract(
+                UpdatesModule._log_update(update_id, f"Скачивание архива для проекта {project_name}")
+                projects_updates[project_name]['EXTRACTED_HASHES'] = UpdatesModule._download_and_extract(
                     url=project_config['DOWNLOAD_URL'],
                     extract_dir=project_paths['EXTRACTED_DIR'],
-                    config=config
+                    config=config,
+                    update_id=update_id
                 )
 
                 # Проверка новой установки
-                if 'CRITICAL_FILES' in project_config and cls._is_new_installation(project_config):
-                    logger.info(f"Обнаружена новая установка: {project_name}")
+                if 'CRITICAL_FILES' in project_config and UpdatesModule._is_new_installation(project_config):
+                    UpdatesModule._log_update(update_id, f"Обнаружена новая установка: {project_name}")
                     shutil.copytree(
                         project_paths['EXTRACTED_DIR'],
                         project_paths['BASE_PATH'],
                         dirs_exist_ok=True
                     )
                     # Обновляем состояние после установки
-                    cls._update_state_file(project_name, config)
+                    UpdatesModule._update_state_file(project_name, config)
+                    UpdatesModule._add_to_history(project_name, "new_installation", "Новая установка проекта", config)
                     continue  # Переходим к следующему проекту
 
                 # Получение текущих хешей
-                projects_updates[project_name]['CURRENT_HASHES'] = cls._get_current_hashes(project_config)
+                UpdatesModule._log_update(update_id, f"Вычисление хешей текущих файлов проекта {project_name}")
+                projects_updates[project_name]['CURRENT_HASHES'] = UpdatesModule._get_current_hashes(project_config)
                 
                 # Поиск изменений
-                projects_updates[project_name]['CHANGES'] = cls._find_changes(
+                UpdatesModule._log_update(update_id, f"Поиск изменений в проекте {project_name}")
+                projects_updates[project_name]['CHANGES'] = UpdatesModule._find_changes(
                     old_hashes=projects_updates[project_name]['CURRENT_HASHES'],
                     new_hashes=projects_updates[project_name]['EXTRACTED_HASHES'],
                     config=project_config
@@ -131,73 +142,81 @@ class UpdatesModule(BaseModule):
 
                 # Применение изменений при их наличии
                 if any(projects_updates[project_name]['CHANGES'].values()):
-                    logger.info(f"Обнаружены изменения в проекте {project_name}")
+                    UpdatesModule._log_update(update_id, f"Обнаружены изменения в проекте {project_name}")
                     
                     # Создание резервных копий
-                    cls._create_backups(
+                    UpdatesModule._create_backups(
                         project_name=project_name,
                         config=project_config,
                         backup_dir=project_paths['BACKUPS_DIR'],
-                        updates=projects_updates[project_name]
+                        updates=projects_updates[project_name],
+                        update_id=update_id
                     )
                     
                     # Применение обновлений
-                    cls._apply_updates(
+                    UpdatesModule._apply_updates(
                         changes=projects_updates[project_name]['CHANGES'],
                         extracted_dir=project_paths['EXTRACTED_DIR'],
-                        config=project_config
+                        config=project_config,
+                        update_id=update_id
                     )
                     
                     # Обработка специальных файлов
-                    cls._handle_special_files(
+                    UpdatesModule._handle_special_files(
                         project_name=project_name,
                         config=project_config,
                         updates=projects_updates,
-                        folders=projects_folders
+                        folders=projects_folders,
+                        update_id=update_id
                     )
 
                     # Перезапуск при необходимости
                     if project_config.get('RESTART_AFTER_UPDATE', False):
-                        cls._restart_application()
+                        UpdatesModule._log_update(update_id, f"Перезапуск приложения после обновления {project_name}")
+                        UpdatesModule._restart_application()
                     
                     # Обновляем состояние после успешного обновления
-                    cls._update_state_file(project_name, config)
+                    UpdatesModule._update_state_file(project_name, config)
+                    UpdatesModule._add_to_history(project_name, "success", "Проект успешно обновлен", config)
                 else:
-                    logger.info(f"Изменений не обнаружено: {project_name}")
+                    UpdatesModule._log_update(update_id, f"Изменений не обнаружено: {project_name}")
                     # Обновляем время проверки даже если изменений нет
-                    cls._update_state_file(project_name, config)
+                    UpdatesModule._update_state_file(project_name, config)
+                    UpdatesModule._add_to_history(project_name, "no_changes", "Изменений не обнаружено", config)
 
             except Exception as e:
-                logger.error(f"Ошибка обновления {project_name}: {str(e)}")
+                error_msg = f"Ошибка обновления {project_name}: {str(e)}"
+                UpdatesModule._log_update(update_id, error_msg, level="ERROR")
+                UpdatesModule._add_to_history(project_name, "error", error_msg, config)
                 continue
 
         # Очистка устаревших файлов
-        cls._cleanup_old_files(config)
-        logger.info("=== Процесс обновления завершен ===")
+        UpdatesModule._cleanup_old_files(config)
+        UpdatesModule._log_update(update_id, "=== Процесс обновления завершен ===")
         return launch_timestamp, projects_updates, projects_folders
 
-    @classmethod
+    @staticmethod
     def _download_and_extract(
-        cls,
         url: str, 
         extract_dir: Path,
-        config: Dict
+        config: Dict,
+        update_id: str = None
     ) -> Dict[str, str]:
         """
         Скачивание и распаковка архива с проектом
         :param url: URL архива для скачивания
         :param extract_dir: Каталог для распаковки
         :param config: Конфигурация модуля
+        :param update_id: ID процесса обновления для логирования
         :return: Словарь хешей файлов {относительный_путь: хеш}
         """
-        logger = LogManager.get_logger('updates')
         archive_path = extract_dir / "temp.zip"
         file_hashes = {}
         
         # Попытки скачивания с повторами
         for attempt in range(config['MAX_RETRIES']):
             try:
-                logger.info(f"Скачивание архива (попытка {attempt+1}): {url}")
+                UpdatesModule._log_update(update_id, f"Скачивание архива (попытка {attempt+1}): {url}")
                 
                 # Загрузка файла
                 with requests.get(
@@ -215,10 +234,11 @@ class UpdatesModule(BaseModule):
                             downloaded += len(chunk)
                             if total_size > 0:
                                 progress = (downloaded / total_size) * 100
-                                logger.debug(f"Прогресс: {progress:.1f}%")
+                                progress_msg = f"Прогресс скачивания: {progress:.1f}%"
+                                UpdatesModule._log_update(update_id, progress_msg)
                 
                 # Распаковка архива
-                logger.info(f"Распаковка архива: {archive_path}")
+                UpdatesModule._log_update(update_id, f"Распаковка архива: {archive_path}")
                 with zipfile.ZipFile(archive_path, 'r') as zip_ref:
                     zip_ref.extractall(extract_dir)
                 
@@ -226,16 +246,18 @@ class UpdatesModule(BaseModule):
                     
             except Exception as e:
                 if attempt == config['MAX_RETRIES'] - 1:
-                    logger.error(f"Ошибка скачивания/распаковки: {str(e)}")
+                    error_msg = f"Ошибка скачивания/распаковки: {str(e)}"
+                    UpdatesModule._log_update(update_id, error_msg, level="ERROR")
                     raise
-                logger.warning(f"Ошибка попытки {attempt+1}: {str(e)}")
+                warning_msg = f"Ошибка попытки {attempt+1}: {str(e)}"
+                UpdatesModule._log_update(update_id, warning_msg, level="WARNING")
             finally:
                 # Всегда удаляем временный архив
                 if archive_path.exists():
                     archive_path.unlink()
 
         # Вычисление хешей распакованных файлов
-        logger.info("Вычисление хешей файлов...")
+        UpdatesModule._log_update(update_id, "Вычисление хешей файлов...")
         for root, _, files in os.walk(extract_dir):
             for file in files:
                 file_path = Path(root) / file
@@ -244,7 +266,8 @@ class UpdatesModule(BaseModule):
                 with open(file_path, 'rb') as f:
                     file_hashes[str(rel_path)] = hashlib.sha256(f.read()).hexdigest()
         
-        logger.info(f"Распаковано файлов: {len(file_hashes)}")
+        message = f"Распаковано файлов: {len(file_hashes)}"
+        UpdatesModule._log_update(update_id, message)
         return file_hashes
 
     @staticmethod
@@ -306,7 +329,8 @@ class UpdatesModule(BaseModule):
         project_name: str, 
         config: Dict, 
         backup_dir: Path, 
-        updates: Dict
+        updates: Dict,
+        update_id: str = None
     ) -> None:
         """
         Создание резервных копий изменяемых файлов
@@ -314,12 +338,13 @@ class UpdatesModule(BaseModule):
         :param config: Конфигурация проекта
         :param backup_dir: Каталог для резервных копий
         :param updates: Данные обновлений
+        :param update_id: ID процесса обновления для логирования
         """
-        logger = LogManager.get_logger('updates')
         base_path = Path(config['BASE_PATH'])
         log_file = backup_dir / "backup.log"
         
-        logger.info(f"Создание резервных копий в: {backup_dir}")
+        message = f"Создание резервных копий в: {backup_dir}"
+        UpdatesModule._log_update(update_id, message)
         
         with open(log_file, 'w') as log:
             log.write(f"Резервное копирование начато: {datetime.now()}\n")
@@ -343,21 +368,23 @@ class UpdatesModule(BaseModule):
                         shutil.copy2(path, dst)
                         log.write(f"Доп. копия: {rel_path}\n")
         
-        logger.info(f"Резервные копии созданы: {len(updates['CURRENT_HASHES'])} файлов")
+        message = f"Резервные копии созданы: {len(updates['CURRENT_HASHES'])} файлов"
+        UpdatesModule._log_update(update_id, message)
 
     @staticmethod
     def _apply_updates(
         changes: Dict, 
         extracted_dir: Path, 
-        config: Dict
+        config: Dict,
+        update_id: str = None
     ) -> None:
         """
         Применение обновлений к файлам проекта
         :param changes: Обнаруженные изменения
         :param extracted_dir: Каталог с новыми файлами
         :param config: Конфигурация проекта
+        :param update_id: ID процесса обновления для логирования
         """
-        logger = LogManager.get_logger('updates')
         base_path = Path(config['BASE_PATH'])
         
         # Копирование новых и измененных файлов
@@ -366,38 +393,40 @@ class UpdatesModule(BaseModule):
             dst = base_path / rel_path
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
-            logger.debug(f"Обновлен: {rel_path}")
+            UpdatesModule._log_update(update_id, f"Обновлен: {rel_path}")
             
         # Удаление отсутствующих в новой версии файлов
         for entry in changes['removed']:
             target = base_path / entry['path']
             if target.exists():
                 target.unlink()
-                logger.debug(f"Удален: {entry['path']}")
+                UpdatesModule._log_update(update_id, f"Удален: {entry['path']}")
         
-        logger.info(f"Применено обновлений: "
-                    f"+{len(changes['new'])} "
-                    f"~{len(changes['updated'])} "
-                    f"-{len(changes['removed'])}")
+        message = (f"Применено обновлений: "
+                  f"+{len(changes['new'])} "
+                  f"~{len(changes['updated'])} "
+                  f"-{len(changes['removed'])}")
+        UpdatesModule._log_update(update_id, message)
 
     @staticmethod
     def _handle_special_files(
         project_name: str, 
         config: Dict, 
         updates: Dict, 
-        folders: Dict
+        folders: Dict,
+        update_id: str = None
     ) -> None:
         """
-        Обработка файлов с особыми функциями обновления
+        Обработка файлов с особыми функции обновления
         :param project_name: Имя проекта
         :param config: Конфигурация проекта
         :param updates: Данные обновлений
         :param folders: Пути к файлам проекта
+        :param update_id: ID процесса обновления для логирования
         """
         if 'FUNCTIONS_IF_UPDATE' not in config:
             return
             
-        logger = LogManager.get_logger('updates')
         special_files = config['FUNCTIONS_IF_UPDATE']
         
         # Обработка только измененных файлов
@@ -413,9 +442,11 @@ class UpdatesModule(BaseModule):
                         projects_updates=updates[project_name],
                         projects_folders=folders[project_name]
                     )
-                    logger.info(f"Выполнена спец.функция {func_name} для {rel_path}")
+                    message = f"Выполнена спец.функция {func_name} для {rel_path}"
+                    UpdatesModule._log_update(update_id, message)
                 except Exception as e:
-                    logger.error(f"Ошибка спец.функции {func_name} ({rel_path}): {str(e)}")
+                    error_msg = f"Ошибка спец.функции {func_name} ({rel_path}): {str(e)}"
+                    UpdatesModule._log_update(update_id, error_msg, level="ERROR")
 
     @staticmethod
     def _is_new_installation(config: Dict) -> bool:
@@ -468,7 +499,6 @@ class UpdatesModule(BaseModule):
         Очистка устаревших временных файлов
         :param config: Конфигурация модуля
         """
-        logger = LogManager.get_logger('updates')
         base_temp_dir = Path(config['BASE_TEMP_DIR'])
         cutoff_date = datetime.now() - timedelta(days=config['CLEANUP_DAYS'])
         removed_count = 0
@@ -492,25 +522,21 @@ class UpdatesModule(BaseModule):
                         if dir_date < cutoff_date:
                             shutil.rmtree(version_dir)
                             removed_count += 1
-                            logger.debug(f"Удален устаревший каталог: {version_dir}")
                     except ValueError:
                         continue
         
         if removed_count > 0:
-            logger.info(f"Очищено устаревших каталогов: {removed_count}")
+            UpdatesModule._log_update(None, f"Очищено устаревших каталогов: {removed_count}")
 
     @staticmethod
     def _restart_application() -> None:
         """Перезапуск приложения после обновления"""
-        logger = LogManager.get_logger('updates')
-        logger.info("Инициирован перезапуск приложения...")
         python = sys.executable
         subprocess.Popen([python] + sys.argv + ['--after-update'])
         sys.exit()
 
-    @classmethod
+    @staticmethod
     def check_and_update_project(
-        cls,
         project_name: str,
         projects_config: Dict,
         module_config: Dict = None,
@@ -527,12 +553,9 @@ class UpdatesModule(BaseModule):
         if project_name not in projects_config:
             return False
             
-        config = {**cls.DEFAULT_CONFIG, **(module_config or {})}
-        logger = LogManager.get_logger('updates')
+        config = {**UpdatesModule.DEFAULT_CONFIG, **(module_config or {})}
         
-        if not force and not cls.should_check_updates(project_name, config):
-            time_passed = cls.time_since_last_update(project_name, config)
-            logger.info(f"Проверка не требуется: {project_name}. Последнее обновление: {time_passed}")
+        if not force and not UpdatesModule.should_check_updates(project_name, config):
             return False
             
         try:
@@ -540,18 +563,17 @@ class UpdatesModule(BaseModule):
             project_config = {project_name: projects_config[project_name]}
             
             # Запускаем процесс обновления
-            cls.start_updates_projects(
+            UpdatesModule.start_updates_projects(
                 projects_config=project_config,
                 module_config=module_config,
                 force_check=True
             )
             return True
         except Exception as e:
-            logger.error(f"Ошибка при обновлении {project_name}: {str(e)}")
             return False
 
-    @classmethod
-    def get_last_update_time(cls, project_name: str, config: Dict) -> Optional[datetime]:
+    @staticmethod
+    def get_last_update_time(project_name: str, config: Dict) -> Optional[datetime]:
         """
         Получение времени последнего обновления проекта
         :param project_name: Имя проекта
@@ -570,33 +592,33 @@ class UpdatesModule(BaseModule):
         except:
             return None
 
-    @classmethod
-    def seconds_since_last_update(cls, project_name: str, config: Dict) -> float:
+    @staticmethod
+    def seconds_since_last_update(project_name: str, config: Dict) -> float:
         """
         Вычисление секунд, прошедших с последнего обновления
         :param project_name: Имя проекта
         :param config: Конфигурация модуля
         :return: Количество секунд (0 если обновлений не было)
         """
-        last_update = cls.get_last_update_time(project_name, config)
+        last_update = UpdatesModule.get_last_update_time(project_name, config)
         if not last_update:
             return 0
         return (datetime.now() - last_update).total_seconds()
 
-    @classmethod
-    def should_check_updates(cls, project_name: str, config: Dict) -> bool:
+    @staticmethod
+    def should_check_updates(project_name: str, config: Dict) -> bool:
         """
         Проверка необходимости проверки обновлений
         :param project_name: Имя проекта
         :param config: Конфигурация модуля
         :return: True если проверка требуется
         """
-        seconds_passed = cls.seconds_since_last_update(project_name, config)
+        seconds_passed = UpdatesModule.seconds_since_last_update(project_name, config)
         min_interval = config['MIN_CHECK_INTERVAL']
         return seconds_passed >= min_interval
 
-    @classmethod
-    def _update_state_file(cls, project_name: str, config: Dict) -> None:
+    @staticmethod
+    def _update_state_file(project_name: str, config: Dict) -> None:
         """
         Обновление файла состояния после успешной проверки
         :param project_name: Имя проекта
@@ -619,3 +641,133 @@ class UpdatesModule(BaseModule):
         state_file.parent.mkdir(parents=True, exist_ok=True)
         with open(state_file, 'w') as f:
             json.dump(state, f, indent=2)
+
+    @staticmethod
+    def _init_logging(config: Dict) -> None:
+        """
+        Инициализация системы логирования
+        :param config: Конфигурация модуля
+        """
+        log_dir = Path(config['LOG_DIR'])
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Настройка базового логирования
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_dir / 'updates.log'),
+                logging.StreamHandler(sys.stdout)
+            ]
+        )
+
+    @staticmethod
+    def _log_update(update_id: str, message: str, level: str = "INFO") -> None:
+        """
+        Запись сообщения в лог обновления
+        :param update_id: ID процесса обновления
+        :param message: Сообщение для записи
+        :param level: Уровень логирования
+        """
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_message = f"[{timestamp}] [{level}] {message}"
+        
+        if update_id:
+            log_message = f"[{update_id}] {log_message}"
+        
+        # Запись в лог
+        logger = logging.getLogger('updates')
+        if level == "ERROR":
+            logger.error(log_message)
+        elif level == "WARNING":
+            logger.warning(log_message)
+        else:
+            logger.info(log_message)
+            
+        # Также записываем в отдельный файл для данного обновления
+        if update_id:
+            log_dir = Path(UpdatesModule.DEFAULT_CONFIG['LOG_DIR'])
+            update_log_file = log_dir / f"{update_id}.log"
+            with open(update_log_file, 'a') as f:
+                f.write(f"{log_message}\n")
+
+    @staticmethod
+    def _add_to_history(project_name: str, status: str, message: str, config: Dict) -> None:
+        """
+        Добавление записи в историю обновлений
+        :param project_name: Имя проекта
+        :param status: Статус обновления
+        :param message: Сообщение
+        :param config: Конфигурация модуля
+        """
+        history_file = Path(config['HISTORY_FILE'])
+        history = []
+        
+        if history_file.exists():
+            try:
+                with open(history_file, 'r') as f:
+                    history = json.load(f)
+            except:
+                pass
+        
+        history.append({
+            'project': project_name,
+            'timestamp': datetime.now().isoformat(),
+            'status': status,
+            'message': message
+        })
+        
+        # Ограничиваем историю последними 100 записями
+        history = history[-100:]
+        
+        history_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(history_file, 'w') as f:
+            json.dump(history, f, indent=2)
+
+    @staticmethod
+    def get_update_history(project_name: str = None, config: Dict = None) -> List[Dict]:
+        """
+        Получение истории обновлений
+        :param project_name: Имя проекта для фильтрации (опционально)
+        :param config: Конфигурация модуля
+        :return: Список записей истории
+        """
+        if config is None:
+            config = UpdatesModule.DEFAULT_CONFIG
+            
+        history_file = Path(config['HISTORY_FILE'])
+        history = []
+        
+        if history_file.exists():
+            try:
+                with open(history_file, 'r') as f:
+                    history = json.load(f)
+            except:
+                pass
+        
+        if project_name:
+            history = [item for item in history if item['project'] == project_name]
+        
+        return history
+
+    @staticmethod
+    def get_update_log(update_id: str, config: Dict = None) -> str:
+        """
+        Получение лога конкретного обновления
+        :param update_id: ID обновления
+        :param config: Конфигурация модуля
+        :return: Содержимое лог-файла
+        """
+        if config is None:
+            config = UpdatesModule.DEFAULT_CONFIG
+            
+        log_file = Path(config['LOG_DIR']) / f"{update_id}.log"
+        
+        if not log_file.exists():
+            return "Лог-файл не найден"
+        
+        try:
+            with open(log_file, 'r') as f:
+                return f.read()
+        except Exception as e:
+            return f"Ошибка чтения лог-файла: {str(e)}"
