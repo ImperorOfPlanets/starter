@@ -431,6 +431,26 @@ translations = {
             'basic': {
                 'title': 'Обновления',
                 'description': 'Информация об обновления'
+            },
+            'index':{
+                'updates_status_title': 'Статус обновлений',
+                'check_updates': 'Проверить обновления',
+                'update_status': 'Статус обновлений',
+                'project': 'Проект',
+                'last_update': 'Последнее обновление',
+                'status': 'Статус',
+                'actions': 'Действия',
+                'never_updated': 'Никогда не обновлялся',
+                'update_now': 'Обновить сейчас',
+                'checking': 'Проверка...',
+                'updating': 'Обновление...',
+                'up_to_date': 'Актуально',
+                'recently_updated': 'Недавно обновлено',
+                'update_available': 'Доступно обновление',
+                'updates_check_success': 'Обновления проверены успешно',
+                'project_not_found': 'Проект не найден',
+                'update_success': 'Обновление успешно',
+                'update_failed': 'Обновление не удалось'
             }
         },
    
@@ -492,6 +512,8 @@ translations = {
                 "status": "Статус"
             }
         },
+
+        # ==================== SETTINGS ====================
         'settings': {
             'basic': {
                 'title': "Настройки",
