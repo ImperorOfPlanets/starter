@@ -1,16 +1,18 @@
-import json
-import logging
-
-from flask import render_template, jsonify, request
+from flask import render_template, jsonify, request, send_file
 from datetime import datetime
 from pathlib import Path
+import json
+import logging
+import threading
+import uuid
 
 from starter_files.core.utils.i18n_utils import t
 from starter_files.core.oss.default.updates import UpdatesModule
 from starter_files.configs.configs import PROJECTS
+from starter_files.core.utils.log_utils import LogManager
 
 # Настройка логирования
-logger = logging.getLogger(__name__)
+logger = LogManager.get_logger(__name__)
 
 # Конфигурация модуля для панели управления
 this_section_in_control_panel = True
@@ -18,9 +20,13 @@ section_icon = "bi-cloud-arrow-down"
 section_name = "Updates"
 section_order = 10
 
+# Путь к директории логов обновлений
+UPDATE_LOGS_DIR = Path(__file__).parent.parent.parent.parent / 'starter_files' / 'logs' / 'updates'
+UPDATE_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
 def index(data, session):
     """Главная страница модуля обновлений"""
-    update_status = get_update_status_list()  # Changed here
+    update_status = get_update_status_list()
     return render_template(
         'sections/updates/index.html',
         t=t,
@@ -81,25 +87,48 @@ def update_project(data, session):
     if project_name not in PROJECTS:
         return jsonify({'success': False, 'message': t('project_not_found')})
     
-    try:
-        # Получаем конфиг с правильным путем к файлу состояния
-        config = get_updates_config()
-        
-        # Запускаем обновление и получаем update_id
-        timestamp, updates, folders = UpdatesModule.start_updates_projects(
-            projects_config={project_name: PROJECTS[project_name]},
-            module_config=config,
-            force_check=True  # Исправлено с force на force_check
-        )
-        
-        return jsonify({
-            'success': True, 
-            'message': t('update_success'),
-            'update_id': f"update_{timestamp}"
-        })
-    except Exception as e:
-        logger.error(f"Error updating project {project_name}: {str(e)}")
-        return jsonify({'success': False, 'message': str(e)})
+    # Создание уникального ID обновления
+    update_id = str(uuid.uuid4())
+    log_file_path = UPDATE_LOGS_DIR / f"update_{project_name}_{update_id}.log"
+    
+    # Запуск обновления в отдельном потоке
+    def run_update():
+        try:
+            config = get_updates_config()
+            
+            # Записываем начало обновления в лог
+            with open(log_file_path, 'w') as f:
+                f.write(f"=== Начало обновления проекта {project_name} ===\n")
+                f.write(f"Время начала: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            
+            # Запускаем обновление
+            timestamp, updates, folders = UpdatesModule.start_updates_projects(
+                projects_config={project_name: PROJECTS[project_name]},
+                module_config=config,
+                force_check=True
+            )
+            
+            # Записываем успешное завершение
+            with open(log_file_path, 'a') as f:
+                f.write(f"=== Обновление завершено успешно ===\n")
+                f.write(f"Время завершения: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                
+        except Exception as e:
+            # Записываем ошибку в лог
+            with open(log_file_path, 'a') as f:
+                f.write(f"\nОШИБКА: {str(e)}\n")
+            logger.error(f"Error updating project {project_name}: {str(e)}")
+    
+    thread = threading.Thread(target=run_update)
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'success': True, 
+        'message': t('update_started'),
+        'update_id': update_id,
+        'project': project_name
+    })
 
 def get_project_details(data, session):
     """Получение детальной информации о проекте"""
@@ -131,83 +160,56 @@ def get_project_details(data, session):
     
     return jsonify({'success': True, 'project_info': project_info})
 
-def get_updates_config():
-    """Получение конфигурации с правильным путем к файлу состояния"""
-    config = UpdatesModule.DEFAULT_CONFIG.copy()
-    
-    # Устанавливаем правильные пути к файлам
-    script_path = Path(__file__).resolve().parent.parent.parent.parent
-    state_file_path = script_path / 'starter_files' / 'update_state.json'
-    history_file_path = script_path / 'starter_files' / 'update_history.json'
-    
-    config['STATE_FILE'] = str(state_file_path)
-    config['HISTORY_FILE'] = str(history_file_path)
-    
-    # Создаем директорию, если она не существует
-    state_file_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Создаем файлы, если они не существуют
-    if not state_file_path.exists():
-        with open(state_file_path, 'w') as f:
-            json.dump({}, f)
-    
-    if not history_file_path.exists():
-        with open(history_file_path, 'w') as f:
-            json.dump([], f)
-    
-    return config
-
-def get_update_logs(data, session):
-    """Получение логов процесса обновления"""
+def get_update_log(data, session):
+    """Получение лога обновления"""
     update_id = data.get('update_id')
-    if not update_id:
-        return jsonify({'success': False, 'message': 'Update ID required'})
+    project = data.get('project')
+    
+    if not update_id or not project:
+        return jsonify({'success': False, 'message': 'Update ID and project required'})
+    
+    log_file_path = UPDATE_LOGS_DIR / f"update_{project}_{update_id}.log"
+    
+    if not log_file_path.exists():
+        return jsonify({'success': False, 'message': 'Log file not found', 'logs': ''})
     
     try:
-        logs = UpdatesModule.get_update_logs(update_id)
-        return jsonify({'success': True, 'logs': logs})
+        with open(log_file_path, 'r') as f:
+            logs = f.read()
+        
+        # Проверяем, завершено ли обновление
+        completed = "=== Обновление завершено успешно ===" in logs or "ОШИБКА:" in logs
+        
+        return jsonify({
+            'success': True,
+            'logs': logs,
+            'completed': completed
+        })
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        return jsonify({'success': False, 'message': str(e), 'logs': ''})
 
-def get_update_status(data, session):
-    """Получение статуса процесса обновления"""
+def download_update_log(data, session):
+    """Скачивание лога обновления"""
     update_id = data.get('update_id')
-    if not update_id:
-        return jsonify({'success': False, 'message': 'Update ID required'})
+    project = data.get('project')
+    
+    if not update_id or not project:
+        return "Update ID and project required", 400
+    
+    log_file_path = UPDATE_LOGS_DIR / f"update_{project}_{update_id}.log"
+    
+    if not log_file_path.exists():
+        return "Log file not found", 404
     
     try:
-        status = UpdatesModule.get_update_status(update_id)
-        return jsonify({'success': True, 'status': status})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
-
-def start_update_all_async(data, session):
-    """Асинхронный запуск обновления всех проектов"""
-    try:
-        from starter_files.configs.configs import PROJECTS
-        update_id = UpdatesModule.start_update_in_thread(
-            projects_config=PROJECTS,
-            force_check=True
+        return send_file(
+            log_file_path,
+            as_attachment=True,
+            download_name=f"update_{project}_{update_id}.log",
+            mimetype='text/plain'
         )
-        return jsonify({'success': True, 'update_id': update_id})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
-
-def start_update_project_async(data, session):
-    """Асинхронный запуск обновления конкретного проекта"""
-    project_name = data.get('project')
-    if project_name not in PROJECTS:
-        return jsonify({'success': False, 'message': 'Project not found'})
-    
-    try:
-        project_config = {project_name: PROJECTS[project_name]}
-        update_id = UpdatesModule.start_update_in_thread(
-            projects_config=project_config,
-            force_check=True
-        )
-        return jsonify({'success': True, 'update_id': update_id, 'project': project_name})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        return str(e), 500
 
 def get_project_history(data, session):
     """Получение истории обновлений проекта"""
@@ -224,15 +226,30 @@ def get_project_history(data, session):
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
-def get_update_log(data, session):
-    """Получение лога конкретного обновления"""
-    update_id = data.get('update_id')
-    if not update_id:
-        return jsonify({'success': False, 'message': 'Update ID required'})
+def get_updates_config():
+    """Получение конфигурации с правильным путем к файлу состояния"""
+    config = UpdatesModule.DEFAULT_CONFIG.copy()
     
-    try:
-        config = get_updates_config()
-        log_content = UpdatesModule.get_update_log(update_id, config)
-        return jsonify({'success': True, 'log': log_content})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+    # Устанавливаем правильные пути к файлам
+    script_path = Path(__file__).resolve().parent.parent.parent.parent
+    update_files_dir = script_path / 'starter_files' / 'update_files'
+    
+    # Создаем директорию, если она не существует
+    update_files_dir.mkdir(parents=True, exist_ok=True)
+    
+    state_file_path = update_files_dir / 'update_state.json'
+    history_file_path = update_files_dir / 'update_history.json'
+    
+    config['STATE_FILE'] = str(state_file_path)
+    config['HISTORY_FILE'] = str(history_file_path)
+    
+    # Создаем файлы состояния и истории, если они не существуют
+    if not state_file_path.exists():
+        with open(state_file_path, 'w') as f:
+            json.dump({}, f)
+    
+    if not history_file_path.exists():
+        with open(history_file_path, 'w') as f:
+            json.dump([], f)
+    
+    return config

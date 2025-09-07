@@ -118,6 +118,9 @@
                 <button type="button" class="btn btn-primary" id="refreshLogBtn">
                     <i class="bi bi-arrow-repeat"></i> Обновить лог
                 </button>
+                <button type="button" class="btn btn-success" id="downloadLogBtn">
+                    <i class="bi bi-download"></i> Скачать лог
+                </button>
             </div>
         </div>
     </div>
@@ -416,30 +419,34 @@ $(document).ready(function() {
             .then(function(data) {
                 console.log('Update project response:', data);
                 if (data.success) {
-                    // Сохраняем ID обновления для последующего получения логов
+                    // Сохраняем ID обновления и имя проекта
                     window.currentUpdateId = data.update_id;
+                    window.currentProject = data.project;
                     
                     // Функция для получения и обновления лога
                     var updateLog = function() {
-                        postFormData('get_update_log', { update_id: data.update_id })
+                        postFormData('get_update_log', { 
+                            update_id: window.currentUpdateId,
+                            project: window.currentProject
+                        })
                             .then(function(logData) {
                                 if (logData.success) {
-                                    $('#updateLogContent pre').text(logData.log);
+                                    $('#updateLogContent pre').text(logData.logs);
                                     $('#updateLogContent').show();
                                     
                                     // Автоскролл к последней записи
                                     var logPre = $('#updateLogContent pre');
                                     logPre.scrollTop(logPre[0].scrollHeight);
                                     
-                                    // Если обновление еще продолжается, продолжаем обновлять лог
-                                    if (logData.log.includes('=== Процесс обновления завершен ===') || 
-                                        logData.log.includes('FATAL ERROR') ||
-                                        logData.log.includes('Ошибка обновления')) {
-                                        // Обновление завершено, останавливаем интервал
+                                    // Если обновление завершено, останавливаем интервал
+                                    if (logData.completed) {
                                         clearInterval(logInterval);
                                         $('#logLoadingSpinner').hide();
                                         $btn.prop('disabled', false);
                                         $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
+                                        
+                                        // Обновляем историю обновлений
+                                        loadProjectHistory();
                                     }
                                 } else {
                                     $('#updateLogContent pre').text('Ошибка загрузки лога: ' + logData.message);
@@ -469,6 +476,33 @@ $(document).ready(function() {
                     // Обработчик кнопки обновления лога
                     $('#refreshLogBtn').off('click').on('click', updateLog);
                     
+                    // Обработчик кнопки скачивания лога
+                    $('#downloadLogBtn').off('click').on('click', function() {
+                        var form = document.createElement('form');
+                        form.method = 'POST';
+                        form.action = '/';
+                        form.style.display = 'none';
+                        
+                        const params = {
+                            'section': 'updates',
+                            'action': 'download_update_log',
+                            'update_id': window.currentUpdateId,
+                            'project': window.currentProject
+                        };
+                        
+                        for (const [key, value] of Object.entries(params)) {
+                            const input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = key;
+                            input.value = value;
+                            form.appendChild(input);
+                        }
+                        
+                        document.body.appendChild(form);
+                        form.submit();
+                        document.body.removeChild(form);
+                    });
+                    
                     // Останавливаем интервал при закрытии модального окна
                     $('#updateLogModal').on('hidden.bs.modal', function() {
                         clearInterval(logInterval);
@@ -489,8 +523,7 @@ $(document).ready(function() {
                 $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
                 updateLogModal.hide();
             });
-    });
-    
+    }); 
     console.log('Update section initialized successfully');
 });
 </script>
