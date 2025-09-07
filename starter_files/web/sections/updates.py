@@ -89,7 +89,7 @@ def update_project(data, session):
         timestamp, updates, folders = UpdatesModule.start_updates_projects(
             projects_config={project_name: PROJECTS[project_name]},
             module_config=config,
-            force=True
+            force_check=True  # Исправлено с force на force_check
         )
         
         return jsonify({
