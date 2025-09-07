@@ -96,9 +96,15 @@
         <div class="card">
             <div class="card-header">
                 <i class="bi bi-clock-history me-2"></i> История обновлений
-                <button class="btn btn-sm btn-outline-primary float-end" id="refresh-history-btn">
-                    <i class="bi bi-arrow-repeat"></i> Обновить
-                </button>
+                <div class="float-end">
+                    <select class="form-select form-select-sm d-inline-block me-2" 
+                            id="project-selector" style="width: 200px;">
+                        <option value="all">Все проекты</option>
+                    </select>
+                    <button class="btn btn-sm btn-outline-primary" id="refresh-history-btn">
+                        <i class="bi bi-arrow-repeat"></i> Обновить
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -113,7 +119,11 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- История будет загружена через JavaScript -->
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">
+                                    Загрузка истории...
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -203,11 +213,89 @@ $('#refresh-history-btn').on('click', function() {
 
 // Загружаем историю при открытии страницы
 $(document).ready(function() {
-    loadProjectHistory('all'); // или выбранный проект
+    // Сначала загружаем список проектов для селектора
+    loadProjectsForSelector();
+    // Затем загружаем историю всех проектов
+    loadProjectHistory('all');
+});
+
+function loadProjectsForSelector() {
+    const projects = {{ update_status|tojson }};
+    const selector = $('#project-selector');
+    
+    selector.empty();
+    selector.append('<option value="all">Все проекты</option>');
+    
+    projects.forEach(project => {
+        selector.append(`<option value="${project.name}">${project.name}</option>`);
+    });
+}
+
+function loadProjectHistory(projectName) {
+    $.ajax({
+        url: '/',
+        method: 'POST',
+        data: {
+            'section': 'updates',
+            'action': 'get_project_history',
+            'project': projectName
+        },
+        success: function(response) {
+            if (response.success) {
+                const historyTable = $('#history-table tbody');
+                historyTable.empty();
+                
+                if (response.history && response.history.length > 0) {
+                    response.history.forEach(item => {
+                        const row = `
+                            <tr>
+                                <td>${item.project}</td>
+                                <td>${new Date(item.timestamp).toLocaleString()}</td>
+                                <td><span class="badge bg-${getStatusColor(item.status)}">${item.status}</span></td>
+                                <td>${item.message}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-info view-log-btn" data-update-id="${item.timestamp}">
+                                        <i class="bi bi-file-text"></i> Лог
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                        historyTable.append(row);
+                    });
+                } else {
+                    historyTable.append(`
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">
+                                История обновлений отсутствует
+                            </td>
+                        </tr>
+                    `);
+                }
+            } else {
+                alert('Ошибка загрузки истории: ' + response.message);
+            }
+        },
+        error: function(xhr, status, error) {
+            alert('Ошибка сети при загрузке истории: ' + error);
+        }
+    });
+}
+
+
+// Обработчик изменения селектора проектов
+$('#project-selector').on('change', function() {
+    const selectedProject = $(this).val();
+    loadProjectHistory(selectedProject);
+});
+
+// Обработчик для кнопки обновления истории
+$('#refresh-history-btn').on('click', function() {
+    const selectedProject = $('#project-selector').val();
+    loadProjectHistory(selectedProject);
 });
 </script>
 
-<!-- Добавьте модальное окно для просмотра логов -->
+            <!-- Добавьте модальное окно для просмотра логов -->
 <div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">

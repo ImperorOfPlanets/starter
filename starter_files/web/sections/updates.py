@@ -202,12 +202,21 @@ def start_update_project_async(data, session):
 def get_project_history(data, session):
     """Получение истории обновлений проекта"""
     project_name = data.get('project')
-    if not project_name or project_name not in PROJECTS:
-        return jsonify({'success': False, 'message': 'Project not found'})
     
     try:
         config = get_updates_config()
-        history = UpdatesModule.get_update_history(project_name, config)
+        
+        # Если project_name = 'all', возвращаем историю всех проектов
+        if project_name == 'all':
+            history = UpdatesModule.get_update_history(None, config)
+        elif project_name and project_name in PROJECTS:
+            history = UpdatesModule.get_update_history(project_name, config)
+        else:
+            return jsonify({
+                'success': False, 
+                'message': 'Project not found or invalid project name'
+            })
+        
         return jsonify({'success': True, 'history': history})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})

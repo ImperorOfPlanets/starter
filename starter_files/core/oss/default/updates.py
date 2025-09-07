@@ -728,7 +728,7 @@ class UpdatesModule(BaseModule):
     def get_update_history(project_name: str = None, config: Dict = None) -> List[Dict]:
         """
         Получение истории обновлений
-        :param project_name: Имя проекта для фильтрации (опционально)
+        :param project_name: Имя проекта для фильтрации (None для всех проектов)
         :param config: Конфигурация модуля
         :return: Список записей истории
         """

@@ -1,3 +1,188 @@
+##starter_files\configs\configs.py
+<code>
+"""
+КОНФИГУРАЦИОННЫЙ ФАЙЛ СИСТЕМЫ ОБНОВЛЕНИЯ
+
+Структура конфига:
+1. PROJECTS - словарь проектов для обновления
+2. BASE_DIRS - базовые директории системы
+3. Настройки ограничений запусков
+4. Флаги логирования
+"""
+
+# ========================
+# 1. НАСТРОЙКИ ПРОЕКТОВ
+# ========================
+PROJECTS = {
+    'starter': {
+        # URL для скачивания архива проекта (обязательный параметр)
+        'DOWNLOAD_URL':'http://gitflic.myidon.site/project/adminuser/starter/file/downloadAll?branch=master&format=zip',
+        
+        # Шаблоны файлов для отслеживания изменений (обязательный параметр)
+        # Формат: список строк с glob-шаблонами
+        'TARGETS': [
+            #'.gitignore',
+            'codereaderForAIv2.py',
+            'README.md',
+            'requirements.txt',
+            'starter.py',
+            'starter_files/*'
+        ],
+        'IGNORED': [
+            'starter_files/execute.log'
+        ],
+        # Базовый путь проекта (относительно корня системы) (обязательный)
+        'BASE_PATH':'.',
+        
+        # Автоматически перезапускать приложение после обновления (опционально)
+        'RESTART_AFTER_UPDATE': True
+    },
+    
+    'docker': {
+        'DOWNLOAD_URL':'http://gitflic.myidon.site/project/adminuser/docker/file/downloadAll?branch=master&format=zip',
+        
+        'TARGETS': [
+            'configs/init/*',
+            'configs/mariadb/mariadb.cnf',
+            'configs/mariadb/conf.d/logging.cnf',
+            'configs/nginx/confs/templates/default.conf.template',
+            'configs/php/cli/*',
+            'configs/php/fpm/*',
+            'configs/scripts/*',
+            'configs/supervisor/supervisord.conf',
+            'configs/transformer/app.py',
+            'configs/transformer/requirements.txt',
+            'configs/transformer/start.sh',
+            'dockerfiles/*',
+            '.env.example',
+            '.gitignore',
+            'Инструкция',
+            'check_files.py',
+            'codereaderForAIv2.py',
+            'docker-compose.example',
+            'generate_compose.py'
+        ],
+
+        # Шаблоны файлов для ИГНОРИРОВАНИЯ при проверке изменений (опционально)
+        'IGNORED': [
+            'configs/vpn/*',
+            'configs/nginx/certs/*',
+            'logs',
+            '.env'
+        ],
+        # Дополнительные файлы для включения в бэкапы (опционально)
+        'ADD_IN_BACKUPS': [
+            'configs/vpn',
+            'configs/nginx',
+            'logs',
+            'shared',
+            '.env'
+        ],
+        # Критические файлы для docker-проекта, если их нет то считается новой установкой
+        'CRITICAL_FILES': [
+            'docker-compose.example'
+        ],
+        'BASE_PATH':'docker',
+        'RESTART_AFTER_UPDATE': True,
+        
+        # Специальные функции для обработки обновлений (опционально)
+        # Формат: {'относительный_путь': 'имя_функции'}
+        'FUNCTIONS_IF_UPDATE': {
+            '.env.example': 'copy_environment_variables'
+        }
+    }
+}
+
+# ========================
+# 2. БАЗОВЫЕ ДИРЕКТОРИИ
+# ========================
+BASE_DIRS = {
+    # Директория для распаковки скачанных архивов
+    'extracted': './extracted',
+    
+    # Директория для хранения резервных копий перед обновлением
+    'backups': './backups'
+}
+
+# ==============================
+# 3. НАСТРОЙКИ ОГРАНИЧЕНИЙ ЗАПУСКОВ
+# ==============================
+from pathlib import Path
+
+# Максимальное количество запусков системы за период
+MAX_RUNS_PER_PERIOD = 5
+
+# Длительность периода контроля в минутах
+PERIOD_MINUTES = 5
+
+# Файл для записи логов запусков (формат: timestamp)
+EXECUTION_LOG_FILE = Path('starter_files') / 'logs' / 'execute.log'
+
+# ========================
+# 4. НАСТРОЙКИ ЛОГИРОВАНИЯ
+# ========================
+
+# Логировать процесс распаковки архивов (список файлов)
+LOGS_EXTRACT = True
+
+# Логировать детали сравнения файлов (хеши, изменения)
+LOGS_CHANGES = True
+
+# Логировать процесс создания резервных копий
+LOGS_BACKUP = True
+
+# ========================
+# 5. НАСТРОЙКИ ПЛАНИРОВЩИКА
+# ========================
+SCHEDULER_CONFIG = {
+    'check_containers': {
+        'interval_minutes': 5,
+        'function': 'check_docker_containers',
+        'enabled': True
+    },
+    'check_updates': {
+        'interval_minutes': 60,
+        'function': 'check_for_updates',
+        'enabled': True
+    },
+    'cleanup_logs': {
+        'interval_minutes': 1440,  # 24 часа
+        'function': 'cleanup_old_logs',
+        'enabled': True
+    }
+}
+
+"""
+ГЛОССАРИЙ ШАБЛОНОВ
+
+CRITICAL_FILES - список файлов, обязательных для работы проекта. 
+Если отсутствует хотя бы один файл из списка - 
+система считает установку новой и выполняет 
+полную копию файлов из архива.
+
+Формат: относительные пути от BASE_PATH
+Пример: ['main.py', 'configs/base.yaml']
+---------------------------------------------------------------
+Синтаксис glob-шаблонов для TARGETS/IGNORED:
+  *       - любое количество символов в имени файла/папки
+  **      - любое количество вложенных папок
+  ?       - любой один символ
+  [seq]   - любой символ из последовательности
+  [!seq]  - любой символ не из последовательности
+
+Примеры:
+  'docs/*.txt'    - все .txt файлы в папке docs
+  'src/**'        - всё содержимое src (включая подпапки)
+  'data?.csv'     - data1.csv, dataA.csv (но не data10.csv)
+
+Особенности:
+- Все пути проверяются ОТНОСИТЕЛЬНО BASE_PATH проекта
+- Шаблоны применяются к полному пути файла
+- Регистрозависимость зависит от ОС
+"""
+
+</code>
+
 ##starter_files\core\base_module.py
 <code>
 import abc
@@ -575,6 +760,7 @@ class SystemModule(BaseModule):
 ##starter_files\core\oss\default\updates.py
 <code>
 from starter_files.core.base_module import BaseModule
+
 import json
 import os
 import shutil
@@ -587,7 +773,6 @@ import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, Tuple, List, Optional
-from starter_files.core.utils.log_utils import LogManager
 
 class UpdatesModule(BaseModule):
     """
@@ -607,17 +792,20 @@ class UpdatesModule(BaseModule):
         'LOG_DIR': 'update_logs',                # Логи обновлений
         'CLEANUP_DAYS': 7,                       # Дней хранения временных файлов
         'MAX_RETRIES': 3,                        # Попыток скачивания
-        'TIMEOUT': 30 ,                          # Таймаут соединения (сек)
+        'TIMEOUT': 30,                           # Таймаут соединения (сек)
         'STATE_FILE': 'update_state.json',       # Файл хранения состояния обновлений
-        'MIN_CHECK_INTERVAL': 30                 # Минимальный интервал между проверками в секундах 
+        'MIN_CHECK_INTERVAL': 30,                # Минимальный интервал между проверками в секундах
+        'HISTORY_FILE': 'update_history.json'    # Файл истории обновлений
     }
     
-    @classmethod
+    # Словарь для хранения активных процессов обновления
+    _active_updates = {}
+    
+    @staticmethod
     def start_updates_projects(
-        cls, 
         projects_config: Dict,
         module_config: Dict = None,
-        force_check: bool = False  # Принудительная проверка
+        force_check: bool = False
     ) -> Tuple[str, Dict, Dict]:
         """
         Основной процесс обновления проектов с контролем интервалов
@@ -627,12 +815,10 @@ class UpdatesModule(BaseModule):
         :return: (Метка времени, Данные обновлений, Пути к файлам)
         """
         # Объединяем конфиги с настройками по умолчанию
-        config = {**cls.DEFAULT_CONFIG, **(module_config or {})}
+        config = {**UpdatesModule.DEFAULT_CONFIG, **(module_config or {})}
         
         # Инициализация системы логирования
-        LogManager.register_log_dir('updates', config['LOG_DIR'])
-        logger = LogManager.get_logger('updates')
-        logger.info("=== Начало процесса обновления ===")
+        UpdatesModule._init_logging(config)
         
         # Создаем базовые каталоги
         base_temp_dir = Path(config['BASE_TEMP_DIR'])
@@ -641,25 +827,32 @@ class UpdatesModule(BaseModule):
         
         # Метка времени для уникальных путей
         launch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        update_id = f"update_{launch_timestamp}"
         projects_updates = {}
         projects_folders = {}
+        
+        # Начинаем запись в лог
+        UpdatesModule._log_update(update_id, "=== Начало процесса обновления ===")
+        UpdatesModule._log_update(update_id, f"Время начала: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
         # Обработка каждого проекта
         for project_name, project_config in projects_config.items():
             try:
-                logger.info(f"Обработка проекта: {project_name}")
+                UpdatesModule._log_update(update_id, f"Обработка проекта: {project_name}")
                 
                 # Проверка необходимости обновления
-                last_update_seconds = cls.seconds_since_last_update(project_name, config)
+                last_update_seconds = UpdatesModule.seconds_since_last_update(project_name, config)
                 
-                if not force_check and not cls.should_check_updates(project_name, config):
-                    logger.info(f"Проверка пропущена: {project_name} "
-                                f"(обновлялся {last_update_seconds:.0f} сек назад, "
-                                f"интервал: {config['MIN_CHECK_INTERVAL']} сек)")
+                if not force_check and not UpdatesModule.should_check_updates(project_name, config):
+                    message = (f"Проверка пропущена: {project_name} "
+                              f"(обновлялся {last_update_seconds:.0f} сек назад, "
+                              f"интервал: {config['MIN_CHECK_INTERVAL']} сек)")
+                    UpdatesModule._log_update(update_id, message)
                     continue
                     
-                logger.info(f"Начало проверки: {project_name} "
-                            f"(последняя проверка: {last_update_seconds:.0f} сек назад)")
+                message = (f"Начало проверки: {project_name} "
+                          f"(последняя проверка: {last_update_seconds:.0f} сек назад)")
+                UpdatesModule._log_update(update_id, message)
                 
                 # Формирование путей для проекта
                 project_paths = {
@@ -675,29 +868,34 @@ class UpdatesModule(BaseModule):
 
                 # Скачивание и распаковка архива
                 projects_updates[project_name] = {}
-                projects_updates[project_name]['EXTRACTED_HASHES'] = cls._download_and_extract(
+                UpdatesModule._log_update(update_id, f"Скачивание архива для проекта {project_name}")
+                projects_updates[project_name]['EXTRACTED_HASHES'] = UpdatesModule._download_and_extract(
                     url=project_config['DOWNLOAD_URL'],
                     extract_dir=project_paths['EXTRACTED_DIR'],
-                    config=config
+                    config=config,
+                    update_id=update_id
                 )
 
                 # Проверка новой установки
-                if 'CRITICAL_FILES' in project_config and cls._is_new_installation(project_config):
-                    logger.info(f"Обнаружена новая установка: {project_name}")
+                if 'CRITICAL_FILES' in project_config and UpdatesModule._is_new_installation(project_config):
+                    UpdatesModule._log_update(update_id, f"Обнаружена новая установка: {project_name}")
                     shutil.copytree(
                         project_paths['EXTRACTED_DIR'],
                         project_paths['BASE_PATH'],
                         dirs_exist_ok=True
                     )
                     # Обновляем состояние после установки
-                    cls._update_state_file(project_name, config)
+                    UpdatesModule._update_state_file(project_name, config)
+                    UpdatesModule._add_to_history(project_name, "new_installation", "Новая установка проекта", config)
                     continue  # Переходим к следующему проекту
 
                 # Получение текущих хешей
-                projects_updates[project_name]['CURRENT_HASHES'] = cls._get_current_hashes(project_config)
+                UpdatesModule._log_update(update_id, f"Вычисление хешей текущих файлов проекта {project_name}")
+                projects_updates[project_name]['CURRENT_HASHES'] = UpdatesModule._get_current_hashes(project_config)
                 
                 # Поиск изменений
-                projects_updates[project_name]['CHANGES'] = cls._find_changes(
+                UpdatesModule._log_update(update_id, f"Поиск изменений в проекте {project_name}")
+                projects_updates[project_name]['CHANGES'] = UpdatesModule._find_changes(
                     old_hashes=projects_updates[project_name]['CURRENT_HASHES'],
                     new_hashes=projects_updates[project_name]['EXTRACTED_HASHES'],
                     config=project_config
@@ -705,73 +903,81 @@ class UpdatesModule(BaseModule):
 
                 # Применение изменений при их наличии
                 if any(projects_updates[project_name]['CHANGES'].values()):
-                    logger.info(f"Обнаружены изменения в проекте {project_name}")
+                    UpdatesModule._log_update(update_id, f"Обнаружены изменения в проекте {project_name}")
                     
                     # Создание резервных копий
-                    cls._create_backups(
+                    UpdatesModule._create_backups(
                         project_name=project_name,
                         config=project_config,
                         backup_dir=project_paths['BACKUPS_DIR'],
-                        updates=projects_updates[project_name]
+                        updates=projects_updates[project_name],
+                        update_id=update_id
                     )
                     
                     # Применение обновлений
-                    cls._apply_updates(
+                    UpdatesModule._apply_updates(
                         changes=projects_updates[project_name]['CHANGES'],
                         extracted_dir=project_paths['EXTRACTED_DIR'],
-                        config=project_config
+                        config=project_config,
+                        update_id=update_id
                     )
                     
                     # Обработка специальных файлов
-                    cls._handle_special_files(
+                    UpdatesModule._handle_special_files(
                         project_name=project_name,
                         config=project_config,
                         updates=projects_updates,
-                        folders=projects_folders
+                        folders=projects_folders,
+                        update_id=update_id
                     )
 
                     # Перезапуск при необходимости
                     if project_config.get('RESTART_AFTER_UPDATE', False):
-                        cls._restart_application()
+                        UpdatesModule._log_update(update_id, f"Перезапуск приложения после обновления {project_name}")
+                        UpdatesModule._restart_application()
                     
                     # Обновляем состояние после успешного обновления
-                    cls._update_state_file(project_name, config)
+                    UpdatesModule._update_state_file(project_name, config)
+                    UpdatesModule._add_to_history(project_name, "success", "Проект успешно обновлен", config)
                 else:
-                    logger.info(f"Изменений не обнаружено: {project_name}")
+                    UpdatesModule._log_update(update_id, f"Изменений не обнаружено: {project_name}")
                     # Обновляем время проверки даже если изменений нет
-                    cls._update_state_file(project_name, config)
+                    UpdatesModule._update_state_file(project_name, config)
+                    UpdatesModule._add_to_history(project_name, "no_changes", "Изменений не обнаружено", config)
 
             except Exception as e:
-                logger.error(f"Ошибка обновления {project_name}: {str(e)}")
+                error_msg = f"Ошибка обновления {project_name}: {str(e)}"
+                UpdatesModule._log_update(update_id, error_msg, level="ERROR")
+                UpdatesModule._add_to_history(project_name, "error", error_msg, config)
                 continue
 
         # Очистка устаревших файлов
-        cls._cleanup_old_files(config)
-        logger.info("=== Процесс обновления завершен ===")
+        UpdatesModule._cleanup_old_files(config)
+        UpdatesModule._log_update(update_id, "=== Процесс обновления завершен ===")
         return launch_timestamp, projects_updates, projects_folders
 
-    @classmethod
+    @staticmethod
     def _download_and_extract(
-        cls,
         url: str, 
         extract_dir: Path,
-        config: Dict
+        config: Dict,
+        update_id: str = None
     ) -> Dict[str, str]:
         """
         Скачивание и распаковка архива с проектом
         :param url: URL архива для скачивания
         :param extract_dir: Каталог для распаковки
         :param config: Конфигурация модуля
+        :param update_id: ID процесса обновления для логирования
         :return: Словарь хешей файлов {относительный_путь: хеш}
         """
-        logger = LogManager.get_logger('updates')
         archive_path = extract_dir / "temp.zip"
         file_hashes = {}
         
         # Попытки скачивания с повторами
         for attempt in range(config['MAX_RETRIES']):
             try:
-                logger.info(f"Скачивание архива (попытка {attempt+1}): {url}")
+                UpdatesModule._log_update(update_id, f"Скачивание архива (попытка {attempt+1}): {url}")
                 
                 # Загрузка файла
                 with requests.get(
@@ -789,10 +995,11 @@ class UpdatesModule(BaseModule):
                             downloaded += len(chunk)
                             if total_size > 0:
                                 progress = (downloaded / total_size) * 100
-                                logger.debug(f"Прогресс: {progress:.1f}%")
+                                progress_msg = f"Прогресс скачивания: {progress:.1f}%"
+                                UpdatesModule._log_update(update_id, progress_msg)
                 
                 # Распаковка архива
-                logger.info(f"Распаковка архива: {archive_path}")
+                UpdatesModule._log_update(update_id, f"Распаковка архива: {archive_path}")
                 with zipfile.ZipFile(archive_path, 'r') as zip_ref:
                     zip_ref.extractall(extract_dir)
                 
@@ -800,16 +1007,18 @@ class UpdatesModule(BaseModule):
                     
             except Exception as e:
                 if attempt == config['MAX_RETRIES'] - 1:
-                    logger.error(f"Ошибка скачивания/распаковки: {str(e)}")
+                    error_msg = f"Ошибка скачивания/распаковки: {str(e)}"
+                    UpdatesModule._log_update(update_id, error_msg, level="ERROR")
                     raise
-                logger.warning(f"Ошибка попытки {attempt+1}: {str(e)}")
+                warning_msg = f"Ошибка попытки {attempt+1}: {str(e)}"
+                UpdatesModule._log_update(update_id, warning_msg, level="WARNING")
             finally:
                 # Всегда удаляем временный архив
                 if archive_path.exists():
                     archive_path.unlink()
 
         # Вычисление хешей распакованных файлов
-        logger.info("Вычисление хешей файлов...")
+        UpdatesModule._log_update(update_id, "Вычисление хешей файлов...")
         for root, _, files in os.walk(extract_dir):
             for file in files:
                 file_path = Path(root) / file
@@ -818,7 +1027,8 @@ class UpdatesModule(BaseModule):
                 with open(file_path, 'rb') as f:
                     file_hashes[str(rel_path)] = hashlib.sha256(f.read()).hexdigest()
         
-        logger.info(f"Распаковано файлов: {len(file_hashes)}")
+        message = f"Распаковано файлов: {len(file_hashes)}"
+        UpdatesModule._log_update(update_id, message)
         return file_hashes
 
     @staticmethod
@@ -880,7 +1090,8 @@ class UpdatesModule(BaseModule):
         project_name: str, 
         config: Dict, 
         backup_dir: Path, 
-        updates: Dict
+        updates: Dict,
+        update_id: str = None
     ) -> None:
         """
         Создание резервных копий изменяемых файлов
@@ -888,12 +1099,13 @@ class UpdatesModule(BaseModule):
         :param config: Конфигурация проекта
         :param backup_dir: Каталог для резервных копий
         :param updates: Данные обновлений
+        :param update_id: ID процесса обновления для логирования
         """
-        logger = LogManager.get_logger('updates')
         base_path = Path(config['BASE_PATH'])
         log_file = backup_dir / "backup.log"
         
-        logger.info(f"Создание резервных копий в: {backup_dir}")
+        message = f"Создание резервных копий в: {backup_dir}"
+        UpdatesModule._log_update(update_id, message)
         
         with open(log_file, 'w') as log:
             log.write(f"Резервное копирование начато: {datetime.now()}\n")
@@ -917,21 +1129,23 @@ class UpdatesModule(BaseModule):
                         shutil.copy2(path, dst)
                         log.write(f"Доп. копия: {rel_path}\n")
         
-        logger.info(f"Резервные копии созданы: {len(updates['CURRENT_HASHES'])} файлов")
+        message = f"Резервные копии созданы: {len(updates['CURRENT_HASHES'])} файлов"
+        UpdatesModule._log_update(update_id, message)
 
     @staticmethod
     def _apply_updates(
         changes: Dict, 
         extracted_dir: Path, 
-        config: Dict
+        config: Dict,
+        update_id: str = None
     ) -> None:
         """
         Применение обновлений к файлам проекта
         :param changes: Обнаруженные изменения
         :param extracted_dir: Каталог с новыми файлами
         :param config: Конфигурация проекта
+        :param update_id: ID процесса обновления для логирования
         """
-        logger = LogManager.get_logger('updates')
         base_path = Path(config['BASE_PATH'])
         
         # Копирование новых и измененных файлов
@@ -940,38 +1154,40 @@ class UpdatesModule(BaseModule):
             dst = base_path / rel_path
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
-            logger.debug(f"Обновлен: {rel_path}")
+            UpdatesModule._log_update(update_id, f"Обновлен: {rel_path}")
             
         # Удаление отсутствующих в новой версии файлов
         for entry in changes['removed']:
             target = base_path / entry['path']
             if target.exists():
                 target.unlink()
-                logger.debug(f"Удален: {entry['path']}")
+                UpdatesModule._log_update(update_id, f"Удален: {entry['path']}")
         
-        logger.info(f"Применено обновлений: "
-                    f"+{len(changes['new'])} "
-                    f"~{len(changes['updated'])} "
-                    f"-{len(changes['removed'])}")
+        message = (f"Применено обновлений: "
+                  f"+{len(changes['new'])} "
+                  f"~{len(changes['updated'])} "
+                  f"-{len(changes['removed'])}")
+        UpdatesModule._log_update(update_id, message)
 
     @staticmethod
     def _handle_special_files(
         project_name: str, 
         config: Dict, 
         updates: Dict, 
-        folders: Dict
+        folders: Dict,
+        update_id: str = None
     ) -> None:
         """
-        Обработка файлов с особыми функциями обновления
+        Обработка файлов с особыми функции обновления
         :param project_name: Имя проекта
         :param config: Конфигурация проекта
         :param updates: Данные обновлений
         :param folders: Пути к файлам проекта
+        :param update_id: ID процесса обновления для логирования
         """
         if 'FUNCTIONS_IF_UPDATE' not in config:
             return
             
-        logger = LogManager.get_logger('updates')
         special_files = config['FUNCTIONS_IF_UPDATE']
         
         # Обработка только измененных файлов
@@ -987,9 +1203,11 @@ class UpdatesModule(BaseModule):
                         projects_updates=updates[project_name],
                         projects_folders=folders[project_name]
                     )
-                    logger.info(f"Выполнена спец.функция {func_name} для {rel_path}")
+                    message = f"Выполнена спец.функция {func_name} для {rel_path}"
+                    UpdatesModule._log_update(update_id, message)
                 except Exception as e:
-                    logger.error(f"Ошибка спец.функции {func_name} ({rel_path}): {str(e)}")
+                    error_msg = f"Ошибка спец.функции {func_name} ({rel_path}): {str(e)}"
+                    UpdatesModule._log_update(update_id, error_msg, level="ERROR")
 
     @staticmethod
     def _is_new_installation(config: Dict) -> bool:
@@ -1042,7 +1260,6 @@ class UpdatesModule(BaseModule):
         Очистка устаревших временных файлов
         :param config: Конфигурация модуля
         """
-        logger = LogManager.get_logger('updates')
         base_temp_dir = Path(config['BASE_TEMP_DIR'])
         cutoff_date = datetime.now() - timedelta(days=config['CLEANUP_DAYS'])
         removed_count = 0
@@ -1066,25 +1283,21 @@ class UpdatesModule(BaseModule):
                         if dir_date < cutoff_date:
                             shutil.rmtree(version_dir)
                             removed_count += 1
-                            logger.debug(f"Удален устаревший каталог: {version_dir}")
                     except ValueError:
                         continue
         
         if removed_count > 0:
-            logger.info(f"Очищено устаревших каталогов: {removed_count}")
+            UpdatesModule._log_update(None, f"Очищено устаревших каталогов: {removed_count}")
 
     @staticmethod
     def _restart_application() -> None:
         """Перезапуск приложения после обновления"""
-        logger = LogManager.get_logger('updates')
-        logger.info("Инициирован перезапуск приложения...")
         python = sys.executable
         subprocess.Popen([python] + sys.argv + ['--after-update'])
         sys.exit()
 
-    @classmethod
+    @staticmethod
     def check_and_update_project(
-        cls,
         project_name: str,
         projects_config: Dict,
         module_config: Dict = None,
@@ -1101,12 +1314,9 @@ class UpdatesModule(BaseModule):
         if project_name not in projects_config:
             return False
             
-        config = {**cls.DEFAULT_CONFIG, **(module_config or {})}
-        logger = LogManager.get_logger('updates')
+        config = {**UpdatesModule.DEFAULT_CONFIG, **(module_config or {})}
         
-        if not force and not cls.should_check_updates(project_name, config):
-            time_passed = cls.time_since_last_update(project_name, config)
-            logger.info(f"Проверка не требуется: {project_name}. Последнее обновление: {time_passed}")
+        if not force and not UpdatesModule.should_check_updates(project_name, config):
             return False
             
         try:
@@ -1114,18 +1324,17 @@ class UpdatesModule(BaseModule):
             project_config = {project_name: projects_config[project_name]}
             
             # Запускаем процесс обновления
-            cls.start_updates_projects(
+            UpdatesModule.start_updates_projects(
                 projects_config=project_config,
                 module_config=module_config,
                 force_check=True
             )
             return True
         except Exception as e:
-            logger.error(f"Ошибка при обновлении {project_name}: {str(e)}")
             return False
 
-    @classmethod
-    def get_last_update_time(cls, project_name: str, config: Dict) -> Optional[datetime]:
+    @staticmethod
+    def get_last_update_time(project_name: str, config: Dict) -> Optional[datetime]:
         """
         Получение времени последнего обновления проекта
         :param project_name: Имя проекта
@@ -1144,33 +1353,33 @@ class UpdatesModule(BaseModule):
         except:
             return None
 
-    @classmethod
-    def seconds_since_last_update(cls, project_name: str, config: Dict) -> float:
+    @staticmethod
+    def seconds_since_last_update(project_name: str, config: Dict) -> float:
         """
         Вычисление секунд, прошедших с последнего обновления
         :param project_name: Имя проекта
         :param config: Конфигурация модуля
         :return: Количество секунд (0 если обновлений не было)
         """
-        last_update = cls.get_last_update_time(project_name, config)
+        last_update = UpdatesModule.get_last_update_time(project_name, config)
         if not last_update:
             return 0
         return (datetime.now() - last_update).total_seconds()
 
-    @classmethod
-    def should_check_updates(cls, project_name: str, config: Dict) -> bool:
+    @staticmethod
+    def should_check_updates(project_name: str, config: Dict) -> bool:
         """
         Проверка необходимости проверки обновлений
         :param project_name: Имя проекта
         :param config: Конфигурация модуля
         :return: True если проверка требуется
         """
-        seconds_passed = cls.seconds_since_last_update(project_name, config)
+        seconds_passed = UpdatesModule.seconds_since_last_update(project_name, config)
         min_interval = config['MIN_CHECK_INTERVAL']
         return seconds_passed >= min_interval
 
-    @classmethod
-    def _update_state_file(cls, project_name: str, config: Dict) -> None:
+    @staticmethod
+    def _update_state_file(project_name: str, config: Dict) -> None:
         """
         Обновление файла состояния после успешной проверки
         :param project_name: Имя проекта
@@ -1193,6 +1402,136 @@ class UpdatesModule(BaseModule):
         state_file.parent.mkdir(parents=True, exist_ok=True)
         with open(state_file, 'w') as f:
             json.dump(state, f, indent=2)
+
+    @staticmethod
+    def _init_logging(config: Dict) -> None:
+        """
+        Инициализация системы логирования
+        :param config: Конфигурация модуля
+        """
+        log_dir = Path(config['LOG_DIR'])
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Настройка базового логирования
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_dir / 'updates.log'),
+                logging.StreamHandler(sys.stdout)
+            ]
+        )
+
+    @staticmethod
+    def _log_update(update_id: str, message: str, level: str = "INFO") -> None:
+        """
+        Запись сообщения в лог обновления
+        :param update_id: ID процесса обновления
+        :param message: Сообщение для записи
+        :param level: Уровень логирования
+        """
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_message = f"[{timestamp}] [{level}] {message}"
+        
+        if update_id:
+            log_message = f"[{update_id}] {log_message}"
+        
+        # Запись в лог
+        logger = logging.getLogger('updates')
+        if level == "ERROR":
+            logger.error(log_message)
+        elif level == "WARNING":
+            logger.warning(log_message)
+        else:
+            logger.info(log_message)
+            
+        # Также записываем в отдельный файл для данного обновления
+        if update_id:
+            log_dir = Path(UpdatesModule.DEFAULT_CONFIG['LOG_DIR'])
+            update_log_file = log_dir / f"{update_id}.log"
+            with open(update_log_file, 'a') as f:
+                f.write(f"{log_message}\n")
+
+    @staticmethod
+    def _add_to_history(project_name: str, status: str, message: str, config: Dict) -> None:
+        """
+        Добавление записи в историю обновлений
+        :param project_name: Имя проекта
+        :param status: Статус обновления
+        :param message: Сообщение
+        :param config: Конфигурация модуля
+        """
+        history_file = Path(config['HISTORY_FILE'])
+        history = []
+        
+        if history_file.exists():
+            try:
+                with open(history_file, 'r') as f:
+                    history = json.load(f)
+            except:
+                pass
+        
+        history.append({
+            'project': project_name,
+            'timestamp': datetime.now().isoformat(),
+            'status': status,
+            'message': message
+        })
+        
+        # Ограничиваем историю последними 100 записями
+        history = history[-100:]
+        
+        history_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(history_file, 'w') as f:
+            json.dump(history, f, indent=2)
+
+    @staticmethod
+    def get_update_history(project_name: str = None, config: Dict = None) -> List[Dict]:
+        """
+        Получение истории обновлений
+        :param project_name: Имя проекта для фильтрации (опционально)
+        :param config: Конфигурация модуля
+        :return: Список записей истории
+        """
+        if config is None:
+            config = UpdatesModule.DEFAULT_CONFIG
+            
+        history_file = Path(config['HISTORY_FILE'])
+        history = []
+        
+        if history_file.exists():
+            try:
+                with open(history_file, 'r') as f:
+                    history = json.load(f)
+            except:
+                pass
+        
+        if project_name:
+            history = [item for item in history if item['project'] == project_name]
+        
+        return history
+
+    @staticmethod
+    def get_update_log(update_id: str, config: Dict = None) -> str:
+        """
+        Получение лога конкретного обновления
+        :param update_id: ID обновления
+        :param config: Конфигурация модуля
+        :return: Содержимое лог-файла
+        """
+        if config is None:
+            config = UpdatesModule.DEFAULT_CONFIG
+            
+        log_file = Path(config['LOG_DIR']) / f"{update_id}.log"
+        
+        if not log_file.exists():
+            return "Лог-файл не найден"
+        
+        try:
+            with open(log_file, 'r') as f:
+                return f.read()
+        except Exception as e:
+            return f"Ошибка чтения лог-файла: {str(e)}"
 </code>
 
 ##starter_files\core\software\default\settings.py
@@ -1502,547 +1841,276 @@ services:
 
 </code>
 
-##starter_files\core\utils\envStarter_utils.py
-<code>
-from pathlib import Path
-from typing import Dict, List, Tuple, Union
-from starter_files.core.utils.globalVars_utils import get_global
-
-def parse_env_content(content: str) -> Tuple[Dict[str, str], List[Union[str, Tuple[str, str]]]]:
-    """Парсит содержимое .env файла, сохраняя структуру"""
-    variables = {}
-    lines = []
-    for line in content.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith('#'):
-            lines.append(line)
-            continue
-        
-        if '=' in stripped:
-            key, value = stripped.split('=', 1)
-            key = key.strip()
-            variables[key] = value.strip()
-            lines.append((key, line))
-        else:
-            lines.append(line)
-    
-    return variables, lines
-
-def generate_env_content(vars_dict: Dict[str, str], 
-                       template_lines: List[Union[str, Tuple[str, str]]],
-                       preserve_custom: bool = True) -> str:
-    """Генерирует содержимое .env файла с сохранением структуры"""
-    result = []
-    vars_to_add = vars_dict.copy()
-    custom_vars = {}
-    
-    for line in template_lines:
-        if isinstance(line, tuple):
-            key, original_line = line
-            if key in vars_to_add:
-                if '=' in original_line:
-                    prefix = original_line.split('=', 1)[0]
-                    new_line = f"{prefix}={vars_to_add.pop(key)}"
-                else:
-                    new_line = f"{key}={vars_to_add.pop(key)}"
-                result.append(new_line)
-            else:
-                result.append(original_line)
-        else:
-            result.append(line)
-    
-    if preserve_custom:
-        custom_vars = {k: v for k, v in vars_dict.items() if k not in [l[0] for l in template_lines if isinstance(l, tuple)]}
-        if custom_vars:
-            result.append('\n# Custom variables')
-            for key, value in custom_vars.items():
-                result.append(f"{key}={value}")
-    
-    return '\n'.join(result)
-
-def read_env_file(env_path: Path) -> Dict[str, str]:
-    """Читает .env файл и возвращает словарь переменных"""
-    if not env_path.exists():
-        return {}
-    
-    with open(env_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    variables, _ = parse_env_content(content)
-    return variables
-
-def write_env_file(env_path: Path, 
-                  vars_dict: Dict[str, str], 
-                  template_path: Path = None):
-    """Записывает .env файл с сохранением структуры шаблона"""
-    if template_path and template_path.exists():
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template_content = f.read()
-        _, template_lines = parse_env_content(template_content)
-        content = generate_env_content(vars_dict, template_lines)
-    else:
-        content = generate_env_content(vars_dict, [])
-    
-    with open(env_path, 'w', encoding='utf-8') as f:
-        f.write(content)
-
-def ensure_env_variables():
-    """Обновляет .env файл в соответствии с .env.example"""
-    script_path = get_global('script_pat')
-
-    env_path = script_path / 'script_pat'
-    logger.info('.env')
-    
-    env_example_path = script_path / '.env.example'
-    logger.info(env_example_path)
-    
-    if not env_example_path.exists():
-        return
-    
-    current_vars = read_env_file(env_path)
-    with open(env_example_path, 'r', encoding='utf-8') as f:
-        example_content = f.read()
-    example_vars, example_lines = parse_env_content(example_content)
-    
-    merged_vars = {**example_vars, **current_vars}
-    content = generate_env_content(merged_vars, example_lines)
-    
-    with open(env_path, 'w', encoding='utf-8') as f:
-        f.write(content)
-</code>
-
-##starter_files\core\utils\fs_utils.py
+##starter_files\web\sections\dashboard.py
 <code>
 import os
-import shutil
-import hashlib
-import re
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+import platform
+import socket
+import sys
+import uuid
+import threading
 
-class FSUtils:
-    """Утилиты для работы с файловой системой"""
+from datetime import datetime, timedelta
+from flask import render_template, jsonify
 
-    @staticmethod
-    def check_folders(folders_to_check: List[str]) -> None:
-        """
-        Проверяет наличие папок и создает их при необходимости.
-        
-        Args:
-            folders_to_check: Список папок для проверки (относительно рабочей директории)
-        """
-        folders_to_check = [
-            'docker', 'laravel'
-        ]
-        for folder in folders_to_check:
-            path = Path(folder)
-            if not path.exists():
-                path.mkdir(parents=True)
-                logger.info(f'Папка "{folder}" создана')
-            else:
-                logger.info(f'Папка "{folder}" уже существует')
-
-    @staticmethod
-    def validate_env_file(env_path: str, allowed_empty: List[str] = None) -> List[str]:
-        """
-        Проверяет .env файл на незаполненные переменные.
-        
-        Args:
-            env_path: Путь к .env файлу
-            allowed_empty: Список переменных, которые могут быть пустыми
-            
-        Returns:
-            Список незаполненных переменных
-        """
-        if allowed_empty is None:
-            allowed_empty = ['ENABLED_SERVICES']
-            
-        empty_vars = []
-        env_pattern = re.compile(
-            r'^\s*(?!#)(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?P<value>\s*("")?(\'\')?[^#\n]*)(?=\n|$)',
-            re.MULTILINE
-        )
-
-        with open(env_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            
-            for match in env_pattern.finditer(content):
-                key = match.group('key')
-                value = match.group('value').strip()
-                
-                if key not in allowed_empty:
-                    is_empty = (
-                        not value 
-                        or value in ('""', "''", "' '", '" "')
-                        or (len(value.strip('"\'')) == 0)
-                    )
-                    
-                    if is_empty:
-                        empty_vars.append(key)
-                        
-        return empty_vars
-
-    @staticmethod
-    def copy_environment_variables(env_example_path: str, env_path: str) -> None:
-        """
-        Копирует переменные из старого .env в новый .env.example.
-        
-        Args:
-            env_example_path: Путь к новому .env.example
-            env_path: Путь к текущему .env
-        """
-        # Чтение старых переменных
-        old_vars = {}
-        if Path(env_path).exists():
-            with open(env_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    if '=' in line and not line.startswith('#'):
-                        key, value = line.strip().split('=', 1)
-                        old_vars[key] = value
-
-        # Копирование с сохранением старых значений
-        if Path(env_example_path).exists():
-            with open(env_example_path, 'r', encoding='utf-8') as f_in:
-                with open(env_path, 'w', encoding='utf-8') as f_out:
-                    for line in f_in:
-                        if '=' in line and not line.startswith('#'):
-                            key, _ = line.split('=', 1)
-                            if key in old_vars:
-                                line = f"{key}={old_vars[key]}\n"
-                        f_out.write(line)
-
-    @staticmethod
-    def get_file_hash(file_path: str) -> str:
-        """
-        Вычисляет SHA-256 хеш файла.
-        
-        Args:
-            file_path: Путь к файлу
-            
-        Returns:
-            Хеш-сумма файла в hex-формате
-        """
-        with open(file_path, 'rb') as f:
-            return hashlib.sha256(f.read()).hexdigest()
-
-    @staticmethod
-    def create_backup(source_dir: str, backup_dir: str, exclude: List[str] = None) -> None:
-        """
-        Создает резервную копию директории.
-        
-        Args:
-            source_dir: Директория для бэкапа
-            backup_dir: Целевая директория
-            exclude: Список шаблонов для исключения
-        """
-        if exclude is None:
-            exclude = []
-            
-        source = Path(source_dir)
-        backup = Path(backup_dir)
-        
-        for item in source.glob('**/*'):
-            if any(item.match(pattern) for pattern in exclude):
-                continue
-                
-            if item.is_file():
-                relative = item.relative_to(source)
-                target = backup / relative
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(item, target)
-
-    @staticmethod
-    def sync_dirs(source_dir: str, target_dir: str, patterns: List[str], ignore: List[str] = None) -> Dict:
-        """
-        Синхронизирует файлы между директориями по шаблонам.
-        
-        Args:
-            source_dir: Источник
-            target_dir: Цель
-            patterns: Шаблоны файлов для включения
-            ignore: Шаблоны файлов для исключения
-            
-        Returns:
-            Словарь с информацией о синхронизированных файлах
-        """
-        if ignore is None:
-            ignore = []
-            
-        changes = {'new': [], 'updated': [], 'removed': []}
-        source = Path(source_dir)
-        target = Path(target_dir)
-        
-        # Обработка новых/измененных файлов
-        for pattern in patterns:
-            for src_path in source.glob(pattern):
-                if src_path.is_file():
-                    rel_path = src_path.relative_to(source)
-                    
-                    if any(rel_path.match(ignore_pattern) for ignore_pattern in ignore):
-                        continue
-                        
-                    dst_path = target / rel_path
-                    dst_path.parent.mkdir(parents=True, exist_ok=True)
-                    
-                    if not dst_path.exists():
-                        changes['new'].append(str(rel_path))
-                    elif FSUtils.get_file_hash(src_path) != FSUtils.get_file_hash(dst_path):
-                        changes['updated'].append(str(rel_path))
-                        
-                    shutil.copy2(src_path, dst_path)
-        
-        return changes
-
-    @staticmethod
-    def create_shortcut(target: str, shortcut: str, args: str = "", workdir: str = "") -> None:
-        """
-        Создает ярлык в Windows.
-        
-        Args:
-            target: Целевой файл
-            shortcut: Путь к ярлыку
-            args: Аргументы командной строки
-            workdir: Рабочая директория
-        """
-        try:
-            import winshell
-            from win32com.client import Dispatch
-            
-            shell = Dispatch('WScript.Shell')
-            shortcut = shell.CreateShortCut(shortcut)
-            shortcut.TargetPath = target
-            shortcut.Arguments = args
-            shortcut.WorkingDirectory = workdir
-            shortcut.save()
-        except ImportError:
-            raise Exception("Для создания ярлыков требуется pywin32 и winshell")
-
-    @staticmethod
-    def get_ip_addresses() -> List[str]:
-        """Возвращает список IP-адресов устройства"""
-        import socket
-        try:
-            hostnames = socket.gethostbyname_ex(socket.gethostname())
-            return hostnames[2]
-        except Exception:
-            return []
-
-    @staticmethod
-    def is_valid_network(ip_address: str) -> bool:
-        """
-        Проверяет, соответствует ли IP адресу диапазону '10.8.*'.
-        
-        Args:
-            ip_address: IP-адрес для проверки
-            
-        Returns:
-            bool: True если адрес валидный
-        """
-        import re
-        return bool(re.match(r'^10\.8\.\d+\.\d+$', ip_address))
-</code>
-
-##starter_files\web\routes.py
-<code>
-
-from flask import Blueprint, current_app, g, jsonify, render_template, request, session, Response
-from importlib import import_module
-from pathlib import Path
-from typing import List, Dict, Any
-
-from starter_files.core.utils.i18n_utils import get_available_languages, t, set_language, get_current_language, return_basic
-from starter_files.core.utils.globalVars_utils import get_global
-from starter_files.core.utils.log_utils import LogManager
-logger = LogManager.get_logger()
-
-from starter_files.core.utils.loader_utils import get, collect_modules_info
-
-routes = Blueprint('routes', __name__)
-
-# Для раздела разработчикам
-def get_modules_index(refresh: bool = False) -> List[Dict[str, Any]]:
-    return collect_modules_info(refresh=refresh)
-
-# Функция получения секций для панель управления
-def get_current_sections_in_panel():
-    sections_in_control_panel = []
-    
-    starter_path = get_global('script_path')
-
-    sections_dir = starter_path / 'starter_files' / 'web' / 'sections'
-    
-    for section_file in sections_dir.glob('*.py'):
-        if section_file.stem == '__init__':
-            continue
-            
-        section_slug = section_file.stem
-
-        try:
-            section = import_module(f'starter_files.web.sections.{section_slug}')
-            
-            if getattr(section, 'this_section_in_control_panel', False):
-                # Получаем мета-информацию через функцию t()
-                section_title = t(f'sections.{section_slug}.basic.title', default=getattr(section, 'section_name', section_slug.replace('_', ' ').title()))
-
-                section_info = {
-                    'section_slug': section_slug,
-                    'section_name': return_basic(section_slug, 'title', getattr(section, 'section_name', section_slug.replace('_', ' ').title())),
-                    'section_icon': getattr(section, 'section_icon', 'bi-box'),
-                    'section_order': getattr(section, 'section_order', 99)
-                }
-                sections_in_control_panel.append(section_info)
-                
-        except Exception as e:
-            logger.exception(f"Error loading section {section_slug}")
-            raise
-    
-    return sorted(sections_in_control_panel, key=lambda x: x['section_order'])
-
-@routes.context_processor
-def inject_variables():
-    return {
-        'languages': get_available_languages(),
-        'current_language': get_current_language(),
-        'sections_in_control_panel': get_current_sections_in_panel()
-    }
-
-@routes.route('/', methods=['GET'])
-def index():
-
-    # Получаем текущий язык
-    lang = get_current_language()
-    # Устанавливаем текущий язык
-    set_language(lang)
-    # Получаем список доступных языков
-    languages = get_available_languages()
-    
-    return render_template('index.html', current_language=lang, languages=languages, t=t, logged_in='username' in session)
-
-@routes.route('/', methods=['POST'])
-def handle_sections():
-    section_name = request.form.get('section')
-    action_name = request.form.get('action')
-    
-    if not section_name or not action_name:
-        return jsonify({'status': 'error', 'message': 'Section and action required'}), 400
-    
-    # Сохраняем в глобальном контексте, чтобы функция t() могла определить модуль и файл
-    g.current_section = section_name
-    g.current_function = action_name
-    
-    try:
-        section = import_module(f'starter_files.web.sections.{section_name}')
-        
-        if not hasattr(section, action_name):
-            return jsonify({'status': 'error', 'message': 'Action not found'}), 404
-        
-        data = {k: v for k, v in request.form.items() if k not in ['section', 'action']}
-        result = getattr(section, action_name)(data, session)
-
-        # Добавленная проверка типа результата
-        if isinstance(result, Response):
-            return result  # Возвращаем Response как есть
-
-        # Обработка результата с учётом Accept заголовка
-        if 'text/html' in request.accept_mimetypes:
-            if isinstance(result, str):
-                return result
-            elif isinstance(result, dict) and 'html' in result:
-                return result['html']
-            else:
-                return jsonify({'status': 'error', 'message': 'HTML response not available'}), 406
-        else:
-            return jsonify(result)
-        
-    except Exception as e:
-        if 'text/html' in request.accept_mimetypes:
-            return f"Error: {str(e)}", 500
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-</code>
-
-##starter_files\web\sections\settings.py
-<code>
-import json
-from pathlib import Path
-from flask import render_template, jsonify, request
 from starter_files.core.utils.i18n_utils import t
-from starter_files.core.utils.log_utils import LogManager
-from starter_files.core.software.default.settings import SettingsModule
 from starter_files.core.utils.globalVars_utils import get_global
+from starter_files.core.utils.loader_utils import get
 
+from starter_files.core.utils.log_utils import LogManager
 logger = LogManager.get_logger()
 
 this_section_in_control_panel = True
-section_icon = "bi-gear"
-section_name = "Settings"
-section_order = 2   # после dashboard
+section_icon = "bi-speedometer2"
+section_name = "Dashboard"
+section_order = 1
 
+# Конфигурация компонентов для универсальной установки
+COMPONENT_CONFIG = {
+    'docker': {
+        'module': 'docker',
+        'check': 'check_docker_installed',
+        'install': 'install_docker'
+    },
+    'docker-compose': {
+        'module': 'docker',
+        'check': 'check_docker_compose_installed',
+        'install': 'install_docker_сompose'
+    },
+    'port-knocking': {
+        'module': 'knocking',
+        'check': 'is_knocking_installed',
+        'install': 'install_port_knocking'
+    },
+    'git': {
+        'module': 'git',
+        'check': 'check_git_installed',
+        'install': 'install_git'
+    },
+    'systemd': {
+        'module': 'service',
+        'check': 'is_systemd_installed',
+        'install': 'install_systemd'
+    },
+    'starter-service': {
+        'module': 'service',
+        'check': 'is_service_installed',
+        'install': 'install_service'
+    },
+    'vpnEther': {
+        'module': 'softether',
+        'check': 'check_softether_installed',
+        'install': 'install_softether'
+    },
+}
+
+# Путь к директории логов установки
+INSTALL_LOGS_DIR = get_global('path_log_install')
+INSTALL_LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 def index(data, session):
-    """Главная страница настроек"""
-    settings = SettingsModule.get_settings()
-
-    # путь к docker/.env из глобальной переменной
-    docker_path = Path(get_global("docker_path", settings.get("docker_files", "/app/docker")))
-    env_path = docker_path / ".env"
-    env_vars = SettingsModule.read_env_file(env_path)
+    # Get system info from global variables with proper fallbacks
+    sys_info = {
+        'os': get_global('os', platform.system()),
+        'os_version': get_global('os_version', platform.version()),
+        'os_release': get_global('os_release', platform.release()),
+        'architecture': get_global('architecture', platform.machine()),
+        'hostname': get_global('hostname', socket.gethostname()),
+        'username': get_global('username', os.getenv('USER') or os.getenv('USERNAME') or 'N/A'),
+        'current_time': get_global('current_time', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+        'uptime': get_global('uptime', 'N/A'),
+        'python_info': {
+            'version': get_global('python_version', platform.python_version()),
+            'implementation': get_global('python_implementation', platform.python_implementation()),
+            'compiler': get_global('python_compiler', platform.python_compiler()),
+            'executable': get_global('python_executable', sys.executable)
+        },
+        'cpu': {
+            'name': get_global('cpu_model', 'N/A'),
+            'cores': get_global('cpu_cores', 'N/A'),
+            'logical_cores': get_global('cpu_logical_cores', 'N/A'),
+            'usage': get_global('cpu_usage', 'N/A')
+        },
+        'memory': {
+            'total': get_global('memory_total', 'N/A'),
+            'used': get_global('memory_used', 'N/A'),
+            'percent': get_global('memory_percent', 'N/A'),
+            'available': get_global('memory_available', 'N/A')
+        },
+        'disk': {
+            'total': get_global('disk_total', 'N/A'),
+            'used': get_global('disk_used', 'N/A'),
+            'percent': get_global('disk_percent', 'N/A'),
+            'free': get_global('disk_free', 'N/A')
+        },
+        'docker':{
+            "docker_installed": get_global('docker_installed',False),
+            "docker_compose_installed": get_global('docker_compose_installed',False)
+        },
+        'knocking':{
+            "knocking_installed ": get_global('knocking_installed',False),
+        },
+        'git':{
+            'git_installed': get_global('git_installed',False),
+            'git_authentication': get_global('git_authentication', 'N/A'),
+        },
+        'systemd':{
+            'systemd_installed': get_global('systemd_installed', False),
+            'service_installed': get_global('service_installed', False),
+            'service_status': get_global('service_status', 'unknown')
+        },
+        'vpnEther':{
+            'vpnEther_installed': get_global('vpnEther_installed',False)
+        },
+    }
 
     return render_template(
-        "sections/settings/index.html",
-        settings=settings,
-        env_vars=env_vars,
-        t=t,
+        'sections/dashboard/index.html',
+        sys_info=sys_info,
+        hostname=sys_info['hostname'],
+        username=sys_info['username'],
+        current_time=sys_info['current_time'],
+        uptime=sys_info['uptime'],
+        python_info=sys_info['python_info'],
+        cpu_info=sys_info['cpu'],
+        memory_info=sys_info['memory'],
+        disk_info=sys_info['disk'],
+        docker_info = sys_info['docker'],
+        t=t
     )
+# ===================УСТАНОВКА ===============================
 
-
-def validate_project_path(data, session):
-    path = data.get("path")
-    if not path:
-        return jsonify({"status": "error", "message": "Path required"})
-    result = SettingsModule.validate_project_path(path)
-    return jsonify({"status": "success", "validation": result})
-
-
-def validate_docker_path(data, session):
-    path = data.get("path")
-    if not path:
-        return jsonify({"status": "error", "message": "Path required"})
-    result = SettingsModule.validate_docker_path(path)
-    return jsonify({"status": "success", "validation": result})
-
-
-def save_settings(data, session):
+def install_package(data, session):
+    """Универсальный обработчик установки пакетов"""
+    package = data.get('package')
+    
+    if not package or package not in COMPONENT_CONFIG:
+        return jsonify({'status': 'error', 'message': 'Invalid package name'})
+    
+    config = COMPONENT_CONFIG[package]
+    
     try:
-        raw = data.get("settings")
-        settings = json.loads(raw) if isinstance(raw, str) else raw
-        ok = SettingsModule.save_settings(settings)
-        if ok:
-            # обновим globals после сохранения
-            SettingsModule.set_globals()
-            return jsonify({"status": "success"})
-        else:
-            return jsonify({"status": "error", "message": "Save failed"})
+        # Проверка установлен ли компонент
+        check = get(config['module'], config['check'])
+        if check:
+            return jsonify({'status': 'info', 'message': f'{package} is already installed'})
     except Exception as e:
-        logger.error(f"Error saving settings: {e}")
-        return jsonify({"status": "error", "message": str(e)})
+        logger.error(f"Component check failed: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Installation check failed: {str(e)}'})
+    
+    # Создание уникального ID установки
+    install_id = str(uuid.uuid4())
+    log_file_path = INSTALL_LOGS_DIR / f"install_{package}_{install_id}.log"
+    
+    # Запуск установки в отдельном потоке
+    def run_installation():
+        try:
+            result = get(config['module'], config['install'], log_file_path=str(log_file_path))
+            
+            # Проверка результата установки
+            if result['status'] == 'error':
+                raise Exception(result['message'])
 
+            # Проверка результата установки
+            if result.get('status') == 'error':
+                raise Exception(result.get('message', 'Unknown error'))
+            
+            # Дополнительная проверка через API-вызов
+            if not get(config['module'], config['check']):
+                raise Exception(f"Verification failed after installation")
+                
+            # Запись успешного завершения
+            with open(log_file_path, 'a') as f:
+                f.write("\nInstallation completed and verified successfully!\n")
+                
+        except Exception as e:
+            with open(log_file_path, 'a') as f:
+                f.write(f"\nFATAL ERROR: {str(e)}\n")
+            logger.error(f"{package} installation failed: {str(e)}")
+    
+    thread = threading.Thread(target=run_installation)
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'status': 'started',
+        'message': f'{package} installation started',
+        'install_id': install_id
+    })
 
-def generate_docker_compose(data, session):
-    settings = SettingsModule.get_settings()
-    ok = SettingsModule.generate_docker_compose(settings)
-    return jsonify({"status": "success" if ok else "error"})
+def download_install_logs(data, session):
+    """Отправка файла логов для скачивания"""
+    package = data.get('package')
+    install_id = data.get('install_id')
+    if not install_id:
+        return "Installation ID required", 400
+    
+    log_file_path = INSTALL_LOGS_DIR / f"install_{package}_{install_id}.log"
+    
+    if not log_file_path.exists():
+        return "Log file not found", 404
+    
+    try:
+        from flask import send_file
+        return send_file(
+            log_file_path,
+            as_attachment=True,
+            download_name=f"install_{install_id}.log",
+            mimetype='text/plain'
+        )
+    except Exception as e:
+        return str(e), 500
 
-
-def run_compose(data, session):
-    settings = SettingsModule.get_settings()
-    ok = SettingsModule.run_compose(settings)
-    return jsonify({"status": "success" if ok else "error"})
-
+def get_install_logs(data, session):
+    """Возвращает содержимое лог-файла установки"""
+    package = data.get('package')
+    install_id = data.get('install_id')
+    if not install_id:
+        return jsonify({
+            'status': 'error',
+            'message': 'Installation ID required',
+            'logs': ''
+        })
+    
+    log_file_path = INSTALL_LOGS_DIR / f"install_{package}_{install_id}.log"
+    
+    if not log_file_path.exists():
+        return jsonify({
+            'status': 'error',
+            'message': 'Log file not found',
+            'logs': ''
+        })
+    
+    try:
+        with open(log_file_path, 'r') as f:
+            logs = f.read()
+        
+        return jsonify({
+            'status': 'success',
+            'logs': logs
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'logs': ''
+        })
 </code>
 
 ##starter_files\web\sections\updates.py
 <code>
-from flask import render_template
+from flask import render_template, jsonify, request
+from datetime import datetime
+from pathlib import Path
+import json
+import logging
+
 from starter_files.core.utils.i18n_utils import t
+from starter_files.core.oss.default.updates import UpdatesModule
+from starter_files.configs.configs import PROJECTS
+
+# Настройка логирования
+logger = logging.getLogger(__name__)
 
 # Конфигурация модуля для панели управления
 this_section_in_control_panel = True
@@ -2051,118 +2119,465 @@ section_name = "Updates"
 section_order = 10
 
 def index(data, session):
-    """Главная страница модуля"""
+    """Главная страница модуля обновлений"""
+    update_status = get_update_status_list()  # Changed here
     return render_template(
         'sections/updates/index.html',
         t=t,
-        message=t('updates_placeholder_message')
+        update_status=update_status
     )
 
-def info(data, session):
-    """Страница информации об обновлениях"""
-    return render_template(
-        'sections/updates/info.html',
-        t=t,
-        message=t('updates_placeholder_info')
-    )
+def get_update_status_list():
+    """Получение статуса обновлений для всех проектов"""
+    status = []
+    config = get_updates_config()
+    
+    for project_name in PROJECTS.keys():
+        last_update = UpdatesModule.get_last_update_time(project_name, config)
+        seconds_passed = UpdatesModule.seconds_since_last_update(project_name, config)
+        
+        if last_update:
+            if seconds_passed < 3600:  # Менее часа назад
+                status_text = t('up_to_date')
+                status_color = 'success'
+            elif seconds_passed < 86400:  # Менее суток назад
+                status_text = t('recently_updated')
+                status_color = 'warning'
+            else:
+                status_text = t('update_available')
+                status_color = 'danger'
+        else:
+            status_text = t('never_updated')
+            status_color = 'secondary'
+        
+        status.append({
+            'name': project_name,
+            'last_update': last_update,
+            'status': status_text,
+            'status_color': status_color
+        })
+    
+    return status
+
+def check_all(data, session):
+    """Проверка всех обновлений"""
+    try:
+        # Получаем конфиг с правильным путем к файлу состояния
+        config = get_updates_config()
+        
+        timestamp, updates, folders = UpdatesModule.start_updates_projects(
+            projects_config=PROJECTS,
+            module_config=config,
+            force_check=True
+        )
+        return jsonify({'success': True, 'message': t('updates_check_success')})
+    except Exception as e:
+        logger.error(f"Error in check_all: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+def update_project(data, session):
+    """Обновление конкретного проекта"""
+    project_name = data.get('project')
+    if project_name not in PROJECTS:
+        return jsonify({'success': False, 'message': t('project_not_found')})
+    
+    try:
+        # Получаем конфиг с правильным путем к файлу состояния
+        config = get_updates_config()
+        
+        success = UpdatesModule.check_and_update_project(
+            project_name=project_name,
+            projects_config=PROJECTS,
+            module_config=config,
+            force=True
+        )
+        if success:
+            return jsonify({'success': True, 'message': t('update_success')})
+        else:
+            return jsonify({'success': False, 'message': t('update_failed')})
+    except Exception as e:
+        logger.error(f"Error updating project {project_name}: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+def get_project_details(data, session):
+    """Получение детальной информации о проекте"""
+    project_name = data.get('project')
+    if project_name not in PROJECTS:
+        return jsonify({'success': False, 'message': t('project_not_found')})
+    
+    project_config = PROJECTS[project_name]
+    config = get_updates_config()
+    
+    # Получаем информацию о последнем обновлении
+    last_update = UpdatesModule.get_last_update_time(project_name, config)
+    seconds_passed = UpdatesModule.seconds_since_last_update(project_name, config)
+    
+    # Форматируем информацию о проекте
+    project_info = {
+        'name': project_name,
+        'download_url': project_config['DOWNLOAD_URL'],
+        'base_path': project_config['BASE_PATH'],
+        'targets': project_config['TARGETS'],
+        'ignored': project_config.get('IGNORED', []),
+        'critical_files': project_config.get('CRITICAL_FILES', []),
+        'add_in_backups': project_config.get('ADD_IN_BACKUPS', []),
+        'functions_if_update': project_config.get('FUNCTIONS_IF_UPDATE', {}),
+        'restart_after_update': project_config.get('RESTART_AFTER_UPDATE', False),
+        'last_update': last_update.isoformat() if last_update else None,
+        'seconds_since_update': seconds_passed
+    }
+    
+    return jsonify({'success': True, 'project_info': project_info})
+
+def get_updates_config():
+    """Получение конфигурации с правильным путем к файлу состояния"""
+    config = UpdatesModule.DEFAULT_CONFIG.copy()
+    
+    # Устанавливаем правильный путь к файлу состояния
+    script_path = Path(__file__).resolve().parent.parent.parent.parent
+    state_file_path = script_path / 'starter_files' / 'update_state.json'
+    config['STATE_FILE'] = str(state_file_path)
+    
+    # Создаем директорию, если она не существует
+    state_file_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Создаем файл состояния, если он не существует
+    if not state_file_path.exists():
+        with open(state_file_path, 'w') as f:
+            json.dump({}, f)
+    
+    return config
+
+def get_update_logs(data, session):
+    """Получение логов процесса обновления"""
+    update_id = data.get('update_id')
+    if not update_id:
+        return jsonify({'success': False, 'message': 'Update ID required'})
+    
+    try:
+        logs = UpdatesModule.get_update_logs(update_id)
+        return jsonify({'success': True, 'logs': logs})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+def get_update_status(data, session):
+    """Получение статуса процесса обновления"""
+    update_id = data.get('update_id')
+    if not update_id:
+        return jsonify({'success': False, 'message': 'Update ID required'})
+    
+    try:
+        status = UpdatesModule.get_update_status(update_id)
+        return jsonify({'success': True, 'status': status})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+def start_update_all_async(data, session):
+    """Асинхронный запуск обновления всех проектов"""
+    try:
+        from starter_files.configs.configs import PROJECTS
+        update_id = UpdatesModule.start_update_in_thread(
+            projects_config=PROJECTS,
+            force_check=True
+        )
+        return jsonify({'success': True, 'update_id': update_id})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+def start_update_project_async(data, session):
+    """Асинхронный запуск обновления конкретного проекта"""
+    project_name = data.get('project')
+    if project_name not in PROJECTS:
+        return jsonify({'success': False, 'message': 'Project not found'})
+    
+    try:
+        project_config = {project_name: PROJECTS[project_name]}
+        update_id = UpdatesModule.start_update_in_thread(
+            projects_config=project_config,
+            force_check=True
+        )
+        return jsonify({'success': True, 'update_id': update_id, 'project': project_name})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+def get_project_history(data, session):
+    """Получение истории обновлений проекта"""
+    project_name = data.get('project')
+    if not project_name or project_name not in PROJECTS:
+        return jsonify({'success': False, 'message': 'Project not found'})
+    
+    try:
+        config = get_updates_config()
+        history = UpdatesModule.get_update_history(project_name, config)
+        return jsonify({'success': True, 'history': history})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+def get_update_log(data, session):
+    """Получение лога конкретного обновления"""
+    update_id = data.get('update_id')
+    if not update_id:
+        return jsonify({'success': False, 'message': 'Update ID required'})
+    
+    try:
+        config = get_updates_config()
+        log_content = UpdatesModule.get_update_log(update_id, config)
+        return jsonify({'success': True, 'log': log_content})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
 </code>
 
-##starter_files\web\templates\sections\settings\index.html
+##starter_files\web\templates\sections\dashboard\index.html
 <code>
+<!-- Модальное окно установки -->
+{% include 'sections/dashboard/modal.html' %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-        <h1 class="h2">{{ t('settings_title') }}</h1>
-        <div class="btn-toolbar mb-2 mb-md-0">
-            <button class="btn btn-sm btn-outline-secondary" data-action="refreshSettings">
-                <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
-            </button>
-        </div>
-    </div>
-
-    <div class="row">
-        <div class="col-md-12">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-gear me-2"></i> {{ t('project_settings') }}
-                </div>
-                <div class="card-body">
-                    <form id="settingsForm">
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="projectPath" class="form-label">{{ t('project_path') }}</label>
-                                <input type="text" class="form-control" id="projectPath"
-                                       name="project_path" value="{{ settings.project_path }}">
-                                <div class="form-text">{{ t('project_path_help') }}</div>
-                                <div id="projectPathValidation" class="mt-1"></div>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="dockerFiles" class="form-label">{{ t('docker_files') }}</label>
-                                <input type="text" class="form-control" id="dockerFiles"
-                                       name="docker_files" value="{{ settings.docker_files }}">
-                                <div class="form-text">{{ t('docker_files_help') }}</div>
-                                <div id="dockerPathValidation" class="mt-1"></div>
-                            </div>
-                        </div>
-
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="projectType" class="form-label">{{ t('project_type') }}</label>
-                                <select class="form-select" id="projectType" name="project_type">
-                                    <option value="client" {{ 'selected' if settings.project_type == 'client' }}>Client</option>
-                                    <option value="laravel" {{ 'selected' if settings.project_type == 'laravel' }}>Laravel</option>
-                                    <option value="symfony" {{ 'selected' if settings.project_type == 'symfony' }}>Symfony</option>
-                                    <option value="custom" {{ 'selected' if settings.project_type == 'custom' }}>Custom</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="environment" class="form-label">{{ t('environment') }}</label>
-                                <select class="form-select" id="environment" name="environment">
-                                    <option value="production" {{ 'selected' if settings.environment == 'production' }}>Production</option>
-                                    <option value="staging" {{ 'selected' if settings.environment == 'staging' }}>Staging</option>
-                                    <option value="development" {{ 'selected' if settings.environment == 'development' }}>Development</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <button type="button" class="btn btn-secondary me-md-2" data-action="validatePaths">
-                                <i class="bi bi-check-circle"></i> {{ t('validate_paths') }}
-                            </button>
-                            <button type="button" class="btn btn-primary" data-action="saveSettings">
-                                <i class="bi bi-save"></i> {{ t('save_settings') }}
-                            </button>
-                            <button type="button" class="btn btn-success" data-action="generateDockerCompose">
-                                <i class="bi bi-file-earmark-code"></i> {{ t('generate_docker_compose') }}
-                            </button>
-                        </div>
-                    </form>
-                </div>
+    <div class="d-flex justify-content-end pt-3 pb-2 mb-3 border-bottom">
+        <div class="btn-toolbar">
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" id="refreshDashboardBtn">
+                    <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                </button>
             </div>
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <i class="bi bi-info-circle me-2"></i> {{ t('project_validation') }}
+    <!-- Карточки с общей информацией -->
+    <div class="row mb-4">
+        <!-- OS -->
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-pc-display me-2"></i> {{ t('system') }}
                 </div>
                 <div class="card-body">
-                    <div id="projectValidationResult">
-                        <p class="text-muted">{{ t('run_validation_to_see_results') }}</p>
-                    </div>
+                    <p class="card-text"><strong>{{ t('hostname') }}:</strong> {{ hostname }}</p>
+                    <p class="card-text"><strong>{{ t('username') }}:</strong> {{ username }}</p>
+                    <p class="card-text"><strong>{{ t('os') }}:</strong> {{ sys_info.os }} {{ sys_info.os_release }} ({{ sys_info.architecture }})</p>
+                    <p class="card-text"><strong>{{ t('version') }}:</strong> {{ sys_info.os_version }}</p>
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <i class="bi bi-info-circle me-2"></i> {{ t('docker_validation') }}
+
+        <!-- CPU -->
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header bg-danger text-white">
+                    <i class="bi bi-cpu me-2"></i> {{ t('cpu') }}
                 </div>
                 <div class="card-body">
-                    <div id="dockerValidationResult">
-                        <p class="text-muted">{{ t('run_validation_to_see_results') }}</p>
-                    </div>
+                    <p class="card-text"><strong>{{ t('processor') }}:</strong> {{ cpu_info.name }}</p>
+                    <p class="card-text"><strong>{{ t('cores') }}:</strong> {{ cpu_info.cores }} ({{ cpu_info.logical_cores }} {{ t('logical') }})</p>
+                    <p class="card-text"><strong>{{ t('usage') }}:</strong> {{ cpu_info.usage }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory -->
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header bg-secondary text-white">
+                    <i class="bi bi-memory me-2"></i> {{ t('memory') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('total') }}:</strong> {{ memory_info.total }}</p>
+                    <p class="card-text"><strong>{{ t('used') }}:</strong> {{ memory_info.used }} ({{ memory_info.percent }})</p>
+                    <p class="card-text"><strong>{{ t('available') }}:</strong> {{ memory_info.available }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- DISK -->
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <i class="bi bi-hdd me-2"></i> {{ t('disk') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('total') }}:</strong> {{ disk_info.total }}</p>
+                    <p class="card-text"><strong>{{ t('used') }}:</strong> {{ disk_info.used }} ({{ disk_info.percent }})</p>
+                    <p class="card-text"><strong>{{ t('free') }}:</strong> {{ disk_info.free }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- UP TIME -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <i class="bi bi-clock me-2"></i> {{ t('uptime') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('current_time') }}:</strong> {{ current_time }}</p>
+                    <p class="card-text"><strong>{{ t('system_uptime') }}:</strong> {{ uptime }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- PYTHON -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <i class="bi bi-file-code me-2"></i> Python
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('version') }}:</strong> {{ python_info.version }}</p>
+                    <p class="card-text"><strong>{{ t('implementation') }}:</strong> {{ python_info.implementation }}</p>
+                    <p class="card-text"><strong>{{ t('compiler') }}:</strong> {{ python_info.compiler }}</p>
+                </div>
+            </div>
+        </div>
+        <hr class="mt-3"/>
+
+        <h1>Обязательный софт</h1>
+
+        <!-- Docker -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-docker me-2"></i> Docker
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
+                        {% if sys_info.docker.docker_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="docker">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                    <p class="card-text"><strong>Compose:</strong> 
+                        {% if sys_info.docker.docker_compose_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="docker-compose">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Port Knocking -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-shield-lock me-2"></i> Port Knocking
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
+                        {% if sys_info.knocking.port_knocking_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="port-knocking">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>        
+
+        <!-- Git -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-git me-2"></i> Git
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
+                        {% if sys_info.git.git_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="git">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- VPN -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-cpu me-2"></i> vpnEther
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
+                        {% if sys_info.vpnEther.vpnEther_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="vpnEther">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Starter Service and SYSTEMD -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-gear me-2"></i> Starter Service
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>Systemd:</strong> 
+                        {% if sys_info.systemd.systemd_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="systemd">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                    <p class="card-text"><strong>Service:</strong> 
+                        {% if sys_info.systemd.service_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                            <span class="badge bg-info">{{ sys_info.systemd.service_status }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            {% if sys_info.systemd.systemd_installed %}
+                                <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="starter-service">
+                                    <i class="bi bi-download"></i> {{ t('install') }}
+                                </button>
+                            {% else %}
+                                <small class="text-muted">Install systemd first</small>
+                            {% endif %}
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Пример для другой утилиты -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <i class=""></i> EXAMPLE
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
+                        {% if sys_info.git_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="git">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
                 </div>
             </div>
         </div>
@@ -2171,136 +2586,664 @@ def info(data, session):
 
 <script>
 $(document).ready(function() {
-    // Обновление
-    $('[data-action="refreshSettings"]').on('click', function() {
-        $('#mainMenu a[data-section="settings"]').click();
-    });
-
-    // Валидация путей
-    $('[data-action="validatePaths"]').on('click', function() {
-        const projectPath = $('#projectPath').val();
-        const dockerFiles = $('#dockerFiles').val();
-
-        $.post('/', {
-            section: 'settings',
-            action: 'validate_project_path',
-            path: projectPath
-        }, function(response) {
-            if (response.status === 'success') {
-                const validation = response.validation;
-                const $result = $('#projectValidationResult');
-
-                let html = '<ul class="list-group list-group-flush">';
-                html += `<li class="list-group-item"><strong>Exists:</strong> ${validation.exists ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Is Directory:</strong> ${validation.is_dir ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Valid:</strong> ${validation.valid ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Message:</strong> ${validation.message}</li>`;
-                html += '</ul>';
-
-                $result.html(html);
-
-                $('#projectPathValidation').html(validation.valid
-                    ? '<span class="text-success"><i class="bi bi-check-circle"></i> Valid path</span>'
-                    : '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ' + validation.message + '</span>');
-            }
-        });
-
-        $.post('/', {
-            section: 'settings',
-            action: 'validate_docker_path',
-            path: dockerFiles
-        }, function(response) {
-            if (response.status === 'success') {
-                const validation = response.validation;
-                const $result = $('#dockerValidationResult');
-
-                let html = '<ul class="list-group list-group-flush">';
-                html += `<li class="list-group-item"><strong>Exists:</strong> ${validation.exists ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Is Directory:</strong> ${validation.is_dir ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Has Compose:</strong> ${validation.has_compose ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Valid:</strong> ${validation.valid ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Message:</strong> ${validation.message}</li>`;
-                html += '</ul>';
-
-                $result.html(html);
-
-                $('#dockerPathValidation').html(validation.valid
-                    ? '<span class="text-success"><i class="bi bi-check-circle"></i> Valid path</span>'
-                    : '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ' + validation.message + '</span>');
-            }
-        });
-    });
-
-    // Сохранение
-    $('[data-action="saveSettings"]').on('click', function() {
-        const formData = {
-            project_path: $('#projectPath').val(),
-            docker_files: $('#dockerFiles').val(),
-            project_type: $('#projectType').val(),
-            environment: $('#environment').val()
-        };
-
-        $.post('/', {
-            section: 'settings',
-            action: 'save_settings',
-            settings: JSON.stringify(formData)
-        }, function(response) {
-            if (response.status === 'success') {
-                alert('{{ t("settings_saved_successfully") }}');
-            } else {
-                alert('{{ t("settings_save_failed") }}: ' + response.message);
-            }
-        }).fail(function() {
-            alert('{{ t("request_failed") }}');
-        });
-    });
-
-    // Генерация docker-compose
-    $('[data-action="generateDockerCompose"]').on('click', function() {
-        if (confirm('{{ t("confirm_generate_docker_compose") }}')) {
-            $.post('/', {
-                section: 'settings',
-                action: 'generate_docker_compose'
-            }, function(response) {
-                if (response.status === 'success') {
-                    alert('{{ t("docker_compose_generated_successfully") }}');
-                } else {
-                    alert('{{ t("docker_compose_generation_failed") }}: ' + response.message);
-                }
-            }).fail(function() {
-                alert('{{ t("request_failed") }}');
-            });
-        }
+    // Обработчик кнопки обновления
+    $('#refreshDashboardBtn').on('click', function() {
+        location.reload();
     });
 });
 </script>
+</code>
 
-{% include 'sections/settings/env_editor.html' %}
+##starter_files\web\templates\sections\dashboard\modal.html
+<code>
+<!-- Добавляем модальное окно установки в конец общего шаблона -->
+<!-- Модальное окно установки (универсальное) -->
+<div class="modal fade" id="installModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="installModalTitle">{{ t('package_installation') }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="{{ t('close') }}"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-center mb-3">
+                    <div class="spinner-border text-primary" role="status" id="installSpinner">
+                        <span class="visually-hidden">{{ t('loading') }}...</span>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info" id="installStatus">
+                    {{ t('preparing_installation') }}
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        {{ t('installation_logs') }}
+                        <button class="btn btn-sm btn-outline-secondary float-end" id="refreshLogsBtn">
+                            <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                        </button>
+                    </div>
+                    <div class="card-body bg-dark text-white" style="height: 50vh; overflow-y: auto;">
+                        <pre id="installLogs" class="mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeInstallBtn">
+                    {{ t('close') }}
+                </button>
+                <button type="button" class="btn btn-success" id="finishInstallBtn" style="display: none;">
+                    <i class="bi bi-check-circle me-1"></i> {{ t('finish') }}
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="downloadLogsBtn" style="display: none;">
+                    <i class="bi bi-download me-1"></i> {{ t('download_logs') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
+<script>
+$(document).ready(function() {
+    // Обработчик для всех кнопок установки
+    $(document).on('click', '.install-btn', function() {
+        const packageName = $(this).data('pkg');
+        const displayNames = {
+            'docker': 'Docker',
+            'docker-compose': 'Docker Compose',
+            'port-knocking': 'Port Knocking',
+            'git': 'Git'
+        };
+        const displayName = displayNames[packageName] || packageName;
+        
+        if (confirm('{{ t("confirm_install_package") }}: ' + displayName + '?')) {
+            const $btn = $(this);
+            $btn.prop('disabled', true);
+            
+            // Показать модальное окно
+            const installModal = new bootstrap.Modal('#installModal');
+            installModal.show();
+            
+            // Установить заголовок
+            $('#installModalTitle').text('{{ t("package_installation") }}: ' + displayName);
+            
+            // Сбросить состояние модального окна
+            $('#installLogs').text('');
+            $('#installStatus').removeClass('alert-success alert-danger alert-warning')
+                               .addClass('alert-info')
+                               .text('{{ t("starting_installation") }}');
+            $('#installSpinner').show();
+            $('#finishInstallBtn').hide();
+            $('#downloadLogsBtn').hide();
+            
+            // Начать установку
+            fetch('/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Accept': 'application/json'
+                },
+                body: new URLSearchParams({
+                    'section': 'dashboard',
+                    'action': 'install_package',
+                    'package': packageName
+                })
+            })
+            .then(response => response.json())
+            .then(response => {
+                if (response.status === 'started') {
+                    const installId = response.install_id;
+                    
+                    // Сохраняем ID установки и имя пакета
+                    $('#installModal').data('install-id', installId);
+                    $('#installModal').data('package', packageName);
+                    
+                    // Функция обновления логов
+                    function updateLogs() {
+                        fetch('/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'Accept': 'application/json'
+                            },
+                            body: new URLSearchParams({
+                                'section': 'dashboard',
+                                'action': 'get_install_logs',
+                                'install_id': installId,
+                                'package': packageName
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(logResponse => {
+                            if (logResponse.status === 'success') {
+                                $('#installLogs').text(logResponse.logs);
+                                
+                                // Автоскролл к последней записи
+                                const logContainer = $('#installLogs').parent();
+                                logContainer.scrollTop(logContainer[0].scrollHeight);
+                                
+                                // Проверяем завершение установки
+                                if (logResponse.completed) {
+                                    clearInterval(logInterval);
+                                    $('#installSpinner').hide();
+                                    $('#finishInstallBtn').show();
+                                    $('#downloadLogsBtn').show();
+                                    
+                                    if (logResponse.installed) {
+                                        $('#installStatus').removeClass('alert-info')
+                                                          .addClass('alert-success')
+                                                          .text('{{ t("installation_completed_success") }}');
+                                    } else {
+                                        $('#installStatus').removeClass('alert-info')
+                                                          .addClass('alert-danger')
+                                                          .text('{{ t("installation_failed") }}');
+                                    }
+                                }
+                            } else {
+                                $('#installStatus').append('<br>' + logResponse.message);
+                            }
+                        })
+                        .catch(error => {
+                            $('#installStatus').append('<br>{{ t("log_request_failed") }}');
+                        });
+                    }
+                    
+                    // Первое обновление
+                    updateLogs();
+                    
+                    // Обновляем логи каждые 2 секунды
+                    const logInterval = setInterval(updateLogs, 2000);
+                    
+                    // Обработчик кнопки обновления логов
+                    $('#refreshLogsBtn').off('click').on('click', updateLogs);
+                    
+                    // Обработчик кнопки завершения
+                    $('#finishInstallBtn').off('click').on('click', function() {
+                        installModal.hide();
+                        location.reload(); // Перезагружаем страницу после установки
+                    });
+                    
+                    // Обработчик кнопки скачивания логов
+                    $('#downloadLogsBtn').off('click').on('click', function() {
+                        const installId = $('#installModal').data('install-id');
+                        const packageName = $('#installModal').data('package');
+                        
+                        // Создаем временную форму для скачивания
+                        const form = document.createElement('form');
+                        form.method = 'POST';
+                        form.action = '/';
+                        form.style.display = 'none';
+                        
+                        const params = {
+                            'section': 'dashboard',
+                            'action': 'download_install_logs',
+                            'install_id': installId,
+                            'package': packageName
+                        };
+                        
+                        for (const [key, value] of Object.entries(params)) {
+                            const input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = key;
+                            input.value = value;
+                            form.appendChild(input);
+                        }
+                        
+                        document.body.appendChild(form);
+                        form.submit();
+                        document.body.removeChild(form);
+                    });
+                    
+                    // Сохраняем interval ID
+                    $('#installModal').data('log-interval', logInterval);
+                } else {
+                    $('#installStatus').removeClass('alert-info')
+                                      .addClass('alert-danger')
+                                      .text(response.message || '{{ t("start_install_failed") }}');
+                    $btn.prop('disabled', false);
+                }
+            })
+            .catch(error => {
+                $('#installStatus').removeClass('alert-info')
+                                  .addClass('alert-danger')
+                                  .text('{{ t("request_failed") }}');
+                $btn.prop('disabled', false);
+            });
+        }
+    });
+
+    // Очистка интервала при закрытии модального окна
+    $('#installModal').on('hidden.bs.modal', function() {
+        const logInterval = $(this).data('log-interval');
+        if (logInterval) {
+            clearInterval(logInterval);
+        }
+        $('.install-btn').prop('disabled', false);
+    });
+});
+</script>
 </code>
 
 ##starter_files\web\templates\sections\updates\index.html
 <code>
 <div class="container-fluid">
     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-        <h1 class="h2">{{ t('updates_title') }}</h1>
+        <h1 class="h2">{{ t('updates_status_title') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button id="check-updates-btn" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-arrow-repeat"></i> {{ t('check_updates') }}
+            </button>
+        </div>
     </div>
 
     <div class="row">
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-cloud-arrow-down me-2"></i> {{ t('updates_system') }}
+                    <i class="bi bi-info-circle me-2"></i> {{ t('update_status') }}
                 </div>
-                <div class="card-body text-center py-5">
-                    <i class="bi bi-cloud-arrow-down display-1 text-muted mb-4"></i>
-                    <h3>{{ t('updates_placeholder_title') }}</h3>
-                    <p class="text-muted">{{ message }}</p>
+                <div class="card-body">
+                    {% if update_status %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-sm">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('project') }}</th>
+                                    <th>{{ t('last_update') }}</th>
+                                    <th>{{ t('status') }}</th>
+                                    <th>{{ t('actions') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for project in update_status %}
+                                <tr>
+                                    <td>
+                                        <a href="#" class="project-details-link" data-project="{{ project.name }}">
+                                            {{ project.name }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        {% if project.last_update %}
+                                            {{ project.last_update.strftime('%Y-%m-%d %H:%M:%S') }}
+                                        {% else %}
+                                            <span class="text-muted">{{ t('never_updated') }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ project.status_color }}">
+                                            {{ project.status }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-secondary update-project-btn" 
+                                                data-project="{{ project.name }}">
+                                            <i class="bi bi-cloud-arrow-down"></i> {{ t('update_now') }}
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-cloud-arrow-down display-1 text-muted mb-4"></i>
+                        <h3>{{ t('no_projects_configured') }}</h3>
+                        <p class="text-muted">{{ t('configure_projects_in_config') }}</p>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="projectDetailsModal" tabindex="-1" aria-labelledby="projectDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="projectDetailsModalLabel">Детали проекта</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="projectDetailsContent">
+                    <!-- Содержимое будет заполнено через JavaScript -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Добавьте эту секцию после таблицы статуса обновлений -->
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-clock-history me-2"></i> История обновлений
+                <button class="btn btn-sm btn-outline-primary float-end" id="refresh-history-btn">
+                    <i class="bi bi-arrow-repeat"></i> Обновить
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm" id="history-table">
+                        <thead>
+                            <tr>
+                                <th>Проект</th>
+                                <th>Время</th>
+                                <th>Статус</th>
+                                <th>Сообщение</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- История будет загружена через JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Добавьте этот JavaScript для загрузки истории обновлений
+function loadProjectHistory(projectName) {
+    $.ajax({
+        url: '/',
+        method: 'POST',
+        data: {
+            'section': 'updates',
+            'action': 'get_project_history',
+            'project': projectName
+        },
+        success: function(response) {
+            if (response.success) {
+                const historyTable = $('#history-table tbody');
+                historyTable.empty();
+                
+                response.history.forEach(item => {
+                    const row = `
+                        <tr>
+                            <td>${item.project}</td>
+                            <td>${new Date(item.timestamp).toLocaleString()}</td>
+                            <td><span class="badge bg-${getStatusColor(item.status)}">${item.status}</span></td>
+                            <td>${item.message}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-info view-log-btn" data-update-id="${item.timestamp}">
+                                    <i class="bi bi-file-text"></i> Лог
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                    historyTable.append(row);
+                });
+            } else {
+                alert('Ошибка загрузки истории: ' + response.message);
+            }
+        }
+    });
+}
+
+function getStatusColor(status) {
+    switch(status) {
+        case 'success': return 'success';
+        case 'error': return 'danger';
+        case 'no_changes': return 'info';
+        case 'new_installation': return 'primary';
+        default: return 'secondary';
+    }
+}
+
+// Обработчик для кнопки просмотра лога
+$(document).on('click', '.view-log-btn', function() {
+    const updateId = $(this).data('update-id');
+    
+    $.ajax({
+        url: '/',
+        method: 'POST',
+        data: {
+            'section': 'updates',
+            'action': 'get_update_log',
+            'update_id': updateId
+        },
+        success: function(response) {
+            if (response.success) {
+                // Показываем лог в модальном окне
+                $('#logModal .modal-body').text(response.log);
+                $('#logModal').modal('show');
+            } else {
+                alert('Ошибка загрузки лога: ' + response.message);
+            }
+        }
+    });
+});
+
+// Обработчик для кнопки обновления истории
+$('#refresh-history-btn').on('click', function() {
+    const projectName = $('#project-selector').val(); // Предполагаем, что есть селектор проектов
+    loadProjectHistory(projectName);
+});
+
+// Загружаем историю при открытии страницы
+$(document).ready(function() {
+    loadProjectHistory('all'); // или выбранный проект
+});
+</script>
+
+<!-- Добавьте модальное окно для просмотра логов -->
+<div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Лог обновления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <pre class="bg-dark text-white p-3" style="max-height: 60vh; overflow-y: auto;"></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    console.log('DOM loaded, initializing update section...');
+    
+    // Функция для отправки POST запроса
+    function postFormData(action, data) {
+        console.log('Sending request:', action, data);
+        
+        // Создаем форму для отправки данных
+        var formData = new FormData();
+        formData.append('section', 'updates');
+        formData.append('action', action);
+        
+        // Добавляем дополнительные данные
+        for (var key in data) {
+            if (data.hasOwnProperty(key)) {
+                formData.append(key, data[key]);
+            }
+        }
+
+        return $.ajax({
+            url: '/',
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            dataType: 'json'
+        });
+    }
+
+    // Кнопка проверки всех обновлений
+    $('#check-updates-btn').on('click', function() {
+        console.log('Check all updates button clicked');
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("checking") }}');
+        
+        postFormData('check_all', {})
+            .done(function(data) {
+                console.log('Check all response:', data);
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                    $btn.prop('disabled', false);
+                    $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_updates") }}');
+                }
+            })
+            .fail(function(error) {
+                console.error('Check all error:', error);
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_updates") }}');
+            });
+    });
+
+    // Кнопки обновления отдельных проектов (делегирование событий)
+    $(document).on('click', '.update-project-btn', function() {
+        var project = $(this).data('project');
+        console.log('Update project button clicked:', project);
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("updating") }}');
+        
+        postFormData('update_project', { project: project })
+            .done(function(data) {
+                console.log('Update project response:', data);
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error updating ' + project + ': ' + data.message);
+                    $btn.prop('disabled', false);
+                    $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
+                }
+            })
+            .fail(function(error) {
+                console.error('Update project error:', error);
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
+            });
+    });
+
+    // Обработчик клика по названию проекта (делегирование событий)
+    $(document).on('click', '.project-details-link', function(e) {
+        e.preventDefault();
+        var projectName = $(this).data('project');
+        console.log('Project details link clicked:', projectName);
+        
+        // Запрос детальной информации о проекте
+        postFormData('get_project_details', { project: projectName })
+            .done(function(data) {
+                console.log('Project details response:', data);
+                if (data.success) {
+                    // Форматируем и отображаем информацию
+                    var info = data.project_info;
+                    var html = `
+                        <h6>Базовая директория</h6>
+                        <p><code>${info.base_path}</code></p>
+                        
+                        <h6>URL для загрузки</h6>
+                        <p><a href="${info.download_url}" target="_blank">${info.download_url}</a></p>
+                        
+                        <h6>Отслеживаемые файлы</h6>
+                        <ul class="list-group mb-3">
+                            ${info.targets.map(target => `<li class="list-group-item"><code>${target}</code></li>`).join('')}
+                        </ul>
+                        
+                        <h6>Игнорируемые файлы</h6>
+                        <ul class="list-group mb-3">
+                            ${info.ignored.length > 0 ? 
+                              info.ignored.map(ignore => `<li class="list-group-item"><code>${ignore}</code></li>`).join('') : 
+                              '<li class="list-group-item text-muted">Нет игнорируемых файлов</li>'}
+                        </ul>
+                    `;
+                    
+                    if (info.critical_files && info.critical_files.length > 0) {
+                        html += `
+                            <h6>Критические файлы</h6>
+                            <ul class="list-group mb-3">
+                                ${info.critical_files.map(file => `<li class="list-group-item"><code>${file}</code></li>`).join('')}
+                            </ul>
+                        `;
+                    }
+                    
+                    if (info.add_in_backups && info.add_in_backups.length > 0) {
+                        html += `
+                            <h6>Дополнительные файлы для бэкапа</h6>
+                            <ul class="list-group mb-3">
+                                ${info.add_in_backups.map(file => `<li class="list-group-item"><code>${file}</code></li>`).join('')}
+                            </ul>
+                        `;
+                    }
+                    
+                    if (info.functions_if_update && Object.keys(info.functions_if_update).length > 0) {
+                        html += `
+                            <h6>Специальные функции обновления</h6>
+                            <ul class="list-group mb-3">
+                                ${Object.entries(info.functions_if_update).map(([file, func]) => 
+                                    `<li class="list-group-item"><code>${file}</code> → ${func}</li>`).join('')}
+                            </ul>
+                        `;
+                    }
+                    
+                    html += `
+                        <h6>Перезапуск после обновления</h6>
+                        <p>${info.restart_after_update ? 
+                            '<span class="badge bg-success">Да</span>' : 
+                            '<span class="badge bg-secondary">Нет</span>'}</p>
+                        
+                        <h6>Последнее обновление</h6>
+                        <p>${info.last_update ? 
+                            new Date(info.last_update).toLocaleString() : 
+                            '<span class="text-muted">Никогда</span>'}</p>
+                    `;
+                    
+                    $('#projectDetailsContent').html(html);
+                    
+                    // Показываем модальное окно
+                    $('#projectDetailsModal').modal('show');
+                } else {
+                    alert('Ошибка: ' + data.message);
+                }
+            })
+            .fail(function(error) {
+                console.error('Project details error:', error);
+                alert('Ошибка сети: ' + error.statusText);
+            });
+    });
+    
+    console.log('Update section initialized successfully');
+});
+</script>
+
+<style>
+.bi-arrow-repeat.spin {
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.project-details-link {
+    text-decoration: none;
+    color: #0d6efd;
+    font-weight: 500;
+}
+.project-details-link:hover {
+    text-decoration: underline;
+}
+</style>
 </code>
 
 ##starter_files\web\templates\sections\updates\info.html
@@ -2328,5 +3271,147 @@ $(document).ready(function() {
 </div>
 </code>
 
+##starter_files\web\templates\sections\updates\status.html
+<code>
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('updates_status_title') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button id="check-updates-btn" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-arrow-repeat"></i> {{ t('check_updates') }}
+            </button>
+        </div>
+    </div>
 
-Мы пишем новую систему обновлений! Сейчас занимаемся обновлением страницы web интерфейса! Нужно чтоб указывал дату последнего и какого компонента
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-info-circle me-2"></i> {{ t('update_status') }}
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-sm">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('project') }}</th>
+                                    <th>{{ t('last_update') }}</th>
+                                    <th>{{ t('status') }}</th>
+                                    <th>{{ t('actions') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for project in update_status %}
+                                <tr>
+                                    <td>{{ project.name }}</td>
+                                    <td>
+                                        {% if project.last_update %}
+                                            {{ project.last_update.strftime('%Y-%m-%d %H:%M:%S') }}
+                                        {% else %}
+                                            <span class="text-muted">{{ t('never_updated') }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ project.status_color }}">
+                                            {{ project.status }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-secondary update-project-btn" 
+                                                data-project="{{ project.name }}">
+                                            <i class="bi bi-cloud-arrow-down"></i> {{ t('update_now') }}
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Функция для отправки POST запроса
+    function postFormData(action, data) {
+        const formData = new URLSearchParams();
+        formData.append('section', 'updates');
+        formData.append('action', action);
+        for (const key in data) {
+            formData.append(key, data[key]);
+        }
+
+        return fetch('/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formData
+        });
+    }
+
+    // Кнопка проверки всех обновлений
+    document.getElementById('check-updates-btn').addEventListener('click', function() {
+        this.disabled = true;
+        this.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> {{ t("checking") }}';
+        
+        postFormData('check_all', {})
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                    this.disabled = false;
+                    this.innerHTML = '<i class="bi bi-arrow-repeat"></i> {{ t("check_updates") }}';
+                }
+            });
+    });
+
+    // Кнопки обновления отдельных проектов
+    document.querySelectorAll('.update-project-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const project = this.dataset.project;
+            this.disabled = true;
+            this.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> {{ t("updating") }}';
+            
+            postFormData('update_project', { project: project })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error updating ' + project + ': ' + data.message);
+                        this.disabled = false;
+                        this.innerHTML = '<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}';
+                    }
+                });
+        });
+    });
+});
+</script>
+
+<style>
+.bi-arrow-repeat.spin {
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+</style>
+</code>
+
+
+При открытии раздела обновлений отваливается запрос
+section updates
+action get_project_history
+project all
+
+{
+  "message": "Project not found",
+  "success": false
+}
