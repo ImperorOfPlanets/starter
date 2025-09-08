@@ -1,742 +1,2283 @@
 ##starter.py
 <code>
-import argparse
-import os
-import platform
-import subprocess
 import sys
-import textwrap
-from pathlib import Path
 
-from starter_files.core.utils import venv_utils
-from starter_files.core.utils.globalVars_utils import get_global
-from starter_files.core.oss.default.system import SystemModule
-from starter_files.core.utils.log_utils import LogManager
+from starter_files.interactive_mode import InteractiveMode
+from starter_files.service_mode import ServiceManager
 
-# Устанавливает глобальные переменные
-SystemModule.collect_basic_system_info()
-
-def parse_args():
-    """Парсит аргументы командной строки"""
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--service', action='store_true', help='Запуск в сервисном режиме')
-    parser.add_argument('--debug', action='store_true', help='Запуск в режиме отладки')
-    return parser.parse_args()
-
-def start_service_mode():
-    """Запускает сервисный режим"""
-    logger = get_global('logger')
-    logger.info("Запуск в сервисном режиме...")
-    sys.exit(0)
-
-def start_interactive_mode():
-    # Обычный режим
-    from starter_files.core.utils.configurateApp_utils import configure_app
-    from starter_files.core.utils.ssl_utils import get_ssl_context
-    from starter_files.core.utils.firstSetup_utils import open_browser
-    from dotenv import load_dotenv
-
-    env_file = Path(get_global('script_path')) / '.env'
-    load_dotenv(env_file)
-    print(f"[DEBUG] Переменные окружения загружены из {env_file}")
-
-    # Для отладки: проверка переменных окружения
-    env_vars = ["APP_SECRET_KEY", "ADMIN_LOGIN", "ADMIN_PASSWORD_HASH"]
-    for var in env_vars:
-        print(f"{var} = {os.environ.get(var, 'NOT_SET')}")
-
-    app = configure_app()
-    ssl_context = get_ssl_context()
-    open_browser()
-    app.run(
-        host='0.0.0.0',
-        port=8000,
-        ssl_context=ssl_context,
-        debug=True
-    )
-
-if __name__ == '__main__':
-    # Первым делом проверяем/создаем venv фыв ыф
-    if venv_utils.ensure_venv():
-        sys.exit(0)
-
-    # Проверка установки зависимостей
-    try:
-        import flask
-        import dotenv
-    except ImportError:
-        from starter_files.core.utils.requirements_utils import install_and_restart
-        install_and_restart()
-    
-
-    args = parse_args()
-    
-    # Инициализируем логгер
-    LogManager.initialize(
-        debug_mode=args.debug,
-        service_mode=args.service
-    )
-    logger = LogManager.get_logger("main")
-
-    # Устанавливаем глобальный обработчик исключений
-    from starter_files.core.utils.exceptionHandler_utils import ExceptionHandler
-    handler = ExceptionHandler()
-    sys.excepthook = handler.handle_unhandled_exception
-    logger.debug("Exception handler initialized")
-
-    # Проверка на настроенность
-    from starter_files.core.utils.firstSetup_utils import first_run_setup
-    is_first_run, credentials = first_run_setup()
-    if is_first_run and credentials:
-        logger.info("First run setup completed")
-        print("\n=== Первичная настройка завершена ===")
-        print(f"Логин: {credentials['login']}")
-        print(f"Пароль: {credentials['password']}")
-        print("Сохраните эти данные!")
-        print("="*50 + "\n")
-
-        print("=== ПРОВЕРКА ОБНОВЛЕНИЙ ===")
-        from starter_files.core.oss.default.updates import UpdatesModule
-        config = UpdatesModule.get_updates_config()
-        seconds = UpdatesModule.seconds_since_last_update('starter', config)
-        print(f"Секунд с последнего обновления: {seconds}")
-        print("===========================")
-
-    # Собираем информацию о фаерволе
-    from starter_files.core.oss.default.firewall import FirewallModule
-    print("=== ПРОВЕРКА ПОРТОВ ===")
-    firewall_info = FirewallModule.collect_firewall_info()
-    
-    if firewall_info['is_available']:
-        print(f"Активный фаервол: {firewall_info['active_firewall']}")
+def main():
+    if '--service-run' in sys.argv:
+        ServiceManager().run()
     else:
-        print("⚠️  Не обнаружен активный фаервол!")
-    
-    # Разрешенные порты в фаерволе
-    if firewall_info['all_ports_open']:
-        print("\n✅ Все порты разрешены")
-        if firewall_info['open_ports']:
-            print(f"Причина: {firewall_info['open_ports'][0]['service']}")
-    elif firewall_info['open_ports']:
-        print("\nРазрешенные порты в фаерволе:")
-        for port_info in firewall_info['open_ports']:
-            service_info = f" ({port_info.get('service', '')})" if port_info.get('service') else ""
-            print(f"  - Порт {port_info['port']}/{port_info['protocol']}{service_info}")
-    else:
-        print("\nНет явно разрешенных портов в фаерволе")
-    
-    # Слушающие порты
-    if firewall_info['listening_ports']:
-        print("\nСлушающие порты:")
-        for port_info in firewall_info['listening_ports']:
-            print(f"  - Порт {port_info['port']}/{port_info['protocol']} ({port_info.get('state', 'LISTEN')})")
-    else:
-        print("\nНет слушающих портов")
-    
-    print("===========================")
+        InteractiveMode().run()
 
-    logger.debug(f"Command line arguments: service={args.service}, debug={args.debug}")
-    # Сервисный режим
-    if args.service:
-        logger.info("Starting service mode")
-        start_service_mode()
-
-    # Обычный режим
-    logger.info("Starting interactive mode")
-    start_interactive_mode()
+if __name__ == "__main__":
+    main()
 </code>
 
-##starter_files\core\oss\default\updates.py
+##starter_files\config.py
 <code>
-import json
+"""
+КОНФИГУРАЦИОННЫЙ ФАЙЛ СИСТЕМЫ ОБНОВЛЕНИЯ
+
+Структура конфига:
+1. PROJECTS - словарь проектов для обновления
+2. BASE_DIRS - базовые директории системы
+3. Настройки ограничений запусков
+4. Флаги логирования
+"""
+
+# ========================
+# 1. НАСТРОЙКИ ПРОЕКТОВ
+# ========================
+PROJECTS = {
+    'starter': {
+        # URL для скачивания архива проекта (обязательный параметр)
+        'DOWNLOAD_URL':'http://gitflic.myidon.site/project/adminuser/starter/file/downloadAll?branch=master&format=zip',
+        
+        # Шаблоны файлов для отслеживания изменений (обязательный параметр)
+        # Формат: список строк с glob-шаблонами
+        'TARGETS': [
+            #'.gitignore',
+            'codereaderForAIv2.py',
+            'README.md',
+            'requirements.txt',
+            'starter.py',
+            'starter_files/*'
+        ],
+        'IGNORED': [
+            'starter_files/execute.log'
+        ],
+        # Базовый путь проекта (относительно корня системы) (обязательный)
+        'BASE_PATH':'.',
+        
+        # Автоматически перезапускать приложение после обновления (опционально)
+        'RESTART_AFTER_UPDATE': True
+    },
+    
+    'docker': {
+        'DOWNLOAD_URL':'http://gitflic.myidon.site/project/adminuser/docker/file/downloadAll?branch=master&format=zip',
+        
+        'TARGETS': [
+            'configs/init/*',
+            'configs/mariadb/mariadb.cnf',
+            'configs/mariadb/conf.d/logging.cnf',
+            'configs/nginx/confs/templates/default.conf.template',
+            'configs/php/cli/*',
+            'configs/php/fpm/*',
+            'configs/scripts/*',
+            'configs/supervisor/supervisord.conf',
+            'configs/transformer/app.py',
+            'configs/transformer/requirements.txt',
+            'configs/transformer/start.sh',
+            'dockerfiles/*',
+            '.env.example',
+            '.gitignore',
+            'Инструкция',
+            'check_files.py',
+            'codereaderForAIv2.py',
+            'docker-compose.example',
+            'generate_compose.py'
+        ],
+
+        # Шаблоны файлов для ИГНОРИРОВАНИЯ при проверке изменений (опционально)
+        'IGNORED': [
+            'configs/vpn/*',
+            'configs/nginx/certs/*',
+            'logs',
+            '.env'
+        ],
+        # Дополнительные файлы для включения в бэкапы (опционально)
+        'ADD_IN_BACKUPS': [
+            'configs/vpn',
+            'configs/nginx',
+            'logs',
+            'shared',
+            '.env'
+        ],
+        # Критические файлы для docker-проекта, если их нет то считается новой установкой
+        'CRITICAL_FILES': [
+            'docker-compose.example'
+        ],
+        'BASE_PATH':'docker',
+        'RESTART_AFTER_UPDATE': True,
+        
+        # Специальные функции для обработки обновлений (опционально)
+        # Формат: {'относительный_путь': 'имя_функции'}
+        'FUNCTIONS_IF_UPDATE': {
+            '.env.example': 'copy_environment_variables'
+        }
+    }
+}
+
+# ========================
+# 2. БАЗОВЫЕ ДИРЕКТОРИИ
+# ========================
+BASE_DIRS = {
+    # Директория для распаковки скачанных архивов
+    'extracted': './extracted',
+    
+    # Директория для хранения резервных копий перед обновлением
+    'backups': './backups'
+}
+
+# ==============================
+# 3. НАСТРОЙКИ ОГРАНИЧЕНИЙ ЗАПУСКОВ
+# ==============================
+from pathlib import Path
+
+# Максимальное количество запусков системы за период
+MAX_RUNS_PER_PERIOD = 5
+
+# Длительность периода контроля в минутах
+PERIOD_MINUTES = 5
+
+# Файл для записи логов запусков (формат: timestamp)
+EXECUTION_LOG_FILE = Path('starter_files') / 'logs' / 'execute.log'
+
+# ========================
+# 4. НАСТРОЙКИ ЛОГИРОВАНИЯ
+# ========================
+
+# Логировать процесс распаковки архивов (список файлов)
+LOGS_EXTRACT = True
+
+# Логировать детали сравнения файлов (хеши, изменения)
+LOGS_CHANGES = True
+
+# Логировать процесс создания резервных копий
+LOGS_BACKUP = True
+
+# ========================
+# 5. НАСТРОЙКИ ПЛАНИРОВЩИКА
+# ========================
+SCHEDULER_CONFIG = {
+    'check_containers': {
+        'interval_minutes': 5,
+        'function': 'check_docker_containers',
+        'enabled': True
+    },
+    'check_updates': {
+        'interval_minutes': 60,
+        'function': 'check_for_updates',
+        'enabled': True
+    },
+    'cleanup_logs': {
+        'interval_minutes': 1440,  # 24 часа
+        'function': 'cleanup_old_logs',
+        'enabled': True
+    }
+}
+
+"""
+ГЛОССАРИЙ ШАБЛОНОВ
+
+CRITICAL_FILES - список файлов, обязательных для работы проекта. 
+Если отсутствует хотя бы один файл из списка - 
+система считает установку новой и выполняет 
+полную копию файлов из архива.
+
+Формат: относительные пути от BASE_PATH
+Пример: ['main.py', 'configs/base.yaml']
+---------------------------------------------------------------
+Синтаксис glob-шаблонов для TARGETS/IGNORED:
+  *       - любое количество символов в имени файла/папки
+  **      - любое количество вложенных папок
+  ?       - любой один символ
+  [seq]   - любой символ из последовательности
+  [!seq]  - любой символ не из последовательности
+
+Примеры:
+  'docs/*.txt'    - все .txt файлы в папке docs
+  'src/**'        - всё содержимое src (включая подпапки)
+  'data?.csv'     - data1.csv, dataA.csv (но не data10.csv)
+
+Особенности:
+- Все пути проверяются ОТНОСИТЕЛЬНО BASE_PATH проекта
+- Шаблоны применяются к полному пути файла
+- Регистрозависимость зависит от ОС
+"""
+
+</code>
+
+##starter_files\interactive\docker_management.py
+<code>
+import subprocess
+import os
+import shutil
+from pathlib import Path
+from typing import Optional
+
+from starter_files.utils.docker_utils import DockerUtils
+from starter_files.utils.env import validate_env_file
+from starter_files.utils.vpn import check_vpn_config
+from starter_files.utils.nginx import check_nginx_configs
+from starter_files.utils.logger import logger
+
+class DockerManager:
+    def __init__(self):
+        self.docker_utils = DockerUtils()
+
+    def log_command(self, command: list, description: Optional[str] = None) -> None:
+        """Логирует выполняемую команду"""
+        cmd_str = ' '.join(command)
+        if description:
+            print(f"\n🔹 {description}:")
+        print(f"Выполняю команду: {cmd_str}")
+
+    def push_images(self) -> bool:
+        """Собирает и отправляет образы в реестр"""
+        registry = "gitflic.myidon.site:80"
+        images = [
+            ("server-other", "Dockerfile_other"),
+            ("server-php", "Dockerfile_php"),
+        ]
+        version = "0.1"
+
+        try:
+            for image_name, dockerfile in images:
+                image_tag = f"{registry}/{image_name}:{version}"
+                build_cmd = [
+                    "docker", "build",
+                    "-t", image_tag,
+                    "-f", f"./docker/dockerfiles/{dockerfile}",
+                    "./docker/dockerfiles"
+                ]
+                self.log_command(build_cmd, "Сборка Docker-образа")
+                subprocess.run(build_cmd, check=True)
+
+                push_cmd = ["docker", "push", image_tag]
+                self.log_command(push_cmd, "Отправка образа в реестр")
+                subprocess.run(push_cmd, check=True)
+                
+                print(f"✅ Образ {image_tag} успешно отправлен")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"🚨 Ошибка при работе с образами: {str(e)}")
+            return False
+
+    def check_docker_login(self, registry: str) -> bool:
+        """Проверяет и выполняет вход в Docker Registry"""
+        if not self.docker_utils.check_docker_registry_auth(registry):
+            print(f"🔒 Требуется вход в реестр {registry}")
+            login_cmd = ["docker", "login", registry]
+            self.log_command(login_cmd, "Аутентификация в Docker-реестре")
+            try:
+                subprocess.run(login_cmd, check=True)
+                return True
+            except Exception:
+                return False
+        return True
+
+    def install_docker(self) -> bool:
+        """Устанавливает Docker для Ubuntu/Debian"""
+        print("\n[Установка Docker]")
+        try:
+            if os.geteuid() != 0:
+                print("Требуются права администратора. Используйте sudo.")
+                return False
+
+            subprocess.run(['apt-get', 'update'], check=True)
+            subprocess.run(['apt-get', 'install', '-y', 'docker.io'], check=True)
+            subprocess.run(['systemctl', 'start', 'docker'], check=True)
+            subprocess.run(['systemctl', 'enable', 'docker'], check=True)
+            
+            print("[Docker] Успешно установлен")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"[Ошибка] Не удалось установить Docker: {e}")
+            return False
+
+    def install_docker_compose(self) -> bool:
+        """Устанавливает Docker Compose"""
+        print("\n[Установка Docker Compose]")
+        try:
+            subprocess.run(
+                'curl -L "https://github.com/docker/compose/releases/download/v2.35.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose',
+                shell=True,
+                check=True
+            )
+            subprocess.run(['chmod', '+x', '/usr/local/bin/docker-compose'], check=True)
+            print("[Docker Compose] Успешно установлен")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"[Ошибка] Не удалось установить Docker Compose: {e}")
+            return False
+
+    def run_docker_compose(self, push_to_registry: bool = False, pull_from_registry: bool = False) -> bool:
+        """Запускает docker-compose с настройками"""
+        docker_dir = 'docker'
+        env_path = os.path.join(docker_dir, '.env')
+        env_example_path = os.path.join(docker_dir, '.env.example')
+        
+        # Проверка и создание .env
+        if not os.path.isfile(env_path):
+            if os.path.isfile(env_example_path):
+                shutil.copyfile(env_example_path, env_path)
+                print("\n[Внимание] .env создан из примера. Заполните его!")
+                return False
+            raise Exception("Отсутствуют .env и .env.example!")
+
+        # Валидация .env
+        empty_vars = validate_env_file(env_path)
+        if empty_vars:
+            raise Exception(f"Пустые переменные в .env: {', '.join(empty_vars)}")
+
+        # Чтение переменных окружения
+        env_vars = {}
+        with open(env_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    key, value = line.split("=", 1)
+                    env_vars[key.strip()] = value.strip().strip('"')
+
+        # Дополнительные проверки
+        check_vpn_config(env_vars, docker_dir)
+        check_nginx_configs(env_vars, docker_dir)
+        
+        if not self.docker_utils.check_dockerfiles(docker_dir):
+            raise Exception("Не найдены необходимые Dockerfile")
+
+        if push_to_registry:
+            print("\n[Этап] Сборка и отправка образов в реестр...")
+            if not self.check_docker_login(registry="gitflic.myidon.site:80"):
+                return False
+            if not self.push_images():
+                return False
+
+        # Генерация docker-compose.yml
+        print("\n[Этап] Генерация docker-compose.yml...")
+        if not self.docker_utils.generate_compose(Path(docker_dir), env_vars, pull_from_registry):
+            raise Exception("Ошибка генерации docker-compose.yml")
+
+        try:
+            compose_path = os.path.join(docker_dir, 'docker-compose.yml')
+
+            if pull_from_registry:
+                print("\n[Этап] Обновление образов из реестра...")
+                subprocess.run(
+                    ["docker-compose", "pull"],
+                    cwd=docker_dir,
+                    check=True
+                )
+
+            print(f"\n[Запуск] Используется compose-файл: {compose_path}")
+            
+            log_dir = os.path.abspath(os.path.join(docker_dir, 'logs'))
+            os.makedirs(log_dir, exist_ok=True)
+            
+            with open(os.path.join(log_dir, 'docker-compose.log'), 'a') as log_file:
+                process = subprocess.Popen(
+                    ["docker-compose", "up", "-d", "--build"],
+                    cwd=docker_dir,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True
+                )
+                
+                for line in process.stdout:
+                    print(line, end='')
+                    log_file.write(line)
+                    
+                process.wait()
+                
+                if process.returncode != 0:
+                    raise subprocess.CalledProcessError(
+                        process.returncode, 
+                        process.args
+                    )
+                    
+            print("[Успех] Контейнеры запущены")
+            return True
+            
+        except subprocess.CalledProcessError as e:
+            print(f"[Ошибка] Docker Compose exited with code {e.returncode}")
+            print(f"[Ошибка] Причина: {e.stderr if e.stderr else 'См. логи'}")
+            return False
+        except Exception as e:
+            print(f"[Критическая ошибка] {str(e)}")
+            return False
+</code>
+
+##starter_files\interactive\service_management.py
+<code>
+
+</code>
+
+##starter_files\interactive\__init__.py
+<code>
+
+</code>
+
+##starter_files\interactive_mode.py
+<code>
+import os
+import sys
+import platform
+from pathlib import Path
+from starter_files.utils.docker_utils import DockerUtils
+from starter_files.utils.fs_utils import FSUtils
+from starter_files.utils.logger import logger
+
+class InteractiveMode:
+    def __init__(self):
+        self.registry_url = "gitflic.myidon.site:80"
+        self.script_path = Path(__file__).resolve().parent.parent / "starter.py"
+
+    def run(self):
+        """Основной метод запуска интерактивного режима"""
+        self._show_system_info()
+        self._check_dependencies()
+        self._show_main_menu()
+
+    def _show_system_info(self):
+        """Вывод системной информации"""
+        print("\n=== СИСТЕМНАЯ ИНФОРМАЦИЯ ===")
+        print(f"ОС: {platform.system()} {platform.version()}")
+        print(f"Python: {platform.python_version()}")
+        
+        ips = FSUtils.get_ip_addresses()
+        valid_ips = [ip for ip in ips if FSUtils.is_valid_network(ip)]
+        print(f"IP-адреса: {', '.join(valid_ips) if valid_ips else 'не обнаружены'}")
+
+    def _check_dependencies(self):
+        """Проверка необходимых зависимостей"""
+        print("\n=== ПРОВЕРКА ЗАВИСИМОСТЕЙ ===")
+        if not DockerUtils.check_installed():
+            print("[Ошибка] Docker не установлен!")
+        elif not DockerUtils.check_compose():
+            print("[Ошибка] Docker Compose не установлен!")
+
+        # Проверка авторизации в Docker Registry
+        if DockerUtils.check_registry_auth(self.registry_url):
+            print(f"[Статус] Авторизация в Docker Registry ({self.registry_url}) успешна")
+        else:
+            print(f"[Внимание] Не авторизован в Docker Registry. Выполните: docker login {self.registry_url}")
+
+    def _show_main_menu(self):
+        """Главное меню приложения"""
+        while True:
+            print("\n=== ГЛАВНОЕ МЕНЮ ===")
+            menu_items = [
+                "1. Собрать образы и отправить в реестр",
+                "2. Обновить образы из реестра",
+                "3. Управление службой",
+                "4. Проверить обновления",
+                "5. Настроить автозагрузку",
+                "0. Выход"
+            ]
+            
+            print("\n".join(menu_items))
+            choice = input("\nВыберите действие: ").strip()
+
+            if choice == '1':
+                self._build_and_push_images()
+            elif choice == '2':
+                self._pull_images()
+            elif choice == '3':
+                self._manage_service()
+            elif choice == '4':
+                self._check_updates()
+            elif choice == '5':
+                self._manage_autostart()
+            elif choice == '0':
+                sys.exit(0)
+            else:
+                print("Неверный ввод, попробуйте снова")
+
+    
+</code>
+
+##starter_files\scheduler.py
+<code>
+import schedule
+import time
+from threading import Event
+from starter_files.untils.logger import logger
+
+class TaskScheduler:
+    def __init__(self):
+        self.stop_event = Event()
+        self.jobs = []
+        self._init_scheduler()  # Явная инициализация при создании
+        
+    def _init_scheduler(self):
+        """Инициализация задач планировщика"""
+        from starter_files.config import SCHEDULER_CONFIG
+        
+        for task_name, config in SCHEDULER_CONFIG.items():
+            if not config['enabled']:
+                continue
+                
+            try:
+                # Динамический импорт функции
+                module = __import__('starter_files.tasks', fromlist=[config['function']])
+                func = getattr(module, config['function'])
+                
+                # Создаем задачу
+                job = schedule.every(config['interval_minutes']).minutes.do(func)
+                self.jobs.append(job)
+                logger.log(f"Задача '{task_name}' запланирована", "SCHEDULER")
+                
+            except Exception as e:
+                logger.log(f"Ошибка планирования задачи '{task_name}': {str(e)}", "ERROR")
+
+    def run_pending(self):
+        """Выполняет все готовые к выполнению задачи"""
+        schedule.run_pending()
+        
+    def run(self):
+        """Основной цикл выполнения задач"""
+        logger.log("Планировщик задач запущен", "SCHEDULER")
+        while not self.stop_event.is_set():
+            self.run_pending()
+            time.sleep(1)
+            
+    def stop(self):
+        """Остановка планировщика"""
+        self.stop_event.set()
+        for job in self.jobs:
+            schedule.cancel_job(job)
+        logger.log("Планировщик задач остановлен", "SCHEDULER")
+</code>
+
+##starter_files\service\docker_service.py
+<code>
+import subprocess
+from typing import Optional
+from starter_files.utils.docker_utils import DockerUtils
+
+class DockerService:
+    def __init__(self):
+        self.docker_utils = DockerUtils()
+
+    def check_environment(self) -> bool:
+        """Проверяет готовность Docker окружения"""
+        if not self.docker_utils.check_docker_installed():
+            return False
+        if not self.docker_utils.check_docker_compose_installed():
+            return False
+        return True
+
+    def validate_compose_file(self, docker_dir: str) -> bool:
+        """Проверяет валидность docker-compose файла"""
+        try:
+            result = subprocess.run(
+                ["docker-compose", "config"],
+                cwd=docker_dir,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return "valid" in result.stdout.lower()
+        except subprocess.CalledProcessError:
+            return False
+</code>
+
+##starter_files\service_mode.py
+<code>
+import os
+import sys
+import platform
+import subprocess
+import shutil
+
+from pathlib import Path
+from typing import Tuple, Optional
+import getpass
+from datetime import datetime
+
+from starter_files.utils.logger import logger
+
+class ServiceManager:
+    def __init__(self, script_path: str, service_name: str = "starter-service"):
+        self.script_path = Path(script_path).absolute()
+        self.service_name = service_name
+        self.system = platform.system()
+        self.username = getpass.getuser()
+        
+        # Определяем команду для запуска скрипта
+        self.exec_cmd = f'"{sys.executable}" "{self.script_path}"'
+        
+    def is_installed(self) -> bool:
+        """Проверяет, установлена ли служба"""
+        if self.system == "Windows":
+            return self._check_windows_service()
+        elif self.system in ["Linux", "Darwin"]:
+            return self._check_unix_service()
+        return False
+    
+    def install(self) -> bool:
+        """Устанавливает службу"""
+        print(f"\n{'='*40}")
+        print(f"Установка службы {self.service_name} для {self.system}")
+        
+        if self.system == "Windows":
+            return self._install_windows_service()
+        elif self.system in ["Linux", "Darwin"]:
+            return self._install_unix_service()
+        return False
+    
+    def uninstall(self) -> bool:
+        """Удаляет службу"""
+        print(f"\n{'='*40}")
+        print(f"Удаление службы {self.service_name} ({self.system})")
+        
+        if not self.is_installed():
+            print("⚠️ Служба не установлена")
+            return False
+            
+        if self.system == "Windows":
+            return self._uninstall_windows_service()
+        elif self.system in ["Linux", "Darwin"]:
+            return self._uninstall_unix_service()
+        return False
+    
+    def _check_windows_service(self) -> bool:
+        """Проверяет наличие службы в Windows (более надежная версия)"""
+        try:
+            # Способ 1: через sc query
+            result = subprocess.run(
+                ['sc', 'query', self.service_name],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if "RUNNING" in result.stdout or "STOPPED" in result.stdout:
+                return True
+            
+            # Способ 2: через PowerShell
+            ps_cmd = f"Get-Service -Name {self.service_name} -ErrorAction SilentlyContinue"
+            result = subprocess.run(
+                ['powershell', '-Command', ps_cmd],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            return result.returncode == 0
+            
+        except Exception:
+            return False
+
+    def _install_windows_service(self) -> bool:
+        """Устанавливает службу в Windows с помощью NSSM"""
+        try:
+            nssm_path = self._get_nssm_path()
+            if not nssm_path:
+                if not self._install_nssm():
+                    return False
+                nssm_path = self._get_nssm_path()
+
+            service_name = self.service_name
+            working_dir = str(self.script_path.parent)
+            log_file = str(Path(working_dir) / 'service.log')
+
+            # Создаем UTF-8 файл с BOM маркером
+            with open(log_file, 'wb') as f:
+                f.write(b'\xef\xbb\xbf')  # UTF-8 BOM
+                f.write(f"Service log started at {datetime.now()}\n".encode('utf-8'))
+
+            # Установка службы с перенаправлением вывода
+            subprocess.run(
+                [nssm_path, 'install', service_name, sys.executable, str(self.script_path), '--service-run'],
+                check=True
+            )
+
+            # Настройка параметров
+            subprocess.run([nssm_path, 'set', service_name, 'AppDirectory', working_dir], check=True)
+            subprocess.run([nssm_path, 'set', service_name, 'AppStdout', log_file], check=True)
+            subprocess.run([nssm_path, 'set', service_name, 'AppStderr', log_file], check=True)
+            subprocess.run([nssm_path, 'set', service_name, 'Start', 'SERVICE_AUTO_START'], check=True)
+
+            # Альтернативный способ установки кодировки - через переменную окружения
+            subprocess.run(
+                [nssm_path, 'set', service_name, 'AppEnvironmentExtra', 'PYTHONIOENCODING=utf-8'],
+                check=True
+            )
+
+            print(f"✅ Служба {service_name} успешно установлена")
+            print(f"Логи будут записываться в: {log_file} (UTF-8)")
+            return True
+
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Ошибка установки службы: {str(e)}")
+            return False
+    
+    def _get_nssm_path(self) -> Optional[Path]:
+        """Ищет NSSM в системе"""
+        paths = [
+            Path("C:\\nssm\\nssm.exe"),
+            Path("C:\\Program Files\\nssm\\nssm.exe"),
+            Path("C:\\Program Files (x86)\\nssm\\nssm.exe"),
+            Path(os.environ.get('ProgramFiles', '')) / 'nssm' / 'nssm.exe',
+            Path(os.environ.get('ProgramFiles(x86)', '')) / 'nssm' / 'nssm.exe'
+        ]
+        
+        for path in paths:
+            if path.exists():
+                return path
+        return None
+    
+    def _install_nssm(self) -> bool:
+        """Устанавливает NSSM (Non-Sucking Service Manager)"""
+        try:
+            temp_dir = Path(os.environ['TEMP'])
+            nssm_url = "https://nssm.cc/release/nssm-2.24.zip"
+            zip_path = temp_dir / "nssm.zip"
+            
+            # Скачиваем NSSM
+            print("Скачивание NSSM...")
+            subprocess.run(
+                ['curl', '-L', nssm_url, '-o', str(zip_path)],
+                check=True
+            )
+            
+            # Распаковываем в поддиректорию
+            extract_dir = temp_dir / "nssm_extracted"
+            extract_dir.mkdir(exist_ok=True)
+            
+            print("Распаковка архива...")
+            import zipfile
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            
+            # Ищем nssm.exe в распакованных файлах
+            nssm_exe = None
+            for root, _, files in os.walk(extract_dir):
+                if "nssm.exe" in files:
+                    nssm_exe = Path(root) / "nssm.exe"
+                    break
+            
+            if not nssm_exe or not nssm_exe.exists():
+                raise FileNotFoundError("nssm.exe не найден в распакованном архиве")
+            
+            # Копируем в Program Files\nssm
+            nssm_dir = Path(os.environ['ProgramFiles']) / 'nssm'
+            nssm_dir.mkdir(exist_ok=True)
+            
+            dest_path = nssm_dir / "nssm.exe"
+            shutil.copy(nssm_exe, dest_path)
+            
+            # Добавляем в PATH
+            os.environ['PATH'] += os.pathsep + str(nssm_dir)
+            
+            # Удаляем временные файлы
+            print("Очистка временных файлов...")
+            zip_path.unlink(missing_ok=True)
+            shutil.rmtree(extract_dir, ignore_errors=True)
+            
+            print("✅ NSSM успешно установлен!")
+            return True
+        except Exception as e:
+            print(f"❌ Ошибка установки NSSM: {str(e)}")
+            return False
+    
+    def _check_unix_service(self) -> bool:
+        """Проверяет наличие службы в Unix-системах"""
+        if self.system == "Linux":
+            # Проверка systemd
+            systemd_dir = Path("/etc/systemd/system")
+            service_file = systemd_dir / f"{self.service_name}.service"
+            
+            if service_file.exists():
+                return True
+            
+            # Проверка init.d
+            initd_file = Path(f"/etc/init.d/{self.service_name}")
+            if initd_file.exists():
+                return True
+        
+        # Общая проверка для всех Unix-систем
+        try:
+            subprocess.run(
+                ['service', self.service_name, 'status'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True
+            )
+            return True
+        except subprocess.CalledProcessError:
+            return False
+    
+    def _install_unix_service(self) -> bool:
+        """Устанавливает службу в Unix-системах"""
+        try:
+            if self.system == "Linux":
+                # Предпочтительный способ - systemd
+                systemd_dir = Path("/etc/systemd/system")
+                systemd_dir.mkdir(parents=True, exist_ok=True)
+                
+                service_content = f"""[Unit]
+Description={self.service_name}
+After=network.target
+
+[Service]
+Type=simple
+User={self.username}
+ExecStart={self.exec_cmd}
+WorkingDirectory={self.script_path.parent}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+"""
+                service_file = systemd_dir / f"{self.service_name}.service"
+                with open(service_file, 'w') as f:
+                    f.write(service_content)
+                
+                # Обновляем systemd и включаем службу
+                subprocess.run(['systemctl', 'daemon-reload'], check=True)
+                subprocess.run(['systemctl', 'enable', self.service_name], check=True)
+                
+                print("✅ Служба установлена как systemd unit")
+                return True
+            
+            # Для других Unix-систем (включая macOS)
+            initd_content = f"""#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          {self.service_name}
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: {self.service_name}
+# Description:       {self.service_name}
+### END INIT INFO
+
+case "$1" in
+    start)
+        {self.exec_cmd} &
+        ;;
+    stop)
+        pkill -f "{self.script_path}"
+        ;;
+    restart)
+        $0 stop
+        $0 start
+        ;;
+    *)
+        echo "Usage: $0 {{start|stop|restart}}"
+        exit 1
+        ;;
+esac
+
+exit 0
+"""
+            initd_file = Path(f"/etc/init.d/{self.service_name}")
+            with open(initd_file, 'w') as f:
+                f.write(initd_content)
+            
+            # Даем права на выполнение
+            initd_file.chmod(0o755)
+            
+            # Добавляем в автозагрузку
+            if self.system == "Linux":
+                subprocess.run(['update-rc.d', self.service_name, 'defaults'], check=True)
+            elif self.system == "Darwin":
+                plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{self.service_name}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{sys.executable}</string>
+        <string>{self.script_path}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>{self.script_path.parent}</string>
+</dict>
+</plist>
+"""
+                plist_file = Path(f"/Library/LaunchDaemons/{self.service_name}.plist")
+                with open(plist_file, 'w') as f:
+                    f.write(plist_content)
+                
+                subprocess.run(['launchctl', 'load', str(plist_file)], check=True)
+            
+            print("✅ Служба установлена")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка установки службы: {str(e)}")
+            return False
+    
+    def _uninstall_unix_service(self) -> bool:
+        """Удаляет службу в Unix-системах"""
+        try:
+            if self.system == "Linux":
+                # Удаляем systemd unit
+                systemd_file = Path(f"/etc/systemd/system/{self.service_name}.service")
+                if systemd_file.exists():
+                    subprocess.run(['systemctl', 'stop', self.service_name], check=False)
+                    subprocess.run(['systemctl', 'disable', self.service_name], check=True)
+                    systemd_file.unlink()
+                    subprocess.run(['systemctl', 'daemon-reload'], check=True)
+                    print("✅ Systemd unit удален")
+                
+                # Удаляем init.d скрипт
+                initd_file = Path(f"/etc/init.d/{self.service_name}")
+                if initd_file.exists():
+                    subprocess.run(['service', self.service_name, 'stop'], check=False)
+                    subprocess.run(['update-rc.d', '-f', self.service_name, 'remove'], check=True)
+                    initd_file.unlink()
+                    print("✅ Init.d скрипт удален")
+            
+            elif self.system == "Darwin":
+                plist_file = Path(f"/Library/LaunchDaemons/{self.service_name}.plist")
+                if plist_file.exists():
+                    subprocess.run(['launchctl', 'unload', str(plist_file)], check=True)
+                    plist_file.unlink()
+                    print("✅ LaunchDaemon удален")
+            
+            else:
+                initd_file = Path(f"/etc/init.d/{self.service_name}")
+                if initd_file.exists():
+                    subprocess.run(['service', self.service_name, 'stop'], check=False)
+                    initd_file.unlink()
+                    print("✅ Init скрипт удален")
+            
+            return True
+        except Exception as e:
+            print(f"❌ Ошибка удаления службы: {str(e)}")
+            return False
+
+    def _uninstall_windows_service(self) -> bool:
+        """Удаляет службу Windows с помощью NSSM"""
+        try:
+            # 1. Получаем путь к NSSM
+            nssm_path = self._get_nssm_path()
+            if not nssm_path:
+                print("❌ NSSM не найден, удаление невозможно")
+                return False
+
+            # 2. Останавливаем службу
+            try:
+                subprocess.run(
+                    ['sc', 'stop', self.service_name],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                print("✅ Служба остановлена")
+            except subprocess.CalledProcessError:
+                pass  # Служба уже остановлена или не существует
+
+            # 3. Удаляем службу через NSSM
+            subprocess.run(
+                [nssm_path, 'remove', self.service_name, 'confirm'],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            
+            # 4. Дополнительно удаляем через sc (на случай если NSSM не сработал)
+            try:
+                subprocess.run(
+                    ['sc', 'delete', self.service_name],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            except subprocess.CalledProcessError:
+                pass
+
+            print(f"✅ Служба {self.service_name} успешно удалена")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка удаления службы: {str(e)}")
+            return False
+
+def manage_service(script_path: str):
+    """Основная функция управления службой"""
+    service_name = "starter-service"
+    manager = ServiceManager(script_path, service_name)
+    
+    print("\n" + "="*50)
+    print("⚙️ Управление службой".center(50))
+    print("="*50)
+    print(f"\nСкрипт: {script_path}")
+    print(f"ОС: {platform.system()}")
+    print(f"Имя службы: {service_name}")
+    
+    if manager.is_installed():
+        print("Текущий статус: ✅ Служба установлена")
+    else:
+        print("Текущий статус: ❌ Служба не установлена")
+
+    print("\nОпции:")
+    print("1. Установить службу")
+    print("2. Удалить службу (если установлена)")
+    print("3. Пропустить")
+    
+    while True:
+        choice = input("\nВаш выбор [1-3]: ").strip()
+        
+        if choice == '1':
+            if manager.is_installed():
+                print("\n⚠️ Служба уже установлена")
+            else:
+                if manager.install():
+                    print("\n✅ Служба успешно установлена!")
+                    # Запускаем службу после установки
+                    try:
+                        if platform.system() == "Windows":
+                            subprocess.run(['sc', 'start', service_name], check=True)
+                        else:
+                            subprocess.run(['service', service_name, 'start'], check=True)
+                        print("✅ Служба запущена")
+                    except Exception as e:
+                        print(f"⚠️ Не удалось запустить службу: {str(e)}")
+                    return True
+        elif choice == '2':
+            if not manager.is_installed():
+                print("\n⚠️ Служба не установлена")
+            elif manager.uninstall():
+                print("\n✅ Служба успешно удалена!")
+                return True
+        elif choice == '3':
+            print("\n⏭ Пропускаем управление службой")
+            return False
+        else:
+            print("⚠️ Неверный выбор, попробуйте снова")
+</code>
+
+##starter_files\tasks.py
+<code>
+from starter_files.interactive.docker import check_docker_installed, run_docker_compose
+from starter_files.untils.updates import start_updates_projects
+from starter_files.untils.logger import logger
+
+def check_docker_containers():
+    """Проверяет состояние контейнеров и перезапускает при необходимости"""
+    logger.log("Проверка состояния Docker контейнеров...", "TASK")
+    if not check_docker_installed():
+        logger.log("Docker не установлен", "ERROR")
+        return
+        
+    # Здесь можно добавить более сложную логику проверки
+    run_docker_compose(push_to_registry=False, pull_from_registry=False)
+
+def check_for_updates():
+    """Проверяет наличие обновлений"""
+    logger.log("Проверка обновлений...", "TASK")
+    start_updates_projects()
+
+def cleanup_old_logs():
+    """Очищает старые логи"""
+    logger.log("Очистка старых логов...", "TASK")
+    # Реализация очистки логов
+</code>
+
+##starter_files\utils\containers_task.py
+<code>
+from starter_files.untils.docker_utils import DockerUtils
+
+class ContainersTask:
+    def execute(self):
+        if not DockerUtils.check_installed():
+            raise Exception("Docker не установлен")
+        
+        # Ваша логика проверки контейнеров
+        print("Проверка контейнеров...")
+</code>
+
+##starter_files\utils\docker_utils.py
+<code>
+import subprocess
+import re
+import os
+import shutil
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+class DockerUtils:
+    @staticmethod
+    def check_docker_installed() -> bool:
+        """Проверяет установлен ли Docker и возвращает статус"""
+        try:
+            result = subprocess.run(
+                ['docker', '--version'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+
+    @staticmethod
+    def check_docker_compose_installed() -> bool:
+        """Проверяет установлен ли Docker Compose и возвращает статус"""
+        try:
+            subprocess.run(
+                ['docker-compose', '--version'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+
+    @staticmethod
+    def check_dockerfiles(docker_dir: str) -> bool:
+        """Проверка наличия необходимых Dockerfile"""
+        required = [
+            os.path.join("dockerfiles", "Dockerfile_other"),
+            os.path.join("dockerfiles", "Dockerfile_php")
+        ]
+        for path in required:
+            if not (Path(docker_dir) / path).exists():
+                return False
+        return True
+
+    @staticmethod
+    def replace_env_variables(content: str, env_vars: Dict[str, str]) -> str:
+        """Заменяет ${PROJECTNAME} на значение из env_vars"""
+        def replace_match(match):
+            return env_vars.get("PROJECTNAME", match.group(0))
+        
+        return re.sub(
+            r'\$\{PROJECTNAME\}',
+            replace_match,
+            content
+        )
+
+    @staticmethod
+    def process_service_blocks(content: str, enabled_services: List[str], env_vars: Dict[str, str]) -> str:
+        """Обрабатывает блоки сервисов, оставляя только разрешенные"""
+        pattern = re.compile(
+            r'### START (.*?) ###(.*?)### END \1 ###',
+            re.DOTALL
+        )
+        
+        def replace_block(match):
+            service_name = match.group(1).strip().upper()
+            block_content = match.group(2)
+            
+            if service_name in enabled_services:
+                replaced_content = DockerUtils.replace_env_variables(block_content, env_vars)
+                return f"### START {service_name} ###{replaced_content}### END {service_name} ###"
+            return ''
+
+        return pattern.sub(replace_block, content)
+
+    @staticmethod
+    def generate_compose(docker_dir: Path, env_vars: Dict[str, str], pull_from_registry: bool = False) -> bool:
+        """Генерирует docker-compose.yml на основе примера"""
+        compose_example = Path(docker_dir) / "docker-compose.example"
+        compose_output = Path(docker_dir) / "docker-compose.yml"
+        
+        try:
+            content = compose_example.read_text(encoding='utf-8')
+
+            if pull_from_registry:
+                content = re.sub(
+                    r'\n\s+build:.*?dockerfile:.*?\n',
+                    '\n',
+                    content,
+                    flags=re.DOTALL
+                )
+
+            enabled_services = [
+                s.strip().upper() 
+                for s in env_vars.get("ENABLED_SERVICES", "").split(",") 
+                if s.strip()
+            ]
+
+            content = DockerUtils.process_service_blocks(content, enabled_services, env_vars)
+            content = DockerUtils.replace_env_variables(content, env_vars)
+
+            compose_output.write_text(content, encoding='utf-8')
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def check_docker_registry_auth(registry: str) -> bool:
+        """Проверяет авторизацию в Docker Registry"""
+        try:
+            result = subprocess.run(
+                ["docker", "login", registry],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                input=b'\n',
+                check=False
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+</code>
+
+##starter_files\utils\env.py
+<code>
+import re
+
+def validate_env_file(env_path, allowed_empty=None):
+    """
+    Проверяет .env файл на наличие незаполненных переменных.
+    Возвращает список пустых переменных, учитывая разрешенные пустые значения.
+    
+    :param env_path: Путь к .env файлу
+    :param allowed_empty: Список разрешенных пустых переменных
+    :return: Список незаполненных переменных
+    """
+    if allowed_empty is None:
+        allowed_empty = ['ENABLED_SERVICES']
+        
+    empty_vars = []
+
+    env_pattern = re.compile(
+        r'^\s*'                             # Начальные пробелы
+        r'(?!#)'                            # Игнорируем комментарии (строка не начинается с #)
+        r'(?P<key>[A-Za-z_][A-Za-z0-9_]*)'  # Имя переменной
+        r'\s*=\s*'                          # Разделитель =
+        r'(?P<value>'                       # Значение:
+            r'''(\s*                        # Пустые пробелы
+                ("")?                       # Пустые кавычки ""
+                |('')?                      # Или пустые кавычки ''
+                |[^#\n]*                    # Любые символы кроме # и переноса
+            )'''                         
+        r')'                             
+        r'\s*'                              # Пробелы в конце
+        r'(?=\n|$)',                        # До конца строки или файла
+        re.MULTILINE
+    )
+
+    with open(env_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+        
+        for match in env_pattern.finditer(content):
+            key = match.group('key')
+            value = match.group('value').strip()
+            
+            if key not in allowed_empty:
+                is_empty = (
+                    not value 
+                    or value in ('""', "''", "' '", '" "')
+                    or (len(value.strip('"\'')) == 0)
+                )
+                
+                if is_empty:
+                    empty_vars.append(key)
+                    
+    return empty_vars
+</code>
+
+##starter_files\utils\fs_utils.py
+<code>
+import os
+import shutil
+import hashlib
+import re
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+class FSUtils:
+    """Утилиты для работы с файловой системой"""
+
+    @staticmethod
+    def check_folders(folders_to_check: List[str]) -> None:
+        """
+        Проверяет наличие папок и создает их при необходимости.
+        
+        Args:
+            folders_to_check: Список папок для проверки (относительно рабочей директории)
+        """
+        folders_to_check = [
+            'docker', 'laravel'
+        ]
+        for folder in folders_to_check:
+            path = Path(folder)
+            if not path.exists():
+                path.mkdir(parents=True)
+                print(f'Папка "{folder}" создана')
+            else:
+                print(f'Папка "{folder}" уже существует')
+
+    @staticmethod
+    def validate_env_file(env_path: str, allowed_empty: List[str] = None) -> List[str]:
+        """
+        Проверяет .env файл на незаполненные переменные.
+        
+        Args:
+            env_path: Путь к .env файлу
+            allowed_empty: Список переменных, которые могут быть пустыми
+            
+        Returns:
+            Список незаполненных переменных
+        """
+        if allowed_empty is None:
+            allowed_empty = ['ENABLED_SERVICES']
+            
+        empty_vars = []
+        env_pattern = re.compile(
+            r'^\s*(?!#)(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?P<value>\s*("")?(\'\')?[^#\n]*)(?=\n|$)',
+            re.MULTILINE
+        )
+
+        with open(env_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+            for match in env_pattern.finditer(content):
+                key = match.group('key')
+                value = match.group('value').strip()
+                
+                if key not in allowed_empty:
+                    is_empty = (
+                        not value 
+                        or value in ('""', "''", "' '", '" "')
+                        or (len(value.strip('"\'')) == 0)
+                    )
+                    
+                    if is_empty:
+                        empty_vars.append(key)
+                        
+        return empty_vars
+
+    @staticmethod
+    def copy_environment_variables(env_example_path: str, env_path: str) -> None:
+        """
+        Копирует переменные из старого .env в новый .env.example.
+        
+        Args:
+            env_example_path: Путь к новому .env.example
+            env_path: Путь к текущему .env
+        """
+        # Чтение старых переменных
+        old_vars = {}
+        if Path(env_path).exists():
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if '=' in line and not line.startswith('#'):
+                        key, value = line.strip().split('=', 1)
+                        old_vars[key] = value
+
+        # Копирование с сохранением старых значений
+        if Path(env_example_path).exists():
+            with open(env_example_path, 'r', encoding='utf-8') as f_in:
+                with open(env_path, 'w', encoding='utf-8') as f_out:
+                    for line in f_in:
+                        if '=' in line and not line.startswith('#'):
+                            key, _ = line.split('=', 1)
+                            if key in old_vars:
+                                line = f"{key}={old_vars[key]}\n"
+                        f_out.write(line)
+
+    @staticmethod
+    def get_file_hash(file_path: str) -> str:
+        """
+        Вычисляет SHA-256 хеш файла.
+        
+        Args:
+            file_path: Путь к файлу
+            
+        Returns:
+            Хеш-сумма файла в hex-формате
+        """
+        with open(file_path, 'rb') as f:
+            return hashlib.sha256(f.read()).hexdigest()
+
+    @staticmethod
+    def create_backup(source_dir: str, backup_dir: str, exclude: List[str] = None) -> None:
+        """
+        Создает резервную копию директории.
+        
+        Args:
+            source_dir: Директория для бэкапа
+            backup_dir: Целевая директория
+            exclude: Список шаблонов для исключения
+        """
+        if exclude is None:
+            exclude = []
+            
+        source = Path(source_dir)
+        backup = Path(backup_dir)
+        
+        for item in source.glob('**/*'):
+            if any(item.match(pattern) for pattern in exclude):
+                continue
+                
+            if item.is_file():
+                relative = item.relative_to(source)
+                target = backup / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(item, target)
+
+    @staticmethod
+    def sync_dirs(source_dir: str, target_dir: str, patterns: List[str], ignore: List[str] = None) -> Dict:
+        """
+        Синхронизирует файлы между директориями по шаблонам.
+        
+        Args:
+            source_dir: Источник
+            target_dir: Цель
+            patterns: Шаблоны файлов для включения
+            ignore: Шаблоны файлов для исключения
+            
+        Returns:
+            Словарь с информацией о синхронизированных файлах
+        """
+        if ignore is None:
+            ignore = []
+            
+        changes = {'new': [], 'updated': [], 'removed': []}
+        source = Path(source_dir)
+        target = Path(target_dir)
+        
+        # Обработка новых/измененных файлов
+        for pattern in patterns:
+            for src_path in source.glob(pattern):
+                if src_path.is_file():
+                    rel_path = src_path.relative_to(source)
+                    
+                    if any(rel_path.match(ignore_pattern) for ignore_pattern in ignore):
+                        continue
+                        
+                    dst_path = target / rel_path
+                    dst_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    if not dst_path.exists():
+                        changes['new'].append(str(rel_path))
+                    elif FSUtils.get_file_hash(src_path) != FSUtils.get_file_hash(dst_path):
+                        changes['updated'].append(str(rel_path))
+                        
+                    shutil.copy2(src_path, dst_path)
+        
+        return changes
+
+    @staticmethod
+    def create_shortcut(target: str, shortcut: str, args: str = "", workdir: str = "") -> None:
+        """
+        Создает ярлык в Windows.
+        
+        Args:
+            target: Целевой файл
+            shortcut: Путь к ярлыку
+            args: Аргументы командной строки
+            workdir: Рабочая директория
+        """
+        try:
+            import winshell
+            from win32com.client import Dispatch
+            
+            shell = Dispatch('WScript.Shell')
+            shortcut = shell.CreateShortCut(shortcut)
+            shortcut.TargetPath = target
+            shortcut.Arguments = args
+            shortcut.WorkingDirectory = workdir
+            shortcut.save()
+        except ImportError:
+            raise Exception("Для создания ярлыков требуется pywin32 и winshell")
+
+    @staticmethod
+    def get_ip_addresses() -> List[str]:
+        """Возвращает список IP-адресов устройства"""
+        import socket
+        try:
+            hostnames = socket.gethostbyname_ex(socket.gethostname())
+            return hostnames[2]
+        except Exception:
+            return []
+
+    @staticmethod
+    def is_valid_network(ip_address: str) -> bool:
+        """
+        Проверяет, соответствует ли IP адресу диапазону '10.8.*'.
+        
+        Args:
+            ip_address: IP-адрес для проверки
+            
+        Returns:
+            bool: True если адрес валидный
+        """
+        import re
+        return bool(re.match(r'^10\.8\.\d+\.\d+$', ip_address))
+</code>
+
+##starter_files\utils\logger.py
+<code>
+# starter_files/logger.py
+import os
+import sys
+import platform
+from pathlib import Path
+from datetime import datetime
+import uuid
+import shutil
+import zipfile
+import getpass
+import socket
+
+class ProjectLogger:
+    def __init__(self):
+        self.logs_dir = Path('logs')
+        self.archive_dir = self.logs_dir / 'archive'
+        self.current_log = None
+        self.run_id = str(uuid.uuid4())[:8]  # Короткий UUID
+        self.start_time = datetime.now()
+        
+        # Создаем директории если их нет
+        self.logs_dir.mkdir(exist_ok=True)
+        self.archive_dir.mkdir(exist_ok=True)
+        
+        # Инициализируем лог
+        self._init_log_file()
+        self._cleanup_old_logs()
+        
+    def _init_log_file(self):
+        """Инициализирует файл лога для текущего запуска"""
+        timestamp = self.start_time.strftime('%Y%m%d_%H%M%S')
+        self.current_log = self.logs_dir / f"log_{timestamp}_{self.run_id}.txt"
+        
+        # Получаем системную информацию
+        system_info = {
+            'OS': platform.system(),
+            'OS Version': platform.version(),
+            'Hostname': socket.gethostname(),
+            'Username': getpass.getuser(),
+            'Python Version': platform.python_version(),
+            'Working Directory': os.getcwd(),
+            'Command Line': ' '.join(sys.argv),
+            'PID': os.getpid()
+        }
+        
+        # Записываем заголовок лога
+        with open(self.current_log, 'a', encoding='utf-8') as f:
+            f.write(f"=== RUN ID: {self.run_id} ===\n")
+            f.write(f"=== START TIME: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')} ===\n\n")
+            
+            f.write("=== SYSTEM INFO ===\n")
+            for key, value in system_info.items():
+                f.write(f"{key}: {value}\n")
+            
+            f.write("\n=== COMMAND LINE PARAMETERS ===\n")
+            for i, arg in enumerate(sys.argv):
+                f.write(f"Argument {i}: {arg}\n")
+            
+            f.write("\n=== ENVIRONMENT VARIABLES ===\n")
+            for key in sorted(os.environ.keys()):
+                if key.startswith(('DOCKER_', 'PATH', 'PYTHON', 'HOME', 'USER')):
+                    f.write(f"{key}: {os.environ[key]}\n")
+            
+            f.write("\n=== LOG ENTRIES ===\n")
+    
+    def _cleanup_old_logs(self):
+        """Управляет количеством лог-файлов"""
+        # Получаем все лог-файлы, отсортированные по дате
+        log_files = sorted(self.logs_dir.glob('log_*.txt'), key=os.path.getmtime)
+        
+        # Если больше 10 файлов - перемещаем старые в архив
+        if len(log_files) > 10:
+            files_to_move = log_files[:-10]  # Все кроме последних 10
+            
+            # Проверяем архив на количество файлов
+            archived_logs = sorted(self.archive_dir.glob('log_*.txt'), key=os.path.getmtime)
+            if len(archived_logs) >= 100:
+                self._create_archive_bundle(archived_logs)
+            
+            # Перемещаем файлы в архив
+            for file in files_to_move:
+                shutil.move(file, self.archive_dir / file.name)
+    
+    def _create_archive_bundle(self, files):
+        """Создает архивный bundle из старых логов"""
+        oldest_date = files[0].stem.split('_')[1]
+        newest_date = files[-1].stem.split('_')[1]
+        archive_name = f"logs_{oldest_date}_to_{newest_date}.zip"
+        
+        # Создаем zip-архив
+        with zipfile.ZipFile(self.archive_dir / archive_name, 'w') as zipf:
+            for file in files:
+                zipf.write(file, file.name)
+                file.unlink()
+    
+    def log(self, message: str, level: str = "INFO", print_to_console: bool = True):
+        """Основная функция логирования"""
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_entry = f"[{timestamp}] [{level}] {message}\n"
+        
+        # Запись в файл (всегда)
+        with open(self.current_log, 'a', encoding='utf-8') as f:
+            f.write(log_entry)
+        
+        # Вывод в консоль
+        if print_to_console:
+            print(log_entry.strip())
+    
+    def log_command(self, command: list, description: str = None):
+        """Специальное логирование для команд"""
+        cmd_str = ' '.join(command)
+        if description:
+            self.log(f"{description}: {cmd_str}", "COMMAND")
+        else:
+            self.log(f"Выполняю команду: {cmd_str}", "COMMAND")
+    
+    def log_system_info(self):
+        """Логирует дополнительную системную информацию"""
+        try:
+            ips = ', '.join(socket.gethostbyname_ex(socket.gethostname())[2])
+            self.log(f"IP Addresses: {ips}", "SYSTEM")
+        except Exception as e:
+            self.log(f"Failed to get IPs: {str(e)}", "WARNING")
+
+# Глобальный экземпляр логгера
+logger = ProjectLogger()
+</code>
+
+##starter_files\utils\mail.py
+<code>
+
+</code>
+
+##starter_files\utils\nginx.py
+<code>
+from pathlib import Path
+
+def check_nginx_configs(env_vars, docker_dir):
+    """Проверка конфигурации Nginx"""
+    conf_dir = Path(docker_dir) / "configs/nginx/confs"
+    cert_dir = Path(docker_dir) / "configs/nginx/certs"
+    
+    if not conf_dir.exists():
+        raise Exception(f"Директория конфигов Nginx не найдена: {conf_dir}")
+        
+    template_path = conf_dir / "templates/default.conf.template"
+    if not template_path.exists():
+        raise Exception(f"Шаблон Nginx не найден: {template_path}")
+    domain = env_vars.get("NGINX_DOMAIN")
+    if domain:
+        cert_files = ["fullchain.pem", "privkey.pem"]
+        missing = [f for f in cert_files if not (cert_dir / f).exists()]
+        if missing:
+            raise Exception(f"Отсутствуют SSL-сертификаты: {', '.join(missing)}")
+</code>
+
+##starter_files\utils\updates.py
+<code>
 import os
 import shutil
 import zipfile
 import requests
 import hashlib
+import json
 import sys
 import subprocess
-import logging
-import uuid
+
 from pathlib import Path
-from datetime import datetime, timedelta
-from typing import Dict, Any, Tuple, List, Optional
+from datetime import datetime,timedelta
 
-from starter_files.core.utils.globalVars_utils import get_global
+from starter_files.config import PROJECTS
 
-class UpdatesModule:
-    """
-    Модуль для управления обновлениями проектов
-    Все файлы хранятся в папке /starter_files/updates/
-    """
-    
-    # Конфигурация путей
-    DEFAULT_CONFIG = {
-        'BASE_TEMP_DIR': 'starter_files/updates',
-        'EXTRACTED_SUBDIR': 'extracted',
-        'BACKUPS_SUBDIR': 'backups',
-        'LOG_DIR': 'starter_files/logs/updates',
-        'CLEANUP_DAYS': 7,
-        'MAX_RETRIES': 3,
-        'TIMEOUT': 30,
-        'STATE_FILE': 'update_state.json',
-        'MIN_CHECK_INTERVAL': 30,
-        'HISTORY_FILE': 'update_history.json'
-    }
-    
-    @staticmethod
-    def get_updates_config() -> Dict:
-        """
-        Получение конфигурации с правильными путями
-        """
-        config = UpdatesModule.DEFAULT_CONFIG.copy()
-        
-        # Устанавливаем правильные пути
-        script_path = get_global('script_path')
-        base_dir = script_path / 'starter_files' / 'updates'
-        logs_dir = script_path / 'starter_files' / 'logs' / 'updates'
-        
-        config['BASE_TEMP_DIR'] = str(base_dir)
-        config['STATE_FILE'] = str(base_dir / 'update_state.json')
-        config['HISTORY_FILE'] = str(base_dir / 'update_history.json')
-        config['LOG_DIR'] = str(logs_dir)
-        
-        # Создаем директории если не существуют
-        base_dir.mkdir(parents=True, exist_ok=True)
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        
-        return config
+from datetime import datetime
 
-    @staticmethod
-    def get_update_history(project_name: str = None) -> Dict:
-        """
-        Получение истории обновлений для проекта или всех проектов
-        """
-        config = UpdatesModule.get_updates_config()
-        history_file = Path(config['HISTORY_FILE'])
-        
-        if not history_file.exists():
-            return {"history": []}
+from starter_files.untils.logger import logger
 
-        try:
-            with open(history_file, 'r', encoding='utf-8') as f:
-                history = json.load(f)
-            
-            if project_name and project_name != 'all':
-                project_history = [item for item in history if item.get('project') == project_name]
-                return {"history": project_history}
-            else:
-                return {"history": history}
-                
-        except Exception as e:
-            return {"error": str(e), "history": []}
+# TEST
 
-    @staticmethod
-    def update_project(project_name: str, project_config: Dict) -> Dict:
-        """
-        Обновление конкретного проекта
-        """
-        config = UpdatesModule.get_updates_config()
-        update_id = str(uuid.uuid4())
-        
-        # Создаем директории для логов
-        log_dir = Path(config['LOG_DIR'])
-        log_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Настройка логирования для этого обновления
-        logger = logging.getLogger(f'update_{update_id}')
-        logger.setLevel(logging.INFO)
-        
-        # Удаляем существующие обработчики
-        for handler in logger.handlers[:]:
-            logger.removeHandler(handler)
-        
-        log_file = log_dir / f"{update_id}.log"
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
-        file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        logger.addHandler(file_handler)
-        
-        # Также добавляем вывод в консоль
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        logger.addHandler(console_handler)
-        
-        try:
-            logger.info(f"Начало обновления проекта {project_name}")
-            
-            # Запускаем процесс обновления
-            timestamp, _, _ = UpdatesModule.start_updates_projects(
-                {project_name: project_config},
-                force_check=True
-            )
-            
-            # Добавляем запись в историю
-            UpdatesModule._add_to_history(project_name, timestamp, "completed", config)
-            
-            logger.info("Обновление завершено успешно")
-            return {
-                "success": True,
-                "update_id": update_id,
-                "project": project_name,
-                "message": "Обновление завершено успешно"
-            }
-            
-        except Exception as e:
-            logger.error(f"Ошибка при обновлении: {str(e)}")
-            # Добавляем запись об ошибке в историю
-            UpdatesModule._add_to_history(project_name, update_id, f"error: {str(e)}", config)
-            return {
-                "success": False,
-                "update_id": update_id,
-                "project": project_name,
-                "message": str(e)
+def start_updates_projects():
+
+    # Определяем общее время запуска
+    LAUNCH_TIMESTAMP = datetime.now().strftime('%Y%m%d_%H%M%S')
+    version_log = Path('last_files_projects.txt')
+
+
+    # Переменная для хранения изменений
+    PROJECTS_UPDATES = {}
+
+    # Переменная для хранения сгенерированных путей
+    PROJECTS_UPDATES_FOLDERS = {}
+
+    # РАСПАКОВЫВАЕМ ФАЙЛЫ
+    for project_name, project_config in PROJECTS.items():
+
+        print(f"\n[Проект {project_name}] Начало обработки")
+
+        PROJECTS_UPDATES[project_name] = {}
+
+        # Генерация уникальных путей для каждого проекта
+        if project_name not in PROJECTS_UPDATES_FOLDERS:
+
+            # Сохраняем пути для дальнейшего использования
+            PROJECTS_UPDATES_FOLDERS[project_name] = {
+                'EXTRACTED_DIR': getPathDir(LAUNCH_TIMESTAMP, project_name, 'extracted'),
+                'BACKUPS_DIR': getPathDir(LAUNCH_TIMESTAMP, project_name, 'backups'),
+                'BASE_PATH': Path(project_config['BASE_PATH'])
             }
 
-    @staticmethod
-    def _add_to_history(project_name: str, update_id: str, status: str, config: Dict):
-        """
-        Добавление записи в историю обновлений
-        """
-        history_file = Path(config['HISTORY_FILE'])
-        history = []
-        
-        if history_file.exists():
+            print(f"\n[Скачивание] Проект: {project_name}")
+            print(f"URL: {project_config['DOWNLOAD_URL']}")
+            print(f"Целевая директория: {PROJECTS_UPDATES_FOLDERS[project_name]['EXTRACTED_DIR']}")
+
+            # Скачивание и распаковка
             try:
-                with open(history_file, 'r', encoding='utf-8') as f:
-                    history = json.load(f)
-            except:
-                pass
-        
-        history.append({
-            "project": project_name,
-            "update_id": update_id,
-            "status": status,
-            "timestamp": datetime.now().isoformat(),
-            "log_file": f"{update_id}.log"
-        })
-        
-        with open(history_file, 'w', encoding='utf-8') as f:
-            json.dump(history, f, indent=2, ensure_ascii=False)
+                # Получаем хеши новых файлов
+                PROJECTS_UPDATES[project_name]['EXTRACTED_HASHES'] = download_and_extract(url=project_config['DOWNLOAD_URL'],extract_dir=PROJECTS_UPDATES_FOLDERS[project_name]['EXTRACTED_DIR'])
+                print(f"Файлы распакованы в: {PROJECTS_UPDATES_FOLDERS[project_name]['EXTRACTED_DIR']}")
 
-    @staticmethod
-    def start_updates_projects(
-        projects_config: Dict,
-        module_config: Dict = None,
-        force_check: bool = False
-    ) -> Tuple[str, Dict, Dict]:
-        """
-        Основной процесс обновления проектов
-        """
-        config = {**UpdatesModule.get_updates_config(), **(module_config or {})}
-        
-        # Инициализация логирования
-        UpdatesModule._init_logging(config)
-        
-        # Создаем базовые каталоги
-        base_temp_dir = Path(config['BASE_TEMP_DIR'])
-        base_temp_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Метка времени для уникальных путей
-        launch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        update_id = f"update_{launch_timestamp}"
-        
-        # Начинаем запись в лог
-        logger = UpdatesModule._init_update_logging(update_id, config)
-        logger.info("=== Начало процесса обновления ===")
-        logger.info(f"Время начала: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                # Проверка новой установки (только если есть CRITICAL_FILES)
+                if 'CRITICAL_FILES' in project_config:
+                    if is_new_installation(project_config):
+                        print(f"[Новая установка] Копирование всех файлов...")
+                        shutil.copytree(
+                            PROJECTS_UPDATES_FOLDERS[project_name]['EXTRACTED_DIR'],
+                            Path(project_config['BASE_PATH']),
+                            dirs_exist_ok=True
+                        )
+                        continue  # Пропускаем обновление
 
-        # Обработка каждого проекта
-        for project_name, project_config in projects_config.items():
-            try:
-                logger.info(f"Обработка проекта: {project_name}")
-                
-                # Проверка необходимости обновления
-                last_update_seconds = UpdatesModule.seconds_since_last_update(project_name, config)
-                
-                if not force_check and not UpdatesModule.should_check_updates(project_name, config):
-                    logger.info(f"Проверка пропущена: {project_name}")
-                    continue
-                    
-                logger.info(f"Начало проверки: {project_name}")
-                
-                # Формирование путей для проекта
-                project_paths = {
-                    'EXTRACTED_DIR': base_temp_dir / config['EXTRACTED_SUBDIR'] / project_name / launch_timestamp,
-                    'BACKUPS_DIR': base_temp_dir / config['BACKUPS_SUBDIR'] / project_name / launch_timestamp,
-                    'BASE_PATH': Path(project_config['BASE_PATH'])
-                }
-                
-                # Создание необходимых каталогов
-                project_paths['EXTRACTED_DIR'].mkdir(parents=True, exist_ok=True)
-                project_paths['BACKUPS_DIR'].mkdir(parents=True, exist_ok=True)
+                # Получаем хеши текущих файлов
+                PROJECTS_UPDATES[project_name]['CURRENT_HASHES'] = get_current_hashes(project_config)
 
-                # Скачивание и распаковка архива
-                logger.info(f"Скачивание архива для проекта {project_name}")
-                extracted_hashes = UpdatesModule._download_and_extract(
-                    url=project_config['DOWNLOAD_URL'],
-                    extract_dir=project_paths['EXTRACTED_DIR'],
-                    config=config,
-                    logger=logger
-                )
-
-                # Проверка новой установки
-                if UpdatesModule._is_new_installation(project_config):
-                    logger.info(f"Обнаружена новая установка: {project_name}")
-                    shutil.copytree(
-                        project_paths['EXTRACTED_DIR'],
-                        project_paths['BASE_PATH'],
-                        dirs_exist_ok=True
-                    )
-                    UpdatesModule._update_state_file(project_name, config)
-                    continue
-
-                # Получение текущих хешей
-                logger.info(f"Вычисление хешей текущих файлов проекта {project_name}")
-                current_hashes = UpdatesModule._get_current_hashes(project_config)
-                
                 # Поиск изменений
-                logger.info(f"Поиск изменений в проекте {project_name}")
-                changes = UpdatesModule._find_changes(
-                    old_hashes=current_hashes,
-                    new_hashes=extracted_hashes,
-                    config=project_config
-                )
+                PROJECTS_UPDATES[project_name]['CHANGES']= find_changes(PROJECTS_UPDATES[project_name]['CURRENT_HASHES'], PROJECTS_UPDATES[project_name]['EXTRACTED_HASHES'], project_config)
 
-                # Применение изменений при их наличии
-                if any(changes.values()):
-                    logger.info(f"Обнаружены изменения в проекте {project_name}")
-                    
-                    # Создание резервных копий
-                    UpdatesModule._create_backups(
-                        project_config=project_config,
-                        backup_dir=project_paths['BACKUPS_DIR'],
-                        current_hashes=current_hashes,
-                        logger=logger
-                    )
-                    
-                    # Применение обновлений
-                    UpdatesModule._apply_updates(
-                        changes=changes,
-                        extracted_dir=project_paths['EXTRACTED_DIR'],
-                        base_path=project_paths['BASE_PATH'],
-                        logger=logger
-                    )
-                    
-                    # Обновляем состояние после успешного обновления
-                    UpdatesModule._update_state_file(project_name, config)
+                if PROJECTS_UPDATES[project_name]['CHANGES']['updated'] or PROJECTS_UPDATES[project_name]['CHANGES']['new'] or PROJECTS_UPDATES[project_name]['CHANGES']['removed']:
+                    print("\nОбнаружены изменения:")
 
+                    print(f"Новые файлы: {len(PROJECTS_UPDATES[project_name]['CHANGES']['new'])}")
+                    for f in PROJECTS_UPDATES[project_name]['CHANGES']['new']:
+                        print(f"  + {f}")
+
+                    print(f"Измененные файлы: {len(PROJECTS_UPDATES[project_name]['CHANGES']['updated'])}")
+                    for f in PROJECTS_UPDATES[project_name]['CHANGES']['updated']:
+                        print(f"  ~ {f}")
+
+                    print(f"Удаленные файлы: {len(PROJECTS_UPDATES[project_name]['CHANGES']['removed'])}")
+                    for f in PROJECTS_UPDATES[project_name]['CHANGES']['removed']:
+                        print(f"  - {f}")
+
+                    # Создаем резервные копии передаем изменения, конфигурация проекта
+                    create_backups(project_name,project_config,PROJECTS_UPDATES_FOLDERS[project_name]['BACKUPS_DIR'],PROJECTS_UPDATES[project_name])
+
+                    # Применяем обновления
+                    apply_updates(PROJECTS_UPDATES[project_name]['CHANGES'], PROJECTS_UPDATES_FOLDERS[project_name]['EXTRACTED_DIR'], project_config)
+                    
+                    # Проверка функций для обновленных файлов
+                    if project_config.get('FUNCTIONS_IF_UPDATE'):
+                        special_files = project_config['FUNCTIONS_IF_UPDATE']
+                        updated_files = PROJECTS_UPDATES[project_name]['CHANGES']['updated']
+                        
+                        for rel_path in updated_files:
+                            if rel_path in special_files:
+                                function_name = special_files[rel_path]
+                                try:
+                                    # Импорт и вызов функции
+                                    module = __import__('starter_files.variables_functions', fromlist=[function_name])
+                                    func = getattr(module, function_name)
+                                    
+                                    # Выполняем функцию с путями
+                                    func(projects_updates=PROJECTS_UPDATES[project_name],projects_folders=PROJECTS_UPDATES_FOLDERS[project_name])
+                                    
+                                    print(f"[Логи] Выполнена функция {function_name} для файла {rel_path}")
+                                        
+                                except Exception as e:
+                                    print(f"[Ошибка] Функция {function_name} для {rel_path}: {str(e)}")
+
+                        # Перезапуск для проектов без CRITICAL_FILES или обычных обновлений
+                        if project_config.get('RESTART_AFTER_UPDATE', False):
+                            restart_application()
+                
+                else:
+                    print("\nИзменений не обнаружено")
             except Exception as e:
-                logger.error(f"Ошибка обновления {project_name}: {str(e)}")
+                print(f"\nОшибка при обновлении: {str(e)}")
                 continue
 
-        # Очистка устаревших файлов
-        UpdatesModule._cleanup_old_files(config)
-        logger.info("=== Процесс обновления завершен ===")
-        return launch_timestamp, {}, {}
+    return LAUNCH_TIMESTAMP, PROJECTS_UPDATES, PROJECTS_UPDATES_FOLDERS
 
-    @staticmethod
-    def _download_and_extract(
-        url: str, 
-        extract_dir: Path,
-        config: Dict,
-        logger: logging.Logger
-    ) -> Dict[str, str]:
-        """
-        Скачивание и распаковка архива с проектом
-        """
-        archive_path = extract_dir / "temp.zip"
-        file_hashes = {}
+def download_and_extract(url, extract_dir):
+    """Скачивание и распаковка архива с возвратом хешей файлов."""
+    from starter_files.config import LOGS_EXTRACT
+    file_hashes = {}
+
+    try:
+        # Создание целевой директории
+        os.makedirs(extract_dir, exist_ok=True)
+        print(f"Создана директория: {extract_dir}")
+
+        # Скачивание архива во временный файл в extract_dir
+        archive_filename = f"temp.zip"
+        archive_path = os.path.join(extract_dir, archive_filename)
+        print(f"Скачивание архива в: {archive_path}")
         
-        # Попытки скачивания с повторами
-        for attempt in range(config['MAX_RETRIES']):
-            try:
-                logger.info(f"Скачивание архива (попытка {attempt+1}): {url}")
-                
-                # Загрузка файла
-                with requests.get(url, stream=True, timeout=config['TIMEOUT']) as response:
-                    response.raise_for_status()
-                    with open(archive_path, 'wb') as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            f.write(chunk)
-                
-                # Распаковка архива
-                logger.info(f"Распаковка архива: {archive_path}")
-                with zipfile.ZipFile(archive_path, 'r') as zip_ref:
-                    zip_ref.extractall(extract_dir)
-                
-                break
-                    
-            except Exception as e:
-                if attempt == config['MAX_RETRIES'] - 1:
-                    raise
-                logger.warning(f"Попытка {attempt+1} не удалась: {str(e)}")
-            finally:
-                if archive_path.exists():
-                    archive_path.unlink()
+        # Загрузка архива
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(archive_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        print(f"Успешно скачан архив ({os.path.getsize(archive_path)} bytes)")
 
-        # Вычисление хешей распакованных файлов
-        logger.info("Вычисление хешей файлов...")
-        for root, _, files in os.walk(extract_dir):
+        # Распаковка архива
+        if LOGS_EXTRACT:
+            print(f"[Распаковка] Содержимое архива:")
+
+        with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+            if LOGS_EXTRACT:
+                # Логирование структуры архива
+                for file in zip_ref.namelist():
+                    print(f"  - {file}")
+            zip_ref.extractall(extract_dir)
+        print("Архив успешно распакован")
+
+        # Удаление временного архива
+        os.remove(archive_path)
+        print(f"Временный архив удален: {archive_path}")
+
+        # Сбор хешей распакованных файлов
+        for root, dirs, files in os.walk(extract_dir):
             for file in files:
-                file_path = Path(root) / file
-                rel_path = file_path.relative_to(extract_dir)
-                
+                file_path = os.path.join(root, file)
+                # Получение относительного пути
+                relative_path = os.path.relpath(file_path, extract_dir)
+                # Вычисление хеша SHA-256
                 with open(file_path, 'rb') as f:
-                    file_hash = hashlib.sha256(f.read()).hexdigest()
-                    file_hashes[str(rel_path)] = file_hash
-                    
-        logger.info(f"Распаковано файлов: {len(file_hashes)}")
+                    file_data = f.read()
+                    file_hash = hashlib.sha256(file_data).hexdigest()
+                file_hashes[relative_path] = file_hash
+                if LOGS_EXTRACT:
+                    print(f"Файл: {relative_path}, хеш: {file_hash}")
+
         return file_hashes
 
-    @staticmethod
-    def _get_current_hashes(project_config: Dict) -> Dict[str, str]:
-        """
-        Получение хешей текущих файлов проекта
-        """
-        base_path = Path(project_config['BASE_PATH'])
-        current_hashes = {}
-        
-        for pattern in project_config['TARGETS']:
-            for path in base_path.rglob(pattern):
-                if path.is_file():
-                    rel_path = path.relative_to(base_path)
-                    with open(path, 'rb') as f:
-                        current_hashes[str(rel_path)] = hashlib.sha256(f.read()).hexdigest()
-        
-        return current_hashes
+    except Exception as e:
+        print(f"[Ошибка] {str(e)}")
+        # Удаление временного архива при ошибке
+        if 'archive_path' in locals() and os.path.exists(archive_path):
+            os.remove(archive_path)
+        raise
 
-    @staticmethod
-    def _find_changes(old_hashes: Dict, new_hashes: Dict, config: Dict) -> Dict[str, List]:
-        """
-        Поиск изменений между версиями
-        """
-        changes = {'new': [], 'updated': [], 'removed': []}
-        
-        # Поиск новых и измененных файлов
-        for rel_path, new_hash in new_hashes.items():
-            old_hash = old_hashes.get(rel_path)
-            if not old_hash:
-                changes['new'].append(rel_path)
-            elif old_hash != new_hash:
-                changes['updated'].append(rel_path)
-        
-        # Поиск удаленных файлов
-        for rel_path in old_hashes:
-            if rel_path not in new_hashes:
-                changes['removed'].append(rel_path)
+def getPathDir(launch_timestamp, project_name, type_dir):
+    """
+    Генерирует путь к директории для конкретного типа каталога.
+    
+    :param launch_timestamp: Метка времени запуска
+    :param project_name: Имя проекта
+    :param type_dir: Тип директории ('TEMP' или 'EXTRACTION')
+    :return: Полный путь к файлу/дириктории
+    """
+    return Path(type_dir) / project_name / launch_timestamp
+
+def load_version_data(version_log, project_name):
+    """Загружает данные о предыдущих версиях"""
+    if not version_log.exists():
+        return {}
+    
+    with open(version_log, 'r') as f:
+        data = json.load(f)
+        return data.get(project_name, {})
+
+def get_current_hashes(project_config):
+    """Получает хеши текущих файлов проекта"""
+    base_path = Path(project_config['BASE_PATH'])
+    targets = project_config['TARGETS']
+    ignored = project_config.get('IGNORED', [])
+    
+    current_hashes = {}
+    
+    for pattern in targets:
+        for path in base_path.glob(pattern):
+            if not path.is_file():
+                continue
                 
-        return changes
+            rel_path = path.relative_to(base_path)
+            
+            if is_ignored(str(rel_path), ignored, base_path):
+                continue
+                
+            with open(path, 'rb') as f:
+                current_hashes[str(rel_path)] = hashlib.sha256(f.read()).hexdigest()
+    
+    return current_hashes
 
-    @staticmethod
-    def _create_backups(
-        project_config: Dict, 
-        backup_dir: Path, 
-        current_hashes: Dict,
-        logger: logging.Logger
-    ) -> None:
-        """
-        Создание резервных копии изменяемых файлов
-        """
-        base_path = Path(project_config['BASE_PATH'])
-        
-        logger.info(f"Создание резервных копий в: {backup_dir}")
-        
-        # Копирование целевых файлов
-        for rel_path in current_hashes:
-            src = base_path / rel_path
+def find_changes(old_hashes, new_hashes, config):
+    """Определяет изменения между версиями"""
+    from starter_files.config import LOGS_CHANGES
+
+    ignored = config.get('IGNORED', [])
+    targets = config['TARGETS']
+    base_path = Path(config['BASE_PATH'])
+    
+    changes = {'new': [],'updated': [],'removed': [] }
+    log_data = []
+
+    if LOGS_CHANGES:
+            log_data.append("\n[Детали изменений]")
+            log_data.append("Сравнение хешей файлов:")
+    # Проверка новых и измененных файлов
+    for rel_path, new_hash in new_hashes.items():
+
+        if not is_target(rel_path, targets, base_path):
+            if LOGS_CHANGES:
+                log_data.append(f"{rel_path} - Пропущен (не входит в TARGETS)") 
+            continue
+
+        if is_ignored(rel_path, ignored, base_path):
+            if LOGS_CHANGES:
+                log_data.append(f"{rel_path} - Пропущен (соответствует IGNORED паттерну)")
+            continue
+            
+        old_hash = old_hashes.get(rel_path)
+
+        if LOGS_CHANGES:
+            if not old_hash:
+                log_data.append(f"{rel_path} - Новый файл (хеш: {new_hash})")
+            elif old_hash != new_hash:
+                log_data.append(
+                    f"{rel_path} - Изменен\n"
+                    f"  Старый хеш: {old_hash}\n"
+                    f"  Новый хеш: {new_hash}"
+                )
+
+        if not old_hash:
+            changes['new'].append(rel_path)
+        elif old_hash != new_hash:
+            changes['updated'].append(rel_path)
+    
+    # Проверка удаленных файлов
+    for rel_path in old_hashes:
+
+        # Фильтрация целей
+        if not is_target(rel_path, targets, base_path):
+            if LOGS_CHANGES:
+                log_data.append(f"{rel_path} - Удаление пропущено (не входит в TARGETS)")
+            continue
+
+        # Проверка игнорирования
+        if is_ignored(rel_path, ignored, base_path):
+            if LOGS_CHANGES:
+                log_data.append(f"{rel_path} - Удаление пропущено (соответствует IGNORED)")
+            continue
+
+        if rel_path not in new_hashes:
+            reason = "Удален в новой версии"
+            if LOGS_CHANGES:
+                old_hash = old_hashes[rel_path]
+                log_data.append(
+                    f"{rel_path} - {reason}\n"
+                    f"  Последний известный хеш: {old_hash}"
+                )
+            changes['removed'].append({'path': rel_path, 'reason': reason})
+
+    # Вывод собранных логов
+    if LOGS_CHANGES and log_data:
+        print("\n".join(log_data))
+    
+    return changes
+
+def is_target(rel_path, target_patterns, base_path):
+    """Проверяет, соответствует ли файл целевому шаблону."""
+    # Нормализуем путь к POSIX-стилю (с /)
+    normalized_path = Path(rel_path).as_posix()
+    
+    for pattern in target_patterns:
+        # Преобразуем шаблон в POSIX-стиль
+        posix_pattern = pattern.replace('\\', '/')
+        if Path(normalized_path).match(posix_pattern):
+            return True
+    return False
+
+def is_ignored(rel_path, ignored_patterns, base_path):
+    """Проверяет, должен ли файл быть проигнорирован"""
+    abs_path = str(base_path / rel_path)
+    for pattern in ignored_patterns:
+        if Path(abs_path).match(pattern):
+            return True
+    return False
+
+def create_backups(project_name, project_config, backup_dir,project_updates):
+    """Создает полный бэкап файлов TARGETS и ADD_IN_BACKUPS с логированием"""
+    backup_dir = Path(backup_dir)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Создаем лог-файл
+    log_file = backup_dir / "backups_log.txt"
+    log_data = []
+    
+    # Загрузка предыдущих версий
+    current_hashes = get_current_hashes(project_config)
+    
+    # Получаем параметры из конфига
+    targets = project_config['TARGETS']
+    ignored = project_config.get('IGNORED', [])
+    add_in_backups = project_config.get('ADD_IN_BACKUPS', [])
+    base_path = Path(project_config['BASE_PATH'])
+    
+    log_data.append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Начало бэкапа проекта {project_name}")
+    
+    # Копируем файлы из TARGETS предыдущей версии
+    copied_files = set()
+    for rel_path in project_updates['CURRENT_HASHES']:
+        src = base_path / rel_path
+        if is_target(rel_path, targets, base_path) and not is_ignored(rel_path, ignored, base_path):
             if src.exists():
                 dst = backup_dir / rel_path
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
-        
-        logger.info(f"Резервные копии созданы: {len(current_hashes)} файлов")
+                copied_files.add(rel_path)
+                log_data.append(f"Скопирован TARGET: {rel_path}")
+    
+    # Копируем ADD_IN_BACKUPS
+    for pattern in add_in_backups:
+        for abs_path in base_path.glob(pattern):
+            if abs_path.is_file():
+                rel_path = abs_path.relative_to(base_path)
+                dst = backup_dir / rel_path
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(abs_path, dst)
+                log_data.append(f"Скопирован ADD_IN_BACKUPS: {rel_path}")
+            elif abs_path.is_dir():
+                for file_path in abs_path.rglob('*'):
+                    if file_path.is_file():
+                        rel_path = file_path.relative_to(base_path)
+                        dst = backup_dir / rel_path
+                        dst.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(file_path, dst)
+                        log_data.append(f"Скопирован ADD_IN_BACKUPS: {rel_path}")
+    
+    # Записываем логи
+    log_data.append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Бэкап завершен. Скопировано: {len(copied_files)} файлов")
+    with open(log_file, 'a', encoding='utf-8') as f:
+        f.write("\n".join(log_data) + "\n\n")
+    
+    print(f"Создан полный бэкап в {backup_dir}")
+    print(f"Логи бэкапа сохранены в {log_file}")
 
-    @staticmethod
-    def _apply_updates(
-        changes: Dict, 
-        extracted_dir: Path, 
-        base_path: Path,
-        logger: logging.Logger
-    ) -> None:
-        """
-        Применение обновлений к файлам проекта
-        """
-        # Копирование новых и измененных файлов
-        for rel_path in changes['new'] + changes['updated']:
-            src = extracted_dir / rel_path
-            dst = base_path / rel_path
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-            logger.info(f"Обновлен: {rel_path}")
-            
-        # Удаление отсутствующих в новой версии файлов
-        for rel_path in changes['removed']:
-            target = base_path / rel_path
-            if target.exists():
-                target.unlink()
-                logger.info(f"Удален: {rel_path}")
+def apply_updates(changes, extracted_dir, config):
+    """Применяет обновления к файлам проекта"""
+    base_path = Path(config['BASE_PATH'])
+    
+    # Обработка новых и измененных файлов
+    for rel_path in changes['new'] + changes['updated']:
+        src = extracted_dir / rel_path
+        dst = base_path / rel_path
         
-        message = (f"Применено обновлений: "
-                  f"+{len(changes['new'])} "
-                  f"~{len(changes['updated'])} "
-                  f"-{len(changes['removed'])}")
-        logger.info(message)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
 
-    @staticmethod
-    def _is_new_installation(config: Dict) -> bool:
-        """
-        Проверка новой установки проекта
-        """
-        base_path = Path(config['BASE_PATH'])
-        return not base_path.exists()
+    # Обработка удаленных файлов (исправлено)
+    for entry in changes['removed']:  # <-- Итерируемся по словарям
+        rel_path = entry['path']       # <-- Извлекаем путь из словаря
+        target = base_path / rel_path
+        if target.exists():
+            target.unlink()
 
-    @staticmethod
-    def _cleanup_old_files(config: Dict) -> None:
-        """
-        Очистка устаревших временных файлов
-        """
-        base_temp_dir = Path(config['BASE_TEMP_DIR'])
-        cutoff_date = datetime.now() - timedelta(days=config['CLEANUP_DAYS'])
+def handle_special_file(rel_path, config, base_path):
+    """Обрабатывает файлы с особыми функциями обновления"""
+    function_name = config['FUNCTIONS_IF_UPDATE'][rel_path]
+    try:
+        module = __import__('starter_files.variables_functions', fromlist=[function_name])
+        func = getattr(module, function_name)
+        func(base_path / rel_path)
+    except Exception as e:
+        print(f"Ошибка при обработке специального файла {rel_path}: {str(e)}")
+
+def is_new_installation(project_config):
+    """Проверяет, является ли установка новой"""
+    base_path = Path(project_config['BASE_PATH'])
+    critical_files = project_config.get('CRITICAL_FILES', [])
+    
+    # Если нет критических файлов - используем первый файл из TARGETS
+    if not critical_files:
+        if project_config['TARGETS']:
+            critical_files = [project_config['TARGETS'][0]]
+        else:
+            raise ValueError("Не заданы критические файлы для проекта")
+    
+    # Проверяем существование всех критических файлов
+    return not all((base_path / Path(f)).exists() for f in critical_files)
+
+def restart_application():
+    """Перезапускает приложение"""
+    python = sys.executable
+    # Добавляем флаг --after-update в аргументы
+    new_args = [python] + sys.argv + ['--after-update']
+    subprocess.Popen(new_args)
+    sys.exit()
+</code>
+
+##starter_files\utils\variables_functions.py
+<code>
+import os
+import shutil
+from pathlib import Path
+
+from starter_files.untils.logger import logger
+
+# Функция вывода структуры и содержимого словаря
+def print_dict_structure(data, indent=0):
+    for key, value in data.items():
+        # Отступ для лучшей читаемости вложенных структур
+        spaces = ' ' * indent
         
-        for dir_type in [config['EXTRACTED_SUBDIR'], config['BACKUPS_SUBDIR']]:
-            type_dir = base_temp_dir / dir_type
-            if not type_dir.exists():
-                continue
+        if isinstance(value, dict):
+            # Если значение — другой словарь, рекурсивно выводим его содержимое
+            print(f"{spaces}{key}:")
+            print_dict_structure(value, indent + 4)
+        elif isinstance(value, list):
+            # Если значение — список, выводим элементы списка
+            print(f"{spaces}{key}: {value}")
+        else:
+            # Для простых типов данных сразу печатаем ключ-значение
+            print(f"{spaces}{key}: {value}")
+
+def copy_environment_variables(projects_updates,projects_folders):
+    """
+    Обрабатывает изменение файла .env.example:
+     - Замещает .env.example новым файлом.
+     - Считывает переменные из старого .env.
+     - Удаляет старый .env.
+     - Клонирует .env.example как новый .env.
+     - Переносит переменные из старого .env в новый.
+    """
+    # Пути к ключевым директориям
+    backup_dir = projects_folders['BACKUPS_DIR']
+    extracted_dir = projects_folders['EXTRACTED_DIR']
+    base_path = Path(projects_folders['BASE_PATH'])
+    
+    # Пути к файлам
+    old_env_path = backup_dir / '.env'                   # .env из бекапа
+    new_env_example = extracted_dir / '.env.example'     # Новый .env.example
+    new_env_path = base_path / '.env'                    # Целевой .env
+
+    # 1. Чтение переменных из бекапа
+    old_variables = {}
+    if old_env_path.exists():
+        with open(old_env_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if '=' in line and not line.startswith('#'):
+                    key, value = line.strip().split('=', 1)
+                    old_variables[key] = value
+        print(f"Найдено {len(old_variables)} переменных в бекапе")
+
+    # 2. Копирование нового .env.example в целевую директорию
+    try:
+        shutil.copy(new_env_example, new_env_path)
+        print(f"Скопирован новый .env.example -> {new_env_path}")
+    except Exception as e:
+        print(f"Ошибка копирования: {str(e)}")
+        return
+
+    # 3. Обновление переменных (если есть данные из бекапа)
+    if old_variables:
+        try:
+            with open(new_env_path, 'r+', encoding='utf-8') as f:
+                lines = f.readlines()
+                f.seek(0)
                 
-            for project_dir in type_dir.iterdir():
-                if not project_dir.is_dir():
-                    continue
-                    
-                for version_dir in project_dir.iterdir():
+                # Обновляем существующие переменные
+                for line in lines:
+                    if '=' in line and not line.startswith('#'):
+                        key, _ = line.split('=', 1)
+                        if key in old_variables:
+                            line = f"{key}={old_variables[key]}\n"
+                    f.write(line)
+                f.truncate()
+                
+            print(f"Обновлено {len(old_variables)} переменных в {new_env_path}")
+            
+        except Exception as e:
+            print(f"Ошибка обновления переменных: {str(e)}")
+</code>
+
+##starter_files\utils\vpn.py
+<code>
+from pathlib import Path
+
+def check_vpn_config(env_vars, docker_dir):
+    """Проверка конфигурации VPN"""
+    vpn_required = env_vars.get("VPN_REQUIRED", "disabled").lower()
+    if vpn_required in ["required", "optional"]:
+        vpn_config = env_vars.get("VPN_CONFIG")
+        if not vpn_config:
+            raise Exception("VPN_CONFIG не указан в .env")
+        
+        vpn_path = Path(docker_dir) / vpn_config
+        if not vpn_path.exists():
+            raise Exception(f"Файл конфигурации VPN не найден: {vpn_path}")
+
+
+</code>
+
+##starter_files\utils\__init__.py
+<code>
+
+</code>
+
+##starter_files\utils.py
+<code>
+# utils.py
+import sys
+from datetime import datetime,timedelta
+from starter_files.config import MAX_RUNS_PER_PERIOD, PERIOD_MINUTES, EXECUTION_LOG_FILE
+
+def check_execution_limit():
+    """
+    Функция ограничивает количество запусков приложения.
+    Если зафиксировано более N запусков за последние M минут,
+    возвращает ошибку и прекращает выполнение.
+    """
+
+    now = datetime.now()
+    cutoff_time = now - timedelta(minutes=PERIOD_MINUTES)
+
+    # Чтение существующих меток
+    timestamps = []
+    if EXECUTION_LOG_FILE.exists():
+        with open(EXECUTION_LOG_FILE, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line:
                     try:
-                        dir_date = datetime.strptime(version_dir.name, '%Y%m%d_%H%M%S')
-                        if dir_date < cutoff_date:
-                            shutil.rmtree(version_dir)
+                        ts = datetime.fromisoformat(line)
+                        if ts >= cutoff_time:
+                            timestamps.append(ts)
                     except ValueError:
                         continue
 
-    @staticmethod
-    def get_last_update_time(project_name: str, config: Dict) -> Optional[datetime]:
-        """
-        Получение времени последнего обновления проекта
-        """
-        state_file = Path(config['STATE_FILE'])
-        if not state_file.exists():
-            return None
-        
-        try:
-            with open(state_file, 'r', encoding='utf-8') as f:
-                state = json.load(f)
-            project_state = state.get(project_name, {})
-            return datetime.fromisoformat(project_state.get('last_update'))
-        except:
-            return None
+    # Проверяем, не превысит ли новый запуск лимит
+    if len(timestamps) >= MAX_RUNS_PER_PERIOD:
+        print(f"Ошибка: Лимит {MAX_RUNS_PER_PERIOD} запусков за {PERIOD_MINUTES} минут.")
+        return False
 
-    @staticmethod
-    def seconds_since_last_update(project_name: str, config: Dict) -> float:
-        """
-        Вычисление секунд, прошедших с последнего обновления
-        """
-        last_update = UpdatesModule.get_last_update_time(project_name, config)
-        if not last_update:
-            return 0
-        return (datetime.now() - last_update).total_seconds()
+    # Добавляем текущий запуск и сохраняем
+    timestamps.append(now)
+    with open(EXECUTION_LOG_FILE, 'w') as f:
+        for ts in timestamps:
+            f.write(ts.isoformat() + "\n")
 
-    @staticmethod
-    def should_check_updates(project_name: str, config: Dict) -> bool:
-        """
-        Проверка необходимости проверки обновлений
-        """
-        seconds_passed = UpdatesModule.seconds_since_last_update(project_name, config)
-        min_interval = config['MIN_CHECK_INTERVAL']
-        return seconds_passed >= min_interval
+    return True
+</code>
 
-    @staticmethod
-    def _update_state_file(project_name: str, config: Dict) -> None:
-        """
-        Обновление файла состояния после успешной проверки
-        """
-        state_file = Path(config['STATE_FILE'])
-        state = {}
-        
-        if state_file.exists():
-            try:
-                with open(state_file, 'r', encoding='utf-8') as f:
-                    state = json.load(f)
-            except:
-                pass
-        
-        project_state = state.get(project_name, {})
-        project_state['last_update'] = datetime.now().isoformat()
-        state[project_name] = project_state
-        
-        with open(state_file, 'w', encoding='utf-8') as f:
-            json.dump(state, f, indent=2, ensure_ascii=False)
+##starter_files\__init__.py
+<code>
 
-    @staticmethod
-    def _init_logging(config: Dict) -> None:
-        """
-        Инициализация системы логирования
-        """
-        log_dir = Path(config['LOG_DIR'])
-        log_dir.mkdir(parents=True, exist_ok=True)
-        
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_dir / 'updates.log', encoding='utf-8'),
-                logging.StreamHandler(sys.stdout)
-            ]
-        )
-
-    @staticmethod
-    def _init_update_logging(update_id: str, config: Dict) -> logging.Logger:
-        """
-        Инициализация системы логирования для конкретного обновления
-        """
-        log_dir = Path(config['LOG_DIR'])
-        log_dir.mkdir(parents=True, exist_ok=True)
-        
-        logger = logging.getLogger(f'updates_{update_id}')
-        logger.setLevel(logging.INFO)
-        
-        for handler in logger.handlers[:]:
-            logger.removeHandler(handler)
-        
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        
-        log_file = log_dir / f"{update_id}.log"
-        fh = logging.FileHandler(log_file, encoding='utf-8')
-        fh.setLevel(logging.INFO)
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
-        
-        ch = logging.StreamHandler(sys.stdout)
-        ch.setLevel(logging.INFO)
-        ch.setFormatter(formatter)
-        logger.addHandler(ch)
-        
-        return logger
-
-    @staticmethod
-    def get_update_log(update_id: str, config: Dict = None) -> str:
-        """
-        Получение лога конкретного обновления
-        """
-        if config is None:
-            config = UpdatesModule.get_updates_config()
-            
-        log_file = Path(config['LOG_DIR']) / f"{update_id}.log"
-        
-        if not log_file.exists():
-            return "Лог-файл не найден"
-        
-        try:
-            with open(log_file, 'r', encoding='utf-8') as f:
-                return f.read()
-        except Exception as e:
-            return f"Ошибка чтения лог-файла: {str(e)}"
 </code>
 
 
+Мне кажется он пути сравнения путает!
+Пусть выводил полные пути 2 папок в которых он сравнивает файлы!
+ То есть путь распакованной и оригинала!
+
+И он еще в логах пишет
+2025-09-08 11:47:06,553 - INFO - Найдено файлов по шаблону 'codereaderForAIv2.py': 5
+2025-09-08 11:47:06,554 - INFO - Поиск файлов по шаблону: README.md
+2025-09-08 11:47:42,369 - INFO - Найдено файлов по шаблону 'README.md': 6
+2025-09-08 11:47:42,370 - INFO - Поиск файлов по шаблону: requirements.txt
+2025-09-08 11:48:14,324 - INFO - Найдено файлов по шаблону 'requirements.txt': 14
+2025-09-08 11:48:14,324 - INFO - Поиск файлов по шаблону: starter.py
+2025-09-08 11:48:56,701 - INFO - Найдено файлов по шаблону 'starter.py': 5
+2025-09-08 11:48:56,702 - INFO - Поиск файлов по шаблону: starter_files/*
+2025-09-08 11:49:37,445 - INFO - Найдено файлов по шаблону 'starter_files/*': 17
+
+Хотя допустим тут requirements.txt должен быть один файл!

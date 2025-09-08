@@ -252,6 +252,8 @@ class UpdatesModule:
         changes = UpdatesModule._find_changes(
             old_hashes=current_hashes,
             new_hashes=extracted_hashes,
+            old_dir=project_paths['BASE_PATH'],
+            new_dir=project_paths['EXTRACTED_DIR'],
             logger=logger
         )
 
@@ -430,17 +432,22 @@ class UpdatesModule:
         return current_hashes
 
     @staticmethod
-    def _find_changes(old_hashes: Dict, new_hashes: Dict, logger: logging.Logger = None) -> Dict[str, List]:
-        """
-        Поиск изменений между версиями с детальным логированием хешей
-        """
+    def _find_changes(
+        old_hashes: Dict,
+        new_hashes: Dict,
+        old_dir: Path = None,
+        new_dir: Path = None,
+        logger: logging.Logger = None
+    ) -> Dict[str, List]:
         changes = {'new': [], 'updated': [], 'removed': []}
-        
+
         if logger:
             logger.info("=== СРАВНЕНИЕ ХЕШЕЙ ФАЙЛОВ ===")
+            if old_dir and new_dir:
+                logger.info(f"Сравниваются папки:\n  Старая: {old_dir}\n  Новая: {new_dir}")
             logger.info(f"Файлов в текущей версии: {len(old_hashes)}")
             logger.info(f"Файлов в новой версии: {len(new_hashes)}")
-        
+
         # Поиск новых и измененных файлов
         for rel_path, new_hash in new_hashes.items():
             old_hash = old_hashes.get(rel_path)
@@ -456,7 +463,7 @@ class UpdatesModule:
                     logger.info(f"  Хеш текущей версии: {old_hash}")
                     logger.info(f"  Хеш новой версии: {new_hash}")
                     logger.info(f"  Файл будет заменен")
-        
+
         # Поиск удаленных файлов
         for rel_path, old_hash in old_hashes.items():
             if rel_path not in new_hashes:
@@ -464,23 +471,23 @@ class UpdatesModule:
                 if logger:
                     logger.info(f"УДАЛЕН ФАЙЛ: {rel_path}")
                     logger.info(f"  Хеш удаляемого файла: {old_hash}")
-        
+
         if logger:
             logger.info("=== РЕЗУЛЬТАТЫ СРАВНЕНИЯ ===")
             logger.info(f"Новых файлов: {len(changes['new'])}")
             for new_file in changes['new']:
                 logger.info(f"  + {new_file}")
-            
+
             logger.info(f"Измененных файлов: {len(changes['updated'])}")
             for updated_file in changes['updated']:
                 logger.info(f"  ~ {updated_file}")
-            
+
             logger.info(f"Удаленных файлов: {len(changes['removed'])}")
             for removed_file in changes['removed']:
                 logger.info(f"  - {removed_file}")
-                
+
             logger.info("=== КОНЕЦ СРАВНЕНИЯ ===")
-                
+
         return changes
 
     @staticmethod
@@ -494,7 +501,7 @@ class UpdatesModule:
         Применение обновлений к файлам проекта с детальным логированием
         """
         logger.info("=== НАЧАЛО ПРИМЕНЕНИЯ ОБНОВЛЕНИЙ ===")
-        
+        logger.info(f"Применяются изменения из папки:\n  {extracted_dir}\nв папку:\n  {base_path}")
         # Копирование новых файлов
         if changes['new']:
             logger.info(f"Добавление новых файлов ({len(changes['new'])}):")
