@@ -385,9 +385,37 @@ class UpdatesModule:
         base_path = Path(extracted_path)
         included_files = set()
 
+        # Детальное логирование базового пути
+        if logger:
+            logger.info(f"Абсолютный путь поиска: {base_path.absolute()}")
+            logger.info(f"Существует ли путь: {base_path.exists()}")
+            if base_path.exists():
+                logger.info(f"Содержимое базовой директории: {list(base_path.iterdir())}")
+
         # TARGETS
         for pattern in project_config.get("TARGETS", []):
-            matched = [p for p in base_path.rglob(pattern) if p.is_file()]
+            if logger:
+                logger.info(f"Обработка TARGETS шаблона: {pattern}")
+            
+            matched = []
+            try:
+                # Детальное логирование поиска
+                if logger:
+                    logger.info(f"Поиск по шаблону: {pattern} в {base_path.absolute()}")
+                
+                matched = [p for p in base_path.rglob(pattern) if p.is_file()]
+                
+                if logger:
+                    logger.info(f"Найдено файлов: {len(matched)}")
+                    for i, file_path in enumerate(matched[:10]):  # Ограничим вывод первыми 10 файлами
+                        logger.info(f"  {i+1}. {file_path.relative_to(base_path)}")
+                    if len(matched) > 10:
+                        logger.info(f"  ... и еще {len(matched) - 10} файлов")
+                        
+            except Exception as e:
+                if logger:
+                    logger.error(f"Ошибка при обработке шаблона {pattern}: {str(e)}")
+            
             included_files.update(matched)
             if logger:
                 if matched:
@@ -400,7 +428,28 @@ class UpdatesModule:
         # IGNORED
         ignored_files = set()
         for pattern in project_config.get("IGNORED", []):
-            matched = [p for p in base_path.rglob(pattern) if p.is_file()]
+            if logger:
+                logger.info(f"Обработка IGNORED шаблона: {pattern}")
+            
+            matched = []
+            try:
+                # Детальное логирование поиска
+                if logger:
+                    logger.info(f"Поиск по шаблону игнорирования: {pattern} в {base_path.absolute()}")
+                
+                matched = [p for p in base_path.rglob(pattern) if p.is_file()]
+                
+                if logger:
+                    logger.info(f"Найдено файлов для игнорирования: {len(matched)}")
+                    for i, file_path in enumerate(matched[:10]):  # Ограничим вывод первыми 10 файлами
+                        logger.info(f"  {i+1}. {file_path.relative_to(base_path)}")
+                    if len(matched) > 10:
+                        logger.info(f"  ... и еще {len(matched) - 10} файлов")
+                        
+            except Exception as e:
+                if logger:
+                    logger.error(f"Ошибка при обработке шаблона игнорирования {pattern}: {str(e)}")
+            
             ignored_files.update(matched)
             if logger:
                 if matched:
@@ -414,6 +463,11 @@ class UpdatesModule:
 
         if logger:
             logger.info(f"Файлов после фильтрации: {len(final_files)}")
+            logger.info("Список файлов после фильтрации:")
+            for i, file_path in enumerate(list(final_files)[:20]):  # Ограничим вывод первыми 20 файлами
+                logger.info(f"  {i+1}. {file_path.relative_to(base_path)}")
+            if len(final_files) > 20:
+                logger.info(f"  ... и еще {len(final_files) - 20} файлов")
 
         hashes = {}
         for file_path in sorted(final_files):
@@ -441,11 +495,39 @@ class UpdatesModule:
             logger.info(f"TARGETS: {project_config.get('TARGETS', [])}")
             logger.info(f"IGNORED: {project_config.get('IGNORED', [])}")
 
+        # Детальное логирование базового пути
+        if logger:
+            logger.info(f"Абсолютный путь проекта: {base_path.absolute()}")
+            logger.info(f"Существует ли путь: {base_path.exists()}")
+            if base_path.exists():
+                logger.info(f"Содержимое проектной директории: {list(base_path.iterdir())}")
+
         included_files = set()
 
         # TARGETS
         for pattern in project_config.get("TARGETS", []):
-            matched = [p for p in base_path.rglob(pattern) if p.is_file()]
+            if logger:
+                logger.info(f"Обработка TARGETS шаблона: {pattern}")
+            
+            matched = []
+            try:
+                # Детальное логирование поиска
+                if logger:
+                    logger.info(f"Поиск по шаблону: {pattern} в {base_path.absolute()}")
+                
+                matched = [p for p in base_path.rglob(pattern) if p.is_file()]
+                
+                if logger:
+                    logger.info(f"Найдено файлов: {len(matched)}")
+                    for i, file_path in enumerate(matched[:10]):  # Ограничим вывод первыми 10 файлами
+                        logger.info(f"  {i+1}. {file_path.relative_to(base_path)}")
+                    if len(matched) > 10:
+                        logger.info(f"  ... и еще {len(matched) - 10} файлов")
+                        
+            except Exception as e:
+                if logger:
+                    logger.error(f"Ошибка при обработке шаблона {pattern}: {str(e)}")
+            
             included_files.update(matched)
             if logger:
                 if matched:
@@ -458,7 +540,28 @@ class UpdatesModule:
         # IGNORED
         ignored_files = set()
         for pattern in project_config.get("IGNORED", []):
-            matched = [p for p in base_path.rglob(pattern) if p.is_file()]
+            if logger:
+                logger.info(f"Обработка IGNORED шаблона: {pattern}")
+            
+            matched = []
+            try:
+                # Детальное логирование поиска
+                if logger:
+                    logger.info(f"Поиск по шаблону игнорирования: {pattern} в {base_path.absolute()}")
+                
+                matched = [p for p in base_path.rglob(pattern) if p.is_file()]
+                
+                if logger:
+                    logger.info(f"Найдено файлов для игнорирования: {len(matched)}")
+                    for i, file_path in enumerate(matched[:10]):  # Ограничим вывод первыми 10 файлами
+                        logger.info(f"  {i+1}. {file_path.relative_to(base_path)}")
+                    if len(matched) > 10:
+                        logger.info(f"  ... и еще {len(matched) - 10} файлов")
+                        
+            except Exception as e:
+                if logger:
+                    logger.error(f"Ошибка при обработке шаблона игнорирования {pattern}: {str(e)}")
+            
             ignored_files.update(matched)
             if logger:
                 if matched:
@@ -472,6 +575,11 @@ class UpdatesModule:
 
         if logger:
             logger.info(f"Файлов после фильтрации: {len(final_files)}")
+            logger.info("Список файлов после фильтрации:")
+            for i, file_path in enumerate(list(final_files)[:20]):  # Ограничим вывод первыми 20 файлами
+                logger.info(f"  {i+1}. {file_path.relative_to(base_path)}")
+            if len(final_files) > 20:
+                logger.info(f"  ... и еще {len(final_files) - 20} файлов")
 
         hashes = {}
         for file_path in sorted(final_files):
@@ -484,5 +592,3 @@ class UpdatesModule:
             logger.info("=== ЗАВЕРШЕНО ВЫЧИСЛЕНИЕ ХЕШЕЙ ТЕКУЩИХ ФАЙЛОВ ===")
 
         return hashes
-
-
