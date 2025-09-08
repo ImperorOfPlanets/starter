@@ -79,6 +79,7 @@ class SystemModule(BaseModule):
                 'HOME': os.getenv('HOME')
             },
             'script_path': Path(sys.argv[0]).absolute().parent,
+            'starter_path': Path(sys.argv[0]).absolute().parent,
             'privilege_info': privilege_info,
             'uptime': SystemModule.get_system_uptime(),
             'timezone': SystemModule.get_timezone_info(),
