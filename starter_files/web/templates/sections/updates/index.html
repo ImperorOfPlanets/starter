@@ -120,6 +120,27 @@
     </div>
 </div>
 
+<!-- Модальное окно для отслеживания прогресса обновления -->
+<div class="modal fade" id="updateProgressModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Прогресс обновления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <pre class="bg-dark text-white p-3" style="max-height: 60vh; overflow-y: auto; font-family: monospace;"></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary" id="downloadLogBtn" disabled>
+                    <i class="bi bi-download"></i> Скачать лог
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Модальное окно для просмотра логов -->
 <div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl">
@@ -201,29 +222,73 @@ $(document).ready(function() {
             });
     });
 
-    // Кнопки обновления отдельных проектов (делегирование событий)
+    // Функция для отслеживания прогресса обновления
+    function trackUpdateProgress(updateId, projectName) {
+        const modal = $('#updateProgressModal');
+        const logContent = modal.find('.modal-body pre');
+        
+        // Показываем модальное окно
+        modal.modal('show');
+        
+        // Функция для обновления лога
+        function updateLog() {
+            $.ajax({
+                url: '/',
+                method: 'POST',
+                data: {
+                    'section': 'updates',
+                    'action': 'get_update_log',
+                    'update_id': updateId,
+                    'project': projectName
+                },
+                success: function(response) {
+                    if (response.success) {
+                        logContent.text(response.log);
+                        // Прокрутка вниз
+                        logContent.scrollTop(logContent[0].scrollHeight);
+                        
+                        // Проверяем, завершено ли обновление
+                        if (response.log.includes('=== Обновление завершено') || 
+                            response.log.includes('ОШИБКА')) {
+                            clearInterval(intervalId);
+                            modal.find('.btn-primary').prop('disabled', false);
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Обновляем лог каждые 2 секунды
+        const intervalId = setInterval(updateLog, 2000);
+        
+        // Первоначальная загрузка
+        updateLog();
+        
+        // Остановка отслеживания при закрытии модального окна
+        modal.on('hidden.bs.modal', function() {
+            clearInterval(intervalId);
+        });
+    }
+
+    // Обработчик для кнопки обновления проекта
     $(document).on('click', '.update-project-btn', function() {
-        var project = $(this).data('project');
-        console.log('Update project button clicked:', project);
-        var $btn = $(this);
+        const project = $(this).data('project');
+        const $btn = $(this);
         $btn.prop('disabled', true);
         $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("updating") }}');
         
         postFormData('update_project', { project: project })
             .done(function(data) {
-                console.log('Update project response:', data);
                 if (data.success) {
-                    // Не перезагружаем страницу, а обновляем только историю
-                    loadProjectHistory('all');
-                    alert('Проект ' + project + ' успешно обновлен');
+                    // Запускаем отслеживание прогресса
+                    trackUpdateProgress(data.update_id, data.project);
                 } else {
-                    alert('Error updating ' + project + ': ' + data.message);
+                    alert('Error: ' + data.message);
+                    $btn.prop('disabled', false);
+                    $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
                 }
-                $btn.prop('disabled', false);
-                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
             })
             .fail(function(error) {
-                console.error('Update project error:', error);
                 alert('Network error: ' + error.statusText);
                 $btn.prop('disabled', false);
                 $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');

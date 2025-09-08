@@ -81,55 +81,6 @@ def check_all(data, session):
         logger.error(f"Error in check_all: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
 
-def update_project(data, session):
-    """Обновление конкретного проекта"""
-    project_name = data.get('project')
-    if project_name not in PROJECTS:
-        return jsonify({'success': False, 'message': t('project_not_found')})
-    
-    # Создание уникального ID обновления
-    update_id = str(uuid.uuid4())
-    log_file_path = UPDATE_LOGS_DIR / f"update_{project_name}_{update_id}.log"
-    
-    # Запуск обновления в отдельном потоке
-    def run_update():
-        try:
-            config = get_updates_config()
-            
-            # Записываем начало обновления в лог
-            with open(log_file_path, 'w') as f:
-                f.write(f"=== Начало обновления проекта {project_name} ===\n")
-                f.write(f"Время начала: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            
-            # Запускаем обновление
-            timestamp, updates, folders = UpdatesModule.start_updates_projects(
-                projects_config={project_name: PROJECTS[project_name]},
-                module_config=config,
-                force_check=True
-            )
-            
-            # Записываем успешное завершение
-            with open(log_file_path, 'a') as f:
-                f.write(f"=== Обновление завершено успешно ===\n")
-                f.write(f"Время завершения: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                
-        except Exception as e:
-            # Записываем ошибку в лог
-            with open(log_file_path, 'a') as f:
-                f.write(f"\nОШИБКА: {str(e)}\n")
-            logger.error(f"Error updating project {project_name}: {str(e)}")
-    
-    thread = threading.Thread(target=run_update)
-    thread.daemon = True
-    thread.start()
-    
-    return jsonify({
-        'success': True, 
-        'message': t('update_started'),
-        'update_id': update_id,
-        'project': project_name
-    })
-
 def get_project_details(data, session):
     """Получение детальной информации о проекте"""
     project_name = data.get('project')
@@ -273,3 +224,86 @@ def get_updates_config():
             json.dump([], f)
     
     return config
+
+def update_project(data, session):
+    """Обновление конкретного проекта"""
+    project_name = data.get('project')
+    if project_name not in PROJECTS:
+        return jsonify({'success': False, 'message': t('project_not_found')})
+    
+    # Создание уникального ID обновления с временной меткой
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    update_id = f"{project_name}_{timestamp}"
+    
+    # Запуск обновления в отдельном потоке
+    def run_update():
+        try:
+            config = get_updates_config()
+            
+            # Настраиваем специальный логгер для этого обновления
+            logger = setup_update_logger(update_id, config)
+            
+            logger.info(f"=== Начало обновления проекта {project_name} ===")
+            logger.info(f"Время начала: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Базовая директория: {PROJECTS[project_name]['BASE_PATH']}")
+            logger.info(f"URL загрузки: {PROJECTS[project_name]['DOWNLOAD_URL']}")
+            
+            # Запускаем обновление
+            timestamp, updates, folders = UpdatesModule.start_updates_projects(
+                projects_config={project_name: PROJECTS[project_name]},
+                module_config=config,
+                force_check=True,
+                custom_logger=logger  # Передаем кастомный логгер
+            )
+            
+            logger.info(f"=== Обновление завершено успешно ===")
+            logger.info(f"Время завершения: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                
+        except Exception as e:
+            logger.error(f"ОШИБКА: {str(e)}")
+            logger.error("=== Обновление завершено с ошибками ===")
+
+    thread = threading.Thread(target=run_update)
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'success': True, 
+        'message': t('update_started'),
+        'update_id': update_id,
+        'project': project_name
+    })
+
+def setup_update_logger(update_id, config):
+    """Настройка специального логгера для обновления"""
+    log_dir = Path(config['LOG_DIR'])
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Создаем логгер
+    logger = logging.getLogger(f'update_{update_id}')
+    logger.setLevel(logging.INFO)
+    
+    # Удаляем существующие обработчики
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    
+    # Файловый обработчик
+    log_file = log_dir / f"{update_id}.log"
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(logging.INFO)
+    
+    # Форматирование с детальной информацией
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+    # Консольный обработчик (для отладки)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    return logger
