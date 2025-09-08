@@ -20,9 +20,7 @@ PROJECTS = {
         # Формат: список строк с glob-шаблонами
         'TARGETS': [
             #'.gitignore',
-            'codereaderForAIv2.py',
             'README.md',
-            'requirements.txt',
             'starter.py',
             'starter_files/*'
         ],
@@ -58,7 +56,6 @@ PROJECTS = {
             '.gitignore',
             'Инструкция',
             'check_files.py',
-            'codereaderForAIv2.py',
             'docker-compose.example',
             'generate_compose.py'
         ],
