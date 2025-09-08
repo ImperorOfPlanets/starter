@@ -34,7 +34,10 @@ class UpdatesModule(BaseModule):
         'TIMEOUT': 30,                           # Таймаут соединения (сек)
         'STATE_FILE': 'update_state.json',       # Файл хранения состояния обновлений
         'MIN_CHECK_INTERVAL': 30,                # Минимальный интервал между проверками в секундах
-        'HISTORY_FILE': 'update_history.json'    # Файл истории обновлений
+        'HISTORY_FILE': 'update_history.json',   # Файл истории обновлений
+        'LOGS_EXTRACT': True,                    # Логировать процесс распаковки архивов
+        'LOGS_CHANGES': True,                    # Логировать детали сравнения файлов
+        'LOGS_BACKUP': True                      # Логировать процесс создания резервных копий
     }
     
     # Словарь для хранения активных процессов обновления
@@ -137,7 +140,8 @@ class UpdatesModule(BaseModule):
                 projects_updates[project_name]['CHANGES'] = UpdatesModule._find_changes(
                     old_hashes=projects_updates[project_name]['CURRENT_HASHES'],
                     new_hashes=projects_updates[project_name]['EXTRACTED_HASHES'],
-                    config=project_config
+                    config=project_config,
+                    update_id=update_id
                 )
 
                 # Применение изменений при их наличии
@@ -264,7 +268,12 @@ class UpdatesModule(BaseModule):
                 rel_path = file_path.relative_to(extract_dir)
                 
                 with open(file_path, 'rb') as f:
-                    file_hashes[str(rel_path)] = hashlib.sha256(f.read()).hexdigest()
+                    file_hash = hashlib.sha256(f.read()).hexdigest()
+                    file_hashes[str(rel_path)] = file_hash
+                    
+                    # Детальное логирование распаковки
+                    if config.get('LOGS_EXTRACT', True):
+                        UpdatesModule._log_update(update_id, f"Файл: {rel_path}, хеш: {file_hash}")
         
         message = f"Распаковано файлов: {len(file_hashes)}"
         UpdatesModule._log_update(update_id, message)
@@ -294,16 +303,19 @@ class UpdatesModule(BaseModule):
     def _find_changes(
         old_hashes: Dict, 
         new_hashes: Dict, 
-        config: Dict
+        config: Dict,
+        update_id: str = None
     ) -> Dict[str, List]:
         """
         Поиск изменений между версиями
         :param old_hashes: Хеши текущей версии
         :param new_hashes: Хеши новой версии
         :param config: Конфигурация проекта
+        :param update_id: ID процесса обновления для логирования
         :return: Словарь изменений {'new': [], 'updated': [], 'removed': []}
         """
         changes = {'new': [], 'updated': [], 'removed': []}
+        log_data = []
         
         # Поиск новых и измененных файлов
         for rel_path, new_hash in new_hashes.items():
@@ -312,8 +324,10 @@ class UpdatesModule(BaseModule):
                 old_hash = old_hashes.get(rel_path)
                 if not old_hash:
                     changes['new'].append(rel_path)
+                    log_data.append(f"Новый файл: {rel_path}")
                 elif old_hash != new_hash:
                     changes['updated'].append(rel_path)
+                    log_data.append(f"Измененный файл: {rel_path} (старый хеш: {old_hash}, новый хеш: {new_hash})")
         
         # Поиск удаленных файлов
         for rel_path in old_hashes:
@@ -321,6 +335,13 @@ class UpdatesModule(BaseModule):
                 UpdatesModule._is_target(rel_path, config) and 
                 not UpdatesModule._is_ignored(rel_path, config)):
                 changes['removed'].append({'path': rel_path, 'reason': "Удален в новой версии"})
+                log_data.append(f"Удаленный файл: {rel_path}")
+                
+        # Детальное логирование изменений
+        if config.get('LOGS_CHANGES', True) and log_data:
+            UpdatesModule._log_update(update_id, "Детали изменений:")
+            for log_entry in log_data:
+                UpdatesModule._log_update(update_id, f"  {log_entry}")
                 
         return changes
 
@@ -357,6 +378,10 @@ class UpdatesModule(BaseModule):
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src, dst)
                     log.write(f"Скопирован: {rel_path}\n")
+                    
+                    # Детальное логирование бэкапа
+                    if config.get('LOGS_BACKUP', True):
+                        UpdatesModule._log_update(update_id, f"Резервная копия: {rel_path}")
             
             # Дополнительные файлы для бэкапа
             for pattern in config.get('ADD_IN_BACKUPS', []):
@@ -367,6 +392,10 @@ class UpdatesModule(BaseModule):
                         dst.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(path, dst)
                         log.write(f"Доп. копия: {rel_path}\n")
+                        
+                        # Детальное логирование бэкапа
+                        if config.get('LOGS_BACKUP', True):
+                            UpdatesModule._log_update(update_id, f"Доп. резервная копия: {rel_path}")
         
         message = f"Резервные копии созданы: {len(updates['CURRENT_HASHES'])} файлов"
         UpdatesModule._log_update(update_id, message)
@@ -771,3 +800,26 @@ class UpdatesModule(BaseModule):
                 return f.read()
         except Exception as e:
             return f"Ошибка чтения лог-файла: {str(e)}"
+
+    @staticmethod
+    def get_updates_config() -> Dict:
+        """
+        Получение конфигурации с правильным путем к файлу состояния
+        :return: Конфигурация модуля обновлений
+        """
+        config = UpdatesModule.DEFAULT_CONFIG.copy()
+        
+        # Устанавливаем правильный путь к файлу состояния
+        script_path = Path(__file__).resolve().parent.parent.parent.parent
+        state_file_path = script_path / 'starter_files' / 'update_state.json'
+        config['STATE_FILE'] = str(state_file_path)
+        
+        # Создаем директорию, если она не существует
+        state_file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Создаем файл состояния, если он не существует
+        if not state_file_path.exists():
+            with open(state_file_path, 'w') as f:
+                json.dump({}, f)
+        
+        return config
