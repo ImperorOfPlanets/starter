@@ -22,8 +22,9 @@ service.log
 starter_files/updates
 
 # Файл настроек стартера
-.env
 temp.txt
+.env
+
 
 /venv
 venv8*/
