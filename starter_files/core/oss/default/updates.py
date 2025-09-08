@@ -169,8 +169,10 @@ class UpdatesModule:
             url=project_config['DOWNLOAD_URL'],
             extract_dir=extracted_dir,
             config=config,
+            project_config=project_config,
             logger=logger
         )
+
 
         if not project_base_path.exists():
             logger.info(f"Обнаружена новая установка: {project_name}")
@@ -200,22 +202,36 @@ class UpdatesModule:
         UpdatesModule._cleanup_old_files(config)
 
     @staticmethod
-    def _download_and_extract(url: str, extract_dir: Path, config: Dict, logger: logging.Logger) -> Dict[str, str]:
+    def _download_and_extract(
+        url: str, 
+        extract_dir: Path,
+        config: Dict,
+        project_config: Dict,
+        logger: logging.Logger
+    ) -> Dict[str, str]:
+        """
+        Скачивание и распаковка архива с проектом с фильтрацией по TARGETS/IGNORED
+        """
         archive_path = extract_dir / "temp.zip"
         file_hashes = {}
 
+        # Попытки скачивания с повторами
         for attempt in range(config['MAX_RETRIES']):
             try:
                 logger.info(f"Скачивание архива (попытка {attempt+1}): {url}")
+                
                 with requests.get(url, stream=True, timeout=config['TIMEOUT']) as response:
                     response.raise_for_status()
                     with open(archive_path, 'wb') as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
+
                 logger.info(f"Распаковка архива: {archive_path}")
                 with zipfile.ZipFile(archive_path, 'r') as zip_ref:
                     zip_ref.extractall(extract_dir)
+
                 break
+
             except Exception as e:
                 if attempt == config['MAX_RETRIES'] - 1:
                     raise
@@ -224,17 +240,36 @@ class UpdatesModule:
                 if archive_path.exists():
                     archive_path.unlink()
 
-        logger.info(f"=== ВЫЧИСЛЕНИЕ ХЕШЕЙ РАСПАКОВАННЫХ ФАЙЛОВ ===")
-        for root, _, files in os.walk(extract_dir):
-            for file in files:
-                file_path = Path(root) / file
+        # Вычисление хешей ТОЛЬКО по шаблонам TARGETS
+        logger.info("=== ВЫЧИСЛЕНИЕ ХЕШЕЙ СКАЧАННЫХ ФАЙЛОВ (С ФИЛЬТРАЦИЕЙ) ===")
+        logger.info(f"Директория распаковки: {extract_dir}")
+        logger.info(f"TARGETS: {project_config['TARGETS']}")
+        logger.info(f"IGNORED: {project_config.get('IGNORED', [])}")
+
+        included_files = set()
+        for pattern in project_config['TARGETS']:
+            matched = list(extract_dir.rglob(pattern))
+            included_files.update(matched)
+            logger.debug(f"Шаблон {pattern} → найдено {len(matched)} файлов")
+
+        ignored_files = set()
+        for pattern in project_config.get('IGNORED', []):
+            matched = list(extract_dir.rglob(pattern))
+            ignored_files.update(matched)
+            logger.debug(f"Игнор {pattern} → найдено {len(matched)} файлов")
+
+        final_files = included_files - ignored_files
+        logger.info(f"Файлов после фильтрации: {len(final_files)}")
+
+        for file_path in final_files:
+            if file_path.is_file():
                 rel_path = file_path.relative_to(extract_dir)
                 with open(file_path, 'rb') as f:
                     file_hash = hashlib.sha256(f.read()).hexdigest()
                     file_hashes[str(rel_path)] = file_hash
                 logger.debug(f"Вычислен хеш для: {rel_path} -> {file_hash}")
-        logger.info(f"Всего файлов в новой версии: {len(file_hashes)}")
-        logger.info("=== ЗАВЕРШЕНО ВЫЧИСЛЕНИЕ ХЕШЕЙ ===")
+
+        logger.info("=== ЗАВЕРШЕНО ВЫЧИСЛЕНИЕ ХЕШЕЙ СКАЧАННЫХ ФАЙЛОВ ===")
         return file_hashes
 
     @staticmethod
