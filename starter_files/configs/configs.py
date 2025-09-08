@@ -22,14 +22,14 @@ PROJECTS = {
             #'.gitignore',
             'README.md',
             'starter.py',
-            'starter_files/*'
+            'starter_files/**'
         ],
         'IGNORED': [
             'starter_files/execute.log',
-            "starter_files/updates/*",
-            "starter_files/logs/*",
-            "starter_files/web/ssl/*",
-            "starter_files/web/sessions/*",
+            "starter_files/updates/**",  # Рекурсивно игнорируем updates
+            "starter_files/logs/**",     # Рекурсивно игнорируем logs
+            "starter_files/web/ssl/**",  # Рекурсивно игнорируем ssl
+            "starter_files/web/sessions/**",  # Рекурсивно игнорируем sessions
         ],
         
         # Автоматически перезапускать приложение после обновления (опционально)
