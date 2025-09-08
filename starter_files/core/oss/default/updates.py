@@ -197,7 +197,9 @@ class UpdatesModule:
 
     @staticmethod
     def _perform_update(project_name: str, project_config: Dict, logger: logging.Logger):
-        """Выполнение процесса обновления"""
+        """
+        Выполнение процесса обновления с детальным логированием
+        """
         config = UpdatesModule.get_updates_config()
         
         logger.info(f"Базовая директория: {project_config['BASE_PATH']}")
@@ -250,7 +252,6 @@ class UpdatesModule:
         changes = UpdatesModule._find_changes(
             old_hashes=current_hashes,
             new_hashes=extracted_hashes,
-            config=project_config,
             logger=logger
         )
 
@@ -280,222 +281,6 @@ class UpdatesModule:
         UpdatesModule._cleanup_old_files(config)
 
     @staticmethod
-    def _create_backups(
-        project_config: Dict, 
-        backup_dir: Path, 
-        current_hashes: Dict,
-        logger: logging.Logger
-    ) -> None:
-        """
-        Создание резервных копии изменяемых файлов
-        """
-        base_path = Path(project_config['BASE_PATH'])
-        
-        logger.info(f"Создание резервных копий в: {backup_dir}")
-        
-        # Копирование целевых файлов
-        for rel_path in current_hashes:
-            src = base_path / rel_path
-            if src.exists():
-                dst = backup_dir / rel_path
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
-        
-        logger.info(f"Резервные копии созданы: {len(current_hashes)} файлов")
-
-    @staticmethod
-    def _cleanup_old_files(config: Dict) -> None:
-        """
-        Очистка устаревших временных файлов
-        """
-        base_temp_dir = Path(config['BASE_UPDATES_DIR'])
-        cutoff_date = datetime.now() - timedelta(days=config['CLEANUP_DAYS'])
-        
-        for dir_type in [config['EXTRACTED_SUBDIR'], config['BACKUPS_SUBDIR']]:
-            type_dir = base_temp_dir / dir_type
-            if not type_dir.exists():
-                continue
-                
-            for project_dir in type_dir.iterdir():
-                if not project_dir.is_dir():
-                    continue
-                    
-                for version_dir in project_dir.iterdir():
-                    try:
-                        dir_date = datetime.strptime(version_dir.name, '%Y%m%d_%H%M%S')
-                        if dir_date < cutoff_date:
-                            shutil.rmtree(version_dir)
-                    except ValueError:
-                        continue
-
-    @staticmethod
-    def get_update_log(update_id: str) -> str:
-        """
-        Получение лога конкретного обновления
-        """
-        config = UpdatesModule.get_updates_config()
-        log_file = Path(config['LOG_DIR']) / f"{update_id}.log"
-        
-        if not log_file.exists():
-            return "Лог-файл не найден"
-        
-        try:
-            with open(log_file, 'r', encoding='utf-8') as f:
-                return f.read()
-        except Exception as e:
-            return f"Ошибка чтения лог-файла: {str(e)}"
-
-    @staticmethod
-    def _find_changes(old_hashes: Dict, new_hashes: Dict, logger: logging.Logger = None) -> Dict[str, List]:
-        """
-        Поиск изменений между версиями с детальным логированием хешей
-        """
-        changes = {'new': [], 'updated': [], 'removed': []}
-        
-        if logger:
-            logger.info("=== СРАВНЕНИЕ ХЕШЕЙ ФАЙЛОВ ===")
-            logger.info(f"Файлов в текущей версии: {len(old_hashes)}")
-            logger.info(f"Файлов в новой версии: {len(new_hashes)}")
-        
-        # Поиск новых и измененных файлов
-        for rel_path, new_hash in new_hashes.items():
-            old_hash = old_hashes.get(rel_path)
-            if not old_hash:
-                changes['new'].append({'path': rel_path, 'hash': new_hash})
-                if logger:
-                    logger.info(f"НОВЫЙ ФАЙЛ: {rel_path}")
-                    logger.info(f"  Хеш новой версии: {new_hash}")
-            elif old_hash != new_hash:
-                changes['updated'].append({
-                    'path': rel_path, 
-                    'old_hash': old_hash, 
-                    'new_hash': new_hash
-                })
-                if logger:
-                    logger.info(f"ИЗМЕНЕН ФАЙЛ: {rel_path}")
-                    logger.info(f"  Хеш текущей версии: {old_hash}")
-                    logger.info(f"  Хеш новой версии: {new_hash}")
-                    logger.info(f"  Файл будет заменен")
-        
-        # Поиск удаленных файлов
-        for rel_path, old_hash in old_hashes.items():
-            if rel_path not in new_hashes:
-                changes['removed'].append({'path': rel_path, 'hash': old_hash})
-                if logger:
-                    logger.info(f"УДАЛЕН ФАЙЛ: {rel_path}")
-                    logger.info(f"  Хеш удаляемого файла: {old_hash}")
-        
-        if logger:
-            logger.info("=== РЕЗУЛЬТАТЫ СРАВНЕНИЯ ===")
-            logger.info(f"Новых файлов: {len(changes['new'])}")
-            for new_file in changes['new']:
-                logger.info(f"  + {new_file['path']}")
-            
-            logger.info(f"Измененных файлов: {len(changes['updated'])}")
-            for updated_file in changes['updated']:
-                logger.info(f"  ~ {updated_file['path']}")
-            
-            logger.info(f"Удаленных файлов: {len(changes['removed'])}")
-            for removed_file in changes['removed']:
-                logger.info(f"  - {removed_file['path']}")
-                
-            logger.info("=== КОНЕЦ СРАВНЕНИЯ ===")
-                
-        return changes
-
-    @staticmethod
-    def _apply_updates(
-        changes: Dict, 
-        extracted_dir: Path, 
-        base_path: Path,
-        logger: logging.Logger
-    ) -> None:
-        """
-        Применение обновлений к файлам проекта с детальным логированием
-        """
-        logger.info("=== НАЧАЛО ПРИМЕНЕНИЯ ОБНОВЛЕНИЙ ===")
-        
-        # Копирование новых файлов
-        if changes['new']:
-            logger.info(f"Добавление новых файлов ({len(changes['new'])}):")
-            for file_info in changes['new']:
-                rel_path = file_info['path']
-                src = extracted_dir / rel_path
-                dst = base_path / rel_path
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
-                logger.info(f"  + {rel_path} (хеш: {file_info['hash']})")
-        
-        # Копирование измененных файлов
-        if changes['updated']:
-            logger.info(f"Обновление измененных файлов ({len(changes['updated'])}):")
-            for file_info in changes['updated']:
-                rel_path = file_info['path']
-                src = extracted_dir / rel_path
-                dst = base_path / rel_path
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
-                logger.info(f"  ~ {rel_path}")
-                logger.info(f"    Старый хеш: {file_info['old_hash']}")
-                logger.info(f"    Новый хеш: {file_info['new_hash']}")
-                
-        # Удаление отсутствующих в новой версии файлов
-        if changes['removed']:
-            logger.info(f"Удаление файлов ({len(changes['removed'])}):")
-            for file_info in changes['removed']:
-                rel_path = file_info['path']
-                target = base_path / rel_path
-                if target.exists():
-                    target.unlink()
-                    logger.info(f"  - {rel_path} (хеш: {file_info['hash']})")
-        
-        message = (f"Применено обновлений: "
-                f"+{len(changes['new'])} "
-                f"~{len(changes['updated'])} "
-                f"-{len(changes['removed'])}")
-        
-        logger.info(message)
-        logger.info("=== ОБНОВЛЕНИЯ ПРИМЕНЕНЫ ===")
-
-    @staticmethod
-    def _get_current_hashes(project_config: Dict, logger: logging.Logger = None) -> Dict[str, str]:
-        """
-        Получение хешей текущих файлов проекта с логированием
-        """
-        base_path = Path(project_config['BASE_PATH'])
-        current_hashes = {}
-        
-        if logger:
-            logger.info("=== ВЫЧИСЛЕНИЕ ХЕШЕЙ ТЕКУЩИХ ФАЙЛОВ ===")
-            logger.info(f"Директория: {base_path}")
-            logger.info(f"Шаблоны поиска: {project_config['TARGETS']}")
-        
-        for pattern in project_config['TARGETS']:
-            if logger:
-                logger.info(f"Поиск файлов по шаблону: {pattern}")
-            
-            file_count = 0
-            for path in base_path.rglob(pattern):
-                if path.is_file():
-                    rel_path = path.relative_to(base_path)
-                    with open(path, 'rb') as f:
-                        file_hash = hashlib.sha256(f.read()).hexdigest()
-                        current_hashes[str(rel_path)] = file_hash
-                    
-                    if logger:
-                        logger.debug(f"Вычислен хеш для: {rel_path} -> {file_hash}")
-                    file_count += 1
-            
-            if logger:
-                logger.info(f"Найдено файлов по шаблону '{pattern}': {file_count}")
-        
-        if logger:
-            logger.info(f"Всего найдено файлов: {len(current_hashes)}")
-            logger.info("=== ЗАВЕРШЕНО ВЫЧИСЛЕНИЕ ХЕШЕЙ ===")
-        
-        return current_hashes
-
-    @staticmethod
     def _download_and_extract(
         url: str, 
         extract_dir: Path,
@@ -503,7 +288,7 @@ class UpdatesModule:
         logger: logging.Logger
     ) -> Dict[str, str]:
         """
-        Скачивание и распаковка архива с проектом
+        Скачивание и распаковка архива с проектом с детальным логированием
         """
         archive_path = extract_dir / "temp.zip"
         file_hashes = {}
@@ -555,3 +340,211 @@ class UpdatesModule:
         logger.info(f"Всего распаковано файлов: {file_count}")
         logger.info("=== ЗАВЕРШЕНО ВЫЧИСЛЕНИЕ ХЕШЕЙ СКАЧАННЫХ ФАЙЛОВ ===")
         return file_hashes
+
+    @staticmethod
+    def _create_backups(
+        project_config: Dict, 
+        backup_dir: Path, 
+        current_hashes: Dict,
+        logger: logging.Logger
+    ) -> None:
+        """
+        Создание резервных копии изменяемых файлов с детальным логированием
+        """
+        base_path = Path(project_config['BASE_PATH'])
+        
+        logger.info(f"Создание резервных копий в: {backup_dir}")
+        
+        # Копирование целевых файлов
+        for rel_path in current_hashes:
+            src = base_path / rel_path
+            if src.exists():
+                dst = backup_dir / rel_path
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                logger.debug(f"Создана резервная копия: {rel_path}")
+        
+        logger.info(f"Резервные копии созданы: {len(current_hashes)} файлов")
+
+    @staticmethod
+    def _cleanup_old_files(config: Dict) -> None:
+        """
+        Очистка устаревших временных файлов
+        """
+        base_temp_dir = Path(config['BASE_UPDATES_DIR'])
+        cutoff_date = datetime.now() - timedelta(days=config['CLEANUP_DAYS'])
+        
+        for dir_type in [config['EXTRACTED_SUBDIR'], config['BACKUPS_SUBDIR']]:
+            type_dir = base_temp_dir / dir_type
+            if not type_dir.exists():
+                continue
+                
+            for project_dir in type_dir.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                    
+                for version_dir in project_dir.iterdir():
+                    try:
+                        dir_date = datetime.strptime(version_dir.name, '%Y%m%d_%H%M%S')
+                        if dir_date < cutoff_date:
+                            shutil.rmtree(version_dir)
+                    except ValueError:
+                        continue
+
+    @staticmethod
+    def _get_current_hashes(project_config: Dict, logger: logging.Logger = None) -> Dict[str, str]:
+        """
+        Получение хешей текущих файлов проекта с детальным логированием
+        """
+        base_path = Path(project_config['BASE_PATH'])
+        current_hashes = {}
+        
+        if logger:
+            logger.info("=== ВЫЧИСЛЕНИЕ ХЕШЕЙ ТЕКУЩИХ ФАЙЛОВ ===")
+            logger.info(f"Директория: {base_path}")
+            logger.info(f"Шаблоны поиска: {project_config['TARGETS']}")
+        
+        for pattern in project_config['TARGETS']:
+            if logger:
+                logger.info(f"Поиск файлов по шаблону: {pattern}")
+            
+            file_count = 0
+            for path in base_path.rglob(pattern):
+                if path.is_file():
+                    rel_path = path.relative_to(base_path)
+                    with open(path, 'rb') as f:
+                        file_hash = hashlib.sha256(f.read()).hexdigest()
+                        current_hashes[str(rel_path)] = file_hash
+                    
+                    if logger:
+                        logger.debug(f"Вычислен хеш для: {rel_path} -> {file_hash}")
+                    file_count += 1
+            
+            if logger:
+                logger.info(f"Найдено файлов по шаблону '{pattern}': {file_count}")
+        
+        if logger:
+            logger.info(f"Всего найдено файлов: {len(current_hashes)}")
+            logger.info("=== ЗАВЕРШЕНО ВЫЧИСЛЕНИЕ ХЕШЕЙ ===")
+        
+        return current_hashes
+
+    @staticmethod
+    def _find_changes(old_hashes: Dict, new_hashes: Dict, logger: logging.Logger = None) -> Dict[str, List]:
+        """
+        Поиск изменений между версиями с детальным логированием хешей
+        """
+        changes = {'new': [], 'updated': [], 'removed': []}
+        
+        if logger:
+            logger.info("=== СРАВНЕНИЕ ХЕШЕЙ ФАЙЛОВ ===")
+            logger.info(f"Файлов в текущей версии: {len(old_hashes)}")
+            logger.info(f"Файлов в новой версии: {len(new_hashes)}")
+        
+        # Поиск новых и измененных файлов
+        for rel_path, new_hash in new_hashes.items():
+            old_hash = old_hashes.get(rel_path)
+            if not old_hash:
+                changes['new'].append(rel_path)
+                if logger:
+                    logger.info(f"НОВЫЙ ФАЙЛ: {rel_path}")
+                    logger.info(f"  Хеш новой версии: {new_hash}")
+            elif old_hash != new_hash:
+                changes['updated'].append(rel_path)
+                if logger:
+                    logger.info(f"ИЗМЕНЕН ФАЙЛ: {rel_path}")
+                    logger.info(f"  Хеш текущей версии: {old_hash}")
+                    logger.info(f"  Хеш новой версии: {new_hash}")
+                    logger.info(f"  Файл будет заменен")
+        
+        # Поиск удаленных файлов
+        for rel_path, old_hash in old_hashes.items():
+            if rel_path not in new_hashes:
+                changes['removed'].append(rel_path)
+                if logger:
+                    logger.info(f"УДАЛЕН ФАЙЛ: {rel_path}")
+                    logger.info(f"  Хеш удаляемого файла: {old_hash}")
+        
+        if logger:
+            logger.info("=== РЕЗУЛЬТАТЫ СРАВНЕНИЯ ===")
+            logger.info(f"Новых файлов: {len(changes['new'])}")
+            for new_file in changes['new']:
+                logger.info(f"  + {new_file}")
+            
+            logger.info(f"Измененных файлов: {len(changes['updated'])}")
+            for updated_file in changes['updated']:
+                logger.info(f"  ~ {updated_file}")
+            
+            logger.info(f"Удаленных файлов: {len(changes['removed'])}")
+            for removed_file in changes['removed']:
+                logger.info(f"  - {removed_file}")
+                
+            logger.info("=== КОНЕЦ СРАВНЕНИЯ ===")
+                
+        return changes
+
+    @staticmethod
+    def _apply_updates(
+        changes: Dict, 
+        extracted_dir: Path, 
+        base_path: Path,
+        logger: logging.Logger
+    ) -> None:
+        """
+        Применение обновлений к файлам проекта с детальным логированием
+        """
+        logger.info("=== НАЧАЛО ПРИМЕНЕНИЯ ОБНОВЛЕНИЙ ===")
+        
+        # Копирование новых файлов
+        if changes['new']:
+            logger.info(f"Добавление новых файлов ({len(changes['new'])}):")
+            for rel_path in changes['new']:
+                src = extracted_dir / rel_path
+                dst = base_path / rel_path
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                logger.info(f"  + {rel_path}")
+        
+        # Копирование измененных файлов
+        if changes['updated']:
+            logger.info(f"Обновление измененных файлов ({len(changes['updated'])}):")
+            for rel_path in changes['updated']:
+                src = extracted_dir / rel_path
+                dst = base_path / rel_path
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                logger.info(f"  ~ {rel_path}")
+                
+        # Удаление отсутствующих в новой версии файлов
+        if changes['removed']:
+            logger.info(f"Удаление файлов ({len(changes['removed'])}):")
+            for rel_path in changes['removed']:
+                target = base_path / rel_path
+                if target.exists():
+                    target.unlink()
+                    logger.info(f"  - {rel_path}")
+        
+        message = (f"Применено обновлений: "
+                f"+{len(changes['new'])} "
+                f"~{len(changes['updated'])} "
+                f"-{len(changes['removed'])}")
+        
+        logger.info(message)
+        logger.info("=== ОБНОВЛЕНИЯ ПРИМЕНЕНЫ ===")
+
+    @staticmethod
+    def get_update_log(update_id: str) -> str:
+        """
+        Получение лога конкретного обновления
+        """
+        config = UpdatesModule.get_updates_config()
+        log_file = Path(config['LOG_DIR']) / f"{update_id}.log"
+        
+        if not log_file.exists():
+            return "Лог-файл не найден"
+        
+        try:
+            with open(log_file, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            return f"Ошибка чтения лог-файла: {str(e)}"
