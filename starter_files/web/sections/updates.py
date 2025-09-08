@@ -163,30 +163,24 @@ def get_project_details(data, session):
 def get_update_log(data, session):
     """Получение лога обновления"""
     update_id = data.get('update_id')
-    project = data.get('project')
+    project_name = data.get('project')
     
-    if not update_id or not project:
+    if not update_id or not project_name:
         return jsonify({'success': False, 'message': 'Update ID and project required'})
     
-    log_file_path = UPDATE_LOGS_DIR / f"update_{project}_{update_id}.log"
-    
-    if not log_file_path.exists():
-        return jsonify({'success': False, 'message': 'Log file not found', 'logs': ''})
-    
     try:
-        with open(log_file_path, 'r') as f:
-            logs = f.read()
+        config = get_updates_config()
+        log_file = Path(config['LOG_DIR']) / f"{update_id}.log"
         
-        # Проверяем, завершено ли обновление
-        completed = "=== Обновление завершено успешно ===" in logs or "ОШИБКА:" in logs
+        if not log_file.exists():
+            return jsonify({'success': False, 'message': 'Log file not found'})
         
-        return jsonify({
-            'success': True,
-            'logs': logs,
-            'completed': completed
-        })
+        with open(log_file, 'r', encoding='utf-8') as f:
+            log_content = f.read()
+        
+        return jsonify({'success': True, 'log': log_content})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e), 'logs': ''})
+        return jsonify({'success': False, 'message': str(e)})
 
 def download_update_log(data, session):
     """Скачивание лога обновления"""
@@ -225,6 +219,32 @@ def get_project_history(data, session):
         return jsonify({'success': True, 'history': history})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+def download_update_log(data, session):
+    """Скачивание файла лога обновления"""
+    update_id = data.get('update_id')
+    project_name = data.get('project')
+    
+    if not update_id or not project_name:
+        return "Update ID and project required", 400
+    
+    try:
+        config = get_updates_config()
+        log_file = Path(config['LOG_DIR']) / f"{update_id}.log"
+        
+        if not log_file.exists():
+            return "Log file not found", 404
+        
+        # Отправляем файл для скачивания
+        from flask import send_file
+        return send_file(
+            log_file,
+            as_attachment=True,
+            download_name=f"update_{project_name}_{update_id}.log",
+            mimetype='text/plain'
+        )
+    except Exception as e:
+        return str(e), 500
 
 def get_updates_config():
     """Получение конфигурации с правильным путем к файлу состояния"""

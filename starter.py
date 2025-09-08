@@ -93,11 +93,12 @@ if __name__ == '__main__':
         print("Сохраните эти данные!")
         print("="*50 + "\n")
 
-    print("=== ПРОВЕРКА ОБНОВЛЕНИЙ === ")
-    from starter_files.core.utils.loader_utils import get
-    seconds = get('updates','seconds_since_last_update')
-    print(f"Секунд с последнего обновления ${seconds}")
-    print("=========================== ")
+        print("=== ПРОВЕРКА ОБНОВЛЕНИЙ ===")
+        from starter_files.core.oss.default.updates import UpdatesModule
+        config = UpdatesModule.get_updates_config()
+        seconds = UpdatesModule.seconds_since_last_update('starter', config)
+        print(f"Секунд с последнего обновления: {seconds}")
+        print("===========================")
 
     # Собираем информацию о фаерволе
     from starter_files.core.oss.default.firewall import FirewallModule

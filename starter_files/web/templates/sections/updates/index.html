@@ -70,57 +70,20 @@
     </div>
 </div>
 
-<!-- Модальное окно для деталей проекта -->
-<div class="modal fade" id="projectDetailsModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="projectDetailsModal" tabindex="-1" aria-labelledby="projectDetailsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Детали проекта: <span id="modalProjectName"></span></h5>
+                <h5 class="modal-title" id="projectDetailsModalLabel">Детали проекта</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div class="d-flex justify-content-center" id="loadingSpinner">
-                    <div class="spinner-border" role="status">
-                        <span class="visually-hidden">Загрузка...</span>
-                    </div>
-                </div>
-                <div id="projectDetailsContent" style="display: none;">
+                <div id="projectDetailsContent">
                     <!-- Содержимое будет заполнено через JavaScript -->
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Модальное окно для логов обновления -->
-<div class="modal fade" id="updateLogModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Лог обновления: <span id="logProjectName"></span></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="d-flex justify-content-center" id="logLoadingSpinner">
-                    <div class="spinner-border" role="status">
-                        <span class="visually-hidden">Загрузка...</span>
-                    </div>
-                </div>
-                <div id="updateLogContent" style="display: none;">
-                    <pre class="bg-dark text-white p-3" style="max-height: 60vh; overflow-y: auto;"></pre>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-                <button type="button" class="btn btn-primary" id="refreshLogBtn">
-                    <i class="bi bi-arrow-repeat"></i> Обновить лог
-                </button>
-                <button type="button" class="btn btn-success" id="downloadLogBtn">
-                    <i class="bi bi-download"></i> Скачать лог
-                </button>
             </div>
         </div>
     </div>
@@ -144,6 +107,7 @@
                                 <th>Время</th>
                                 <th>Статус</th>
                                 <th>Сообщение</th>
+                                <th>Действия</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -156,119 +120,128 @@
     </div>
 </div>
 
+<!-- Модальное окно для просмотра логов -->
+<div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Лог обновления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <pre class="bg-dark text-white p-3" style="max-height: 60vh; overflow-y: auto;"></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary" id="downloadLogBtn">
+                    <i class="bi bi-download"></i> Скачать лог
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 $(document).ready(function() {
     console.log('DOM loaded, initializing update section...');
-    
-    // Инициализация модальных окон
-    var projectDetailsModal = new bootstrap.Modal(document.getElementById('projectDetailsModal'));
-    var updateLogModal = new bootstrap.Modal(document.getElementById('updateLogModal'));
     
     // Функция для отправки POST запроса
     function postFormData(action, data) {
         console.log('Sending request:', action, data);
         
-        var formData = new URLSearchParams();
+        // Создаем форму для отправки данных
+        var formData = new FormData();
         formData.append('section', 'updates');
         formData.append('action', action);
         
+        // Добавляем дополнительные данные
         for (var key in data) {
             if (data.hasOwnProperty(key)) {
                 formData.append(key, data[key]);
             }
         }
 
-        return fetch('/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: formData
-        }).then(response => response.json());
-    }
-
-    // Функция для получения статуса цвета
-    function getStatusColor(status) {
-        switch(status) {
-            case 'success': return 'success';
-            case 'error': return 'danger';
-            case 'no_changes': return 'info';
-            case 'new_installation': return 'primary';
-            default: return 'secondary';
-        }
-    }
-
-    // Функция для загрузки истории обновлений
-    function loadProjectHistory() {
-        $.ajax({
+        return $.ajax({
             url: '/',
             method: 'POST',
-            data: {
-                'section': 'updates',
-                'action': 'get_project_history',
-                'project': 'all'
-            },
-            success: function(response) {
-                console.log('History response:', response);
-                if (response.success) {
-                    const historyTable = $('#history-table tbody');
-                    historyTable.empty();
-                    
-                    if (response.history && response.history.length > 0) {
-                        response.history.forEach(item => {
-                            const row = `
-                                <tr>
-                                    <td>${item.project}</td>
-                                    <td>${new Date(item.timestamp).toLocaleString()}</td>
-                                    <td><span class="badge bg-${getStatusColor(item.status)}">${item.status}</span></td>
-                                    <td>${item.message}</td>
-                                </tr>
-                            `;
-                            historyTable.append(row);
-                        });
-                    } else {
-                        historyTable.append('<tr><td colspan="4" class="text-center">История обновлений пуста</td></tr>');
-                    }
-                } else {
-                    alert('Ошибка загрузки истории: ' + response.message);
-                }
-            },
-            error: function(error) {
-                console.error('History load error:', error);
-                alert('Ошибка загрузки истории: ' + error.statusText);
-            }
+            data: formData,
+            processData: false,
+            contentType: false,
+            dataType: 'json'
         });
     }
 
-    // Загрузка истории при открытии страницы
-    loadProjectHistory();
+    // Кнопка проверки всех обновлений
+    $('#check-updates-btn').on('click', function() {
+        console.log('Check all updates button clicked');
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("checking") }}');
+        
+        postFormData('check_all', {})
+            .done(function(data) {
+                console.log('Check all response:', data);
+                if (data.success) {
+                    // Не перезагружаем страницу, а обновляем только историю
+                    loadProjectHistory('all');
+                    $btn.prop('disabled', false);
+                    $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_updates") }}');
+                    alert('Проверка обновлений завершена');
+                } else {
+                    alert('Error: ' + data.message);
+                    $btn.prop('disabled', false);
+                    $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_updates") }}');
+                }
+            })
+            .fail(function(error) {
+                console.error('Check all error:', error);
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_updates") }}');
+            });
+    });
 
-    // Обработчик кнопки обновления истории
-    $('#refresh-history-btn').on('click', loadProjectHistory);
+    // Кнопки обновления отдельных проектов (делегирование событий)
+    $(document).on('click', '.update-project-btn', function() {
+        var project = $(this).data('project');
+        console.log('Update project button clicked:', project);
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("updating") }}');
+        
+        postFormData('update_project', { project: project })
+            .done(function(data) {
+                console.log('Update project response:', data);
+                if (data.success) {
+                    // Не перезагружаем страницу, а обновляем только историю
+                    loadProjectHistory('all');
+                    alert('Проект ' + project + ' успешно обновлен');
+                } else {
+                    alert('Error updating ' + project + ': ' + data.message);
+                }
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
+            })
+            .fail(function(error) {
+                console.error('Update project error:', error);
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
+            });
+    });
 
-    // Обработчик клика по названию проекта
+    // Обработчик клика по названию проекта (делегирование событий)
     $(document).on('click', '.project-details-link', function(e) {
         e.preventDefault();
         var projectName = $(this).data('project');
         console.log('Project details link clicked:', projectName);
         
-        // Устанавливаем название проекта в заголовок
-        $('#modalProjectName').text(projectName);
-        
-        // Показываем спиннер и скрываем контент
-        $('#loadingSpinner').show();
-        $('#projectDetailsContent').hide();
-        
-        // Показываем модальное окно
-        projectDetailsModal.show();
-        
         // Запрос детальной информации о проекте
         postFormData('get_project_details', { project: projectName })
-            .then(function(data) {
+            .done(function(data) {
                 console.log('Project details response:', data);
-                $('#loadingSpinner').hide();
-                
                 if (data.success) {
+                    // Форматируем и отображаем информацию
                     var info = data.project_info;
                     var html = `
                         <h6>Базовая директория</h6>
@@ -277,62 +250,45 @@ $(document).ready(function() {
                         <h6>URL для загрузки</h6>
                         <p><a href="${info.download_url}" target="_blank">${info.download_url}</a></p>
                         
-                        <h6>Отслеживаемые файлы</h6>
+                        <h6>Отслеживаемые файловые шаблоны</h6>
                         <ul class="list-group mb-3">
-                    `;
-                    
-                    info.targets.forEach(target => {
-                        html += `<li class="list-group-item"><code>${target}</code></li>`;
-                    });
-                    
-                    html += `
+                            ${info.targets.map(target => `<li class="list-group-item"><code>${target}</code></li>`).join('')}
                         </ul>
                         
-                        <h6>Игнорируемые файлы</h6>
+                        <h6>Игнорируемые файловые шаблоны</h6>
                         <ul class="list-group mb-3">
+                            ${info.ignored.length > 0 ? 
+                              info.ignored.map(ignore => `<li class="list-group-item"><code>${ignore}</code></li>`).join('') : 
+                              '<li class="list-group-item text-muted">Нет игнорируемых шаблонов</li>'}
+                        </ul>
                     `;
-                    
-                    if (info.ignored && info.ignored.length > 0) {
-                        info.ignored.forEach(ignore => {
-                            html += `<li class="list-group-item"><code>${ignore}</code></li>`;
-                        });
-                    } else {
-                        html += '<li class="list-group-item text-muted">Нет игнорируемых файлов</li>';
-                    }
-                    
-                    html += '</ul>';
                     
                     if (info.critical_files && info.critical_files.length > 0) {
                         html += `
                             <h6>Критические файлы</h6>
                             <ul class="list-group mb-3">
+                                ${info.critical_files.map(file => `<li class="list-group-item"><code>${file}</code></li>`).join('')}
+                            </ul>
                         `;
-                        info.critical_files.forEach(file => {
-                            html += `<li class="list-group-item"><code>${file}</code></li>`;
-                        });
-                        html += '</ul>';
                     }
                     
                     if (info.add_in_backups && info.add_in_backups.length > 0) {
                         html += `
                             <h6>Дополнительные файлы для бэкапа</h6>
                             <ul class="list-group mb-3">
+                                ${info.add_in_backups.map(file => `<li class="list-group-item"><code>${file}</code></li>`).join('')}
+                            </ul>
                         `;
-                        info.add_in_backups.forEach(file => {
-                            html += `<li class="list-group-item"><code>${file}</code></li>`;
-                        });
-                        html += '</ul>';
                     }
                     
                     if (info.functions_if_update && Object.keys(info.functions_if_update).length > 0) {
                         html += `
                             <h6>Специальные функции обновления</h6>
                             <ul class="list-group mb-3">
+                                ${Object.entries(info.functions_if_update).map(([file, func]) => 
+                                    `<li class="list-group-item"><code>${file}</code> → ${func}</li>`).join('')}
+                            </ul>
                         `;
-                        Object.entries(info.functions_if_update).forEach(([file, func]) => {
-                            html += `<li class="list-group-item"><code>${file}</code> → ${func}</li>`;
-                        });
-                        html += '</ul>';
                     }
                     
                     html += `
@@ -347,183 +303,139 @@ $(document).ready(function() {
                             '<span class="text-muted">Никогда</span>'}</p>
                     `;
                     
-                    $('#projectDetailsContent').html(html).show();
+                    $('#projectDetailsContent').html(html);
+                    
+                    // Показываем модальное окно
+                    $('#projectDetailsModal').modal('show');
                 } else {
-                    $('#projectDetailsContent').html(`
-                        <div class="alert alert-danger">
-                            Ошибка: ${data.message}
-                        </div>
-                    `).show();
+                    alert('Ошибка: ' + data.message);
                 }
             })
-            .catch(function(error) {
+            .fail(function(error) {
                 console.error('Project details error:', error);
-                $('#loadingSpinner').hide();
-                $('#projectDetailsContent').html(`
-                    <div class="alert alert-danger">
-                        Ошибка сети: ${error}
-                    </div>
-                `).show();
+                alert('Ошибка сети: ' + error.statusText);
             });
     });
-
-    // Кнопка проверки всех обновлений
-    $('#check-updates-btn').on('click', function(e) {
-        e.preventDefault();
-        console.log('Check all updates button clicked');
-        var $btn = $(this);
-        $btn.prop('disabled', true);
-        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("checking") }}');
-        
-        postFormData('check_all', {})
-            .then(function(data) {
-                console.log('Check all response:', data);
-                if (data.success) {
-                    alert('Проверка обновлений завершена успешно!');
-                    location.reload();
+    
+    // Функция загрузки истории обновлений
+    function loadProjectHistory(projectName) {
+        $.ajax({
+            url: '/',
+            method: 'POST',
+            data: {
+                'section': 'updates',
+                'action': 'get_project_history',
+                'project': projectName || 'all'
+            },
+            success: function(response) {
+                if (response.success) {
+                    const historyTable = $('#history-table tbody');
+                    historyTable.empty();
+                    
+                    response.history.forEach(item => {
+                        const row = `
+                            <tr>
+                                <td>${item.project}</td>
+                                <td>${new Date(item.timestamp).toLocaleString()}</td>
+                                <td><span class="badge bg-${getStatusColor(item.status)}">${item.status}</span></td>
+                                <td>${item.message}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-info view-log-btn" 
+                                            data-update-id="${item.update_id || item.timestamp}" 
+                                            data-project="${item.project}">
+                                        <i class="bi bi-file-text"></i> Показать лог
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                        historyTable.append(row);
+                    });
                 } else {
-                    alert('Error: ' + data.message);
-                    $btn.prop('disabled', false);
-                    $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_updates") }}');
+                    alert('Ошибка загрузки истории: ' + response.message);
                 }
-            })
-            .catch(function(error) {
-                console.error('Check all error:', error);
-                alert('Network error: ' + error);
-                $btn.prop('disabled', false);
-                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_updates") }}');
-            });
+            }
+        });
+    }
+
+    function getStatusColor(status) {
+        switch(status) {
+            case 'success': return 'success';
+            case 'error': return 'danger';
+            case 'no_changes': return 'info';
+            case 'new_installation': return 'primary';
+            default: return 'secondary';
+        }
+    }
+
+    // Обработчик для кнопки просмотра лога
+    $(document).on('click', '.view-log-btn', function() {
+        const updateId = $(this).data('update-id');
+        const projectName = $(this).data('project');
+        
+        $.ajax({
+            url: '/',
+            method: 'POST',
+            data: {
+                'section': 'updates',
+                'action': 'get_update_log',
+                'update_id': updateId,
+                'project': projectName
+            },
+            success: function(response) {
+                if (response.success) {
+                    // Показываем лог в модальном окне
+                    $('#logModal .modal-body pre').text(response.log);
+                    $('#logModal').modal('show');
+                    
+                    // Сохраняем updateId для скачивания
+                    $('#downloadLogBtn').data('update-id', updateId);
+                    $('#downloadLogBtn').data('project', projectName);
+                } else {
+                    alert('Ошибка загрузки лога: ' + response.message);
+                }
+            }
+        });
     });
 
-    // Кнопки обновления отдельных проектов
-    $(document).on('click', '.update-project-btn', function(e) {
-        e.preventDefault();
-        var project = $(this).data('project');
-        console.log('Update project button clicked:', project);
-        var $btn = $(this);
-        $btn.prop('disabled', true);
-        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("updating") }}');
+    // Обработчик для кнопки скачивания лога
+    $('#downloadLogBtn').on('click', function() {
+        const updateId = $(this).data('update-id');
+        const projectName = $(this).data('project');
         
-        // Устанавливаем название проекта в заголовок
-        $('#logProjectName').text(project);
+        // Создаем временную форму для скачивания
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/';
+        form.style.display = 'none';
         
-        // Показываем спиннер и скрываем контент
-        $('#logLoadingSpinner').show();
-        $('#updateLogContent').hide();
+        const params = {
+            'section': 'updates',
+            'action': 'download_update_log',
+            'update_id': updateId,
+            'project': projectName
+        };
         
-        // Показываем модальное окно
-        updateLogModal.show();
+        for (const [key, value] of Object.entries(params)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value;
+            form.appendChild(input);
+        }
         
-        // Запускаем обновление
-        postFormData('update_project', { project: project })
-            .then(function(data) {
-                console.log('Update project response:', data);
-                if (data.success) {
-                    // Сохраняем ID обновления и имя проекта
-                    window.currentUpdateId = data.update_id;
-                    window.currentProject = data.project;
-                    
-                    // Функция для получения и обновления лога
-                    var updateLog = function() {
-                        postFormData('get_update_log', { 
-                            update_id: window.currentUpdateId,
-                            project: window.currentProject
-                        })
-                            .then(function(logData) {
-                                if (logData.success) {
-                                    $('#updateLogContent pre').text(logData.logs);
-                                    $('#updateLogContent').show();
-                                    
-                                    // Автоскролл к последней записи
-                                    var logPre = $('#updateLogContent pre');
-                                    logPre.scrollTop(logPre[0].scrollHeight);
-                                    
-                                    // Если обновление завершено, останавливаем интервал
-                                    if (logData.completed) {
-                                        clearInterval(logInterval);
-                                        $('#logLoadingSpinner').hide();
-                                        $btn.prop('disabled', false);
-                                        $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
-                                        
-                                        // Обновляем историю обновлений
-                                        loadProjectHistory();
-                                    }
-                                } else {
-                                    $('#updateLogContent pre').text('Ошибка загрузки лога: ' + logData.message);
-                                    $('#updateLogContent').show();
-                                    $('#logLoadingSpinner').hide();
-                                    clearInterval(logInterval);
-                                    $btn.prop('disabled', false);
-                                    $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
-                                }
-                            })
-                            .catch(function(error) {
-                                $('#updateLogContent pre').text('Ошибка загрузки лога: ' + error);
-                                $('#updateLogContent').show();
-                                $('#logLoadingSpinner').hide();
-                                clearInterval(logInterval);
-                                $btn.prop('disabled', false);
-                                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
-                            });
-                    };
-                    
-                    // Первое обновление лога
-                    updateLog();
-                    
-                    // Обновляем лог каждые 2 секунды
-                    var logInterval = setInterval(updateLog, 2000);
-                    
-                    // Обработчик кнопки обновления лога
-                    $('#refreshLogBtn').off('click').on('click', updateLog);
-                    
-                    // Обработчик кнопки скачивания лога
-                    $('#downloadLogBtn').off('click').on('click', function() {
-                        var form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = '/';
-                        form.style.display = 'none';
-                        
-                        const params = {
-                            'section': 'updates',
-                            'action': 'download_update_log',
-                            'update_id': window.currentUpdateId,
-                            'project': window.currentProject
-                        };
-                        
-                        for (const [key, value] of Object.entries(params)) {
-                            const input = document.createElement('input');
-                            input.type = 'hidden';
-                            input.name = key;
-                            input.value = value;
-                            form.appendChild(input);
-                        }
-                        
-                        document.body.appendChild(form);
-                        form.submit();
-                        document.body.removeChild(form);
-                    });
-                    
-                    // Останавливаем интервал при закрытии модального окна
-                    $('#updateLogModal').on('hidden.bs.modal', function() {
-                        clearInterval(logInterval);
-                        $btn.prop('disabled', false);
-                        $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
-                    });
-                } else {
-                    alert('Error updating ' + project + ': ' + data.message);
-                    $btn.prop('disabled', false);
-                    $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
-                    updateLogModal.hide();
-                }
-            })
-            .catch(function(error) {
-                console.error('Update project error:', error);
-                alert('Network error: ' + error);
-                $btn.prop('disabled', false);
-                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
-                updateLogModal.hide();
-            });
-    }); 
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+    });
+
+    // Обработчик для кнопки обновления истории
+    $('#refresh-history-btn').on('click', function() {
+        loadProjectHistory('all');
+    });
+
+    // Загружаем историю при открытии страницы
+    loadProjectHistory('all');
+    
     console.log('Update section initialized successfully');
 });
 </script>
@@ -540,7 +452,6 @@ $(document).ready(function() {
     text-decoration: none;
     color: #0d6efd;
     font-weight: 500;
-    cursor: pointer;
 }
 .project-details-link:hover {
     text-decoration: underline;
