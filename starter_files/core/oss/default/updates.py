@@ -371,46 +371,118 @@ class UpdatesModule:
             return f"Ошибка чтения лог-файла: {str(e)}"
 
     @staticmethod
-    def _get_current_hashes(project_name: str, project_config: Dict, logger: logging.Logger = None) -> Dict[str, str]:
-        base_path = Path(get_global(f"{project_name}_path"))
-        current_hashes = {}
-
+    def _get_downloaded_hashes(project_name, extracted_path, project_config, logger=None):
+        """
+        Вычисляет хеши скачанных (распакованных) файлов проекта
+        с фильтрацией по TARGETS и IGNORED.
+        """
         if logger:
-            logger.info("=== ВЫЧИСЛЕНИЕ ХЕШЕЙ ТЕКУЩИХ ФАЙЛОВ (С ФИЛЬТРАЦИЕЙ) ===")
-            logger.info(f"Директория проекта: {base_path}")
-            logger.info(f"TARGETS: {project_config['TARGETS']}")
+            logger.info("=== ВЫЧИСЛЕНИЕ ХЕШЕЙ СКАЧАННЫХ ФАЙЛОВ (С ФИЛЬТРАЦИЕЙ) ===")
+            logger.info(f"Директория распаковки: {extracted_path}")
+            logger.info(f"TARGETS: {project_config.get('TARGETS', [])}")
             logger.info(f"IGNORED: {project_config.get('IGNORED', [])}")
 
+        base_path = Path(extracted_path)
         included_files = set()
-        for pattern in project_config['TARGETS']:
-            matched = list(base_path.rglob(pattern))
+
+        # TARGETS
+        for pattern in project_config.get("TARGETS", []):
+            matched = [p for p in base_path.rglob(pattern) if p.is_file()]
             included_files.update(matched)
             if logger:
-                logger.debug(f"Шаблон {pattern} → найдено {len(matched)} файлов")
+                if matched:
+                    logger.debug(f"Шаблон {pattern} → найдено {len(matched)} файлов:")
+                    for f in matched:
+                        logger.debug(f"   - {f.relative_to(base_path)}")
+                else:
+                    logger.debug(f"Шаблон {pattern} → найдено 0 файлов")
 
+        # IGNORED
         ignored_files = set()
-        for pattern in project_config.get('IGNORED', []):
-            matched = list(base_path.rglob(pattern))
+        for pattern in project_config.get("IGNORED", []):
+            matched = [p for p in base_path.rglob(pattern) if p.is_file()]
             ignored_files.update(matched)
             if logger:
-                logger.debug(f"Игнор {pattern} → найдено {len(matched)} файлов")
+                if matched:
+                    logger.debug(f"Игнор {pattern} → найдено {len(matched)} файлов:")
+                    for f in matched:
+                        logger.debug(f"   - {f.relative_to(base_path)}")
+                else:
+                    logger.debug(f"Игнор {pattern} → найдено 0 файлов")
 
         final_files = included_files - ignored_files
+
         if logger:
             logger.info(f"Файлов после фильтрации: {len(final_files)}")
 
-        for path in final_files:
-            if path.is_file():
-                rel_path = path.relative_to(base_path)
-                with open(path, 'rb') as f:
-                    file_hash = hashlib.sha256(f.read()).hexdigest()
-                    current_hashes[str(rel_path)] = file_hash
-                if logger:
-                    logger.debug(f"Вычислен хеш для: {rel_path} -> {file_hash}")
+        hashes = {}
+        for file_path in sorted(final_files):
+            file_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+            hashes[str(file_path.relative_to(base_path))] = file_hash
+            if logger:
+                logger.debug(f"Вычислен хеш для: {file_path.relative_to(base_path)} -> {file_hash}")
 
         if logger:
-            logger.info(f"Всего найдено файлов: {len(current_hashes)}")
+            logger.info("=== ЗАВЕРШЕНО ВЫЧИСЛЕНИЕ ХЕШЕЙ СКАЧАННЫХ ФАЙЛОВ ===")
+
+        return hashes
+
+    @staticmethod
+    def _get_current_hashes(project_name, project_config, logger=None):
+        """
+        Вычисляет хеши файлов текущего проекта
+        с фильтрацией по TARGETS и IGNORED.
+        """
+
+        base_path = Path(get_global(f"{project_name}_path"))
+        if logger:
+            logger.info("=== ВЫЧИСЛЕНИЕ ХЕШЕЙ ТЕКУЩИХ ФАЙЛОВ (С ФИЛЬТРАЦИЕЙ) ===")
+            logger.info(f"Директория проекта: {base_path}")
+            logger.info(f"TARGETS: {project_config.get('TARGETS', [])}")
+            logger.info(f"IGNORED: {project_config.get('IGNORED', [])}")
+
+        included_files = set()
+
+        # TARGETS
+        for pattern in project_config.get("TARGETS", []):
+            matched = [p for p in base_path.rglob(pattern) if p.is_file()]
+            included_files.update(matched)
+            if logger:
+                if matched:
+                    logger.debug(f"Шаблон {pattern} → найдено {len(matched)} файлов:")
+                    for f in matched:
+                        logger.debug(f"   - {f.relative_to(base_path)}")
+                else:
+                    logger.debug(f"Шаблон {pattern} → найдено 0 файлов")
+
+        # IGNORED
+        ignored_files = set()
+        for pattern in project_config.get("IGNORED", []):
+            matched = [p for p in base_path.rglob(pattern) if p.is_file()]
+            ignored_files.update(matched)
+            if logger:
+                if matched:
+                    logger.debug(f"Игнор {pattern} → найдено {len(matched)} файлов:")
+                    for f in matched:
+                        logger.debug(f"   - {f.relative_to(base_path)}")
+                else:
+                    logger.debug(f"Игнор {pattern} → найдено 0 файлов")
+
+        final_files = included_files - ignored_files
+
+        if logger:
+            logger.info(f"Файлов после фильтрации: {len(final_files)}")
+
+        hashes = {}
+        for file_path in sorted(final_files):
+            file_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+            hashes[str(file_path.relative_to(base_path))] = file_hash
+            if logger:
+                logger.debug(f"Вычислен хеш для: {file_path.relative_to(base_path)} -> {file_hash}")
+
+        if logger:
             logger.info("=== ЗАВЕРШЕНО ВЫЧИСЛЕНИЕ ХЕШЕЙ ТЕКУЩИХ ФАЙЛОВ ===")
 
-        return current_hashes
+        return hashes
+
 
