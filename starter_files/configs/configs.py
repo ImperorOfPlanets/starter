@@ -28,7 +28,10 @@ PROJECTS = {
         ],
         'IGNORED': [
             'starter_files/execute.log',
-            "starter_files/updates/*"
+            "starter_files/updates/*",
+            "starter_files/logs/*",
+            "starter_files/web/ssl/*",
+            "starter_files/web/sessions/*",
         ],
         
         # Автоматически перезапускать приложение после обновления (опционально)
