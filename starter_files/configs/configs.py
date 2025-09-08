@@ -30,7 +30,9 @@ PROJECTS = {
             "starter_files/logs/**",     # Рекурсивно игнорируем logs
             "starter_files/web/ssl/**",  # Рекурсивно игнорируем ssl
             "starter_files/web/sessions/**",  # Рекурсивно игнорируем sessions
-            "venv/**",  # Рекурсивно игнорируем sessions
+            "venv/**",  # Рекурсивно игнорируем sessions,
+            "**/__pycache__/**",
+            "**/*.pyc"
         ],
         
         # Автоматически перезапускать приложение после обновления (опционально)
