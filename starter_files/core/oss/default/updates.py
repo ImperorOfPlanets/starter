@@ -187,7 +187,6 @@ class UpdatesModule:
         if changes['new'] or changes['updated'] or changes['removed']:
             logger.info(f"Обнаружены изменения: +{len(changes['new'])} ~{len(changes['updated'])} -{len(changes['removed'])}")
 
-            # Создаем резервные копии всех файлов, которые будут заменены или удалены
             files_to_backup = changes['updated'] + changes['removed']
             UpdatesModule._make_backup_files(project_base_path, backups_dir, files_to_backup, logger)
 
@@ -199,7 +198,7 @@ class UpdatesModule:
 
     @staticmethod
     def _make_backup_files(base_path: Path, backup_dir: Path, files: List[str], logger: logging.Logger):
-        logger.info(f"Создание бэкапов для {len(files)} файлов")
+        logger.info(f"Создание резервных копий для {len(files)} файлов")
         for rel_path in files:
             src = base_path / rel_path
             if src.exists():
@@ -241,17 +240,19 @@ class UpdatesModule:
                     except Exception as e:
                         logger.error(f"Ошибка удаления временного архива: {str(e)}")
 
-        file_hashes = {}
         matched_files = set()
         for pattern in project_config.get('TARGETS', []):
             logger.info(f"Поиск файлов по шаблону '{pattern}' в директории: {extract_dir}")
             if pattern.startswith('starter_files'):
                 sub_dir = extract_dir / 'starter_files'
-                matched = [p for p in sub_dir.rglob('*') if p.is_file()] if sub_dir.exists() else []
+                if sub_dir.exists():
+                    files_found = [p for p in sub_dir.rglob('*') if p.is_file()]
+                else:
+                    files_found = []
             else:
-                matched = list(extract_dir.rglob(pattern))
-            logger.info(f"Найдено по шаблону {pattern}: {len(matched)} файлов")
-            matched_files.update(matched)
+                files_found = list(extract_dir.rglob(pattern))
+            logger.info(f"Найдено по шаблону {pattern}: {len(files_found)} файлов")
+            matched_files.update(files_found)
 
         ignored_patterns = project_config.get('IGNORED', [])
 
@@ -259,19 +260,22 @@ class UpdatesModule:
             rel_path = str(path.relative_to(extract_dir)).replace(os.sep, '/')
             for ignore_pat in ignored_patterns:
                 ignore_pat_norm = ignore_pat.replace(os.sep, '/')
-                if fnmatch(rel_path, ignore_pat_norm):
-                    return True
+                if '**' in ignore_pat_norm:
+                    if fnmatch(rel_path, ignore_pat_norm):
+                        return True
+                else:
+                    if rel_path == ignore_pat_norm:
+                        return True
             return False
 
         filtered_files = [f for f in matched_files if not is_ignored(f)]
         logger.info(f"Файлов после фильтрации игнорируемых паттернов: {len(filtered_files)}")
-
         for f in filtered_files[:20]:
             logger.info(f"  - {f.relative_to(extract_dir)}")
 
+        file_hashes = {}
         for f in filtered_files:
             file_hashes[str(f.relative_to(extract_dir))] = hashlib.sha256(f.read_bytes()).hexdigest()
-
         logger.info("=== Завершено вычисление хешей распакованных файлов ===")
         return file_hashes
 
@@ -281,17 +285,18 @@ class UpdatesModule:
         logger.info(f"Вычисление хешей текущих файлов проекта в {base_path}")
 
         matched_files = set()
-        file_hashes = {}
-
         for pattern in project_config.get('TARGETS', []):
             logger.info(f"Поиск файлов по шаблону '{pattern}' в директории: {base_path}")
             if pattern.startswith('starter_files'):
                 sub_dir = base_path / 'starter_files'
-                matched = [p for p in sub_dir.rglob('*') if p.is_file()] if sub_dir.exists() else []
+                if sub_dir.exists():
+                    files_found = [p for p in sub_dir.rglob('*') if p.is_file()]
+                else:
+                    files_found = []
             else:
-                matched = list(base_path.rglob(pattern))
-            logger.info(f"Найдено по шаблону {pattern}: {len(matched)} файлов")
-            matched_files.update(matched)
+                files_found = list(base_path.rglob(pattern))
+            logger.info(f"Найдено по шаблону {pattern}: {len(files_found)} файлов")
+            matched_files.update(files_found)
 
         ignored_patterns = project_config.get('IGNORED', [])
 
@@ -299,19 +304,22 @@ class UpdatesModule:
             rel_path = str(path.relative_to(base_path)).replace(os.sep, '/')
             for ignore_pat in ignored_patterns:
                 ignore_pat_norm = ignore_pat.replace(os.sep, '/')
-                if fnmatch(rel_path, ignore_pat_norm):
-                    return True
+                if '**' in ignore_pat_norm:
+                    if fnmatch(rel_path, ignore_pat_norm):
+                        return True
+                else:
+                    if rel_path == ignore_pat_norm:
+                        return True
             return False
 
         filtered_files = [f for f in matched_files if not is_ignored(f)]
         logger.info(f"Файлов после фильтрации игнорируемых паттернов: {len(filtered_files)}")
-
         for f in filtered_files[:20]:
             logger.info(f"  - {f.relative_to(base_path)}")
 
+        file_hashes = {}
         for f in filtered_files:
             file_hashes[str(f.relative_to(base_path))] = hashlib.sha256(f.read_bytes()).hexdigest()
-
         logger.info("=== Завершено вычисление хешей текущих файлов ===")
         return file_hashes
 
