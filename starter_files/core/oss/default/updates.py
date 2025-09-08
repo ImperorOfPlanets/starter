@@ -310,8 +310,11 @@ class UpdatesModule:
         file_hashes = {}
         for f in matched_files:
             rel_path_str = str(f.relative_to(extract_dir)).replace('\\', '/')
-            file_hashes[rel_path_str] = hashlib.sha256(f.read_bytes()).hexdigest()
-        logger.info(f"Файлов после фильтрации игнорируемых паттернов: {len(file_hashes)}")
+            file_hash = hashlib.sha256(f.read_bytes()).hexdigest()
+            file_hashes[rel_path_str] = file_hash
+            logger.debug(f"Хеш нового файла: {rel_path_str} -> {file_hash}")
+        
+        logger.info(f"Файлов после фильтрации: {len(file_hashes)}")
         return file_hashes
 
     @staticmethod
@@ -329,41 +332,57 @@ class UpdatesModule:
         file_hashes = {}
         for f in matched_files:
             rel_path_str = str(f.relative_to(base_path)).replace('\\', '/')
-            file_hashes[rel_path_str] = hashlib.sha256(f.read_bytes()).hexdigest()
-        logger.info(f"Файлов после фильтрации игнорируемых паттернов: {len(file_hashes)}")
+            file_hash = hashlib.sha256(f.read_bytes()).hexdigest()
+            file_hashes[rel_path_str] = file_hash
+            logger.debug(f"Хеш текущего файла: {rel_path_str} -> {file_hash}")
+        
+        logger.info(f"Файлов после фильтрации: {len(file_hashes)}")
         return file_hashes
 
     @staticmethod
     def _find_changes(old_hashes: Dict[str, str], new_hashes: Dict[str, str], old_dir: Optional[Path] = None, new_dir: Optional[Path] = None, logger: Optional[logging.Logger] = None) -> Dict[str, List[str]]:
         changes = {'new': [], 'updated': [], 'removed': []}
         if logger:
-            logger.info("=== Сравнение хешей файлов ===")
+            logger.info("=== ДЕТАЛЬНОЕ СРАВНЕНИЕ ХЕШЕЙ ФАЙЛОВ ===")
             logger.info(f"Сравнение папок:\n  Старая: {old_dir}\n  Новая: {new_dir}")
             logger.info(f"Файлов в текущей версии: {len(old_hashes)}")
             logger.info(f"Файлов в новой версии: {len(new_hashes)}")
+            
+            # Логируем все файлы и их хеши из старой версии
+            logger.info("=== ХЕШИ ТЕКУЩИХ ФАЙЛОВ ===")
+            for rel_path, file_hash in old_hashes.items():
+                logger.info(f"{rel_path}: {file_hash}")
+            
+            # Логируем все файлы и их хеши из новой версии
+            logger.info("=== ХЕШИ НОВЫХ ФАЙЛОВ ===")
+            for rel_path, file_hash in new_hashes.items():
+                logger.info(f"{rel_path}: {file_hash}")
 
         for rel_path, new_hash in new_hashes.items():
             old_hash = old_hashes.get(rel_path)
             if not old_hash:
                 changes['new'].append(rel_path)
                 if logger:
-                    logger.info(f"Новый файл: {rel_path}")
+                    logger.info(f"НОВЫЙ ФАЙЛ: {rel_path}")
             elif old_hash != new_hash:
                 changes['updated'].append(rel_path)
                 if logger:
-                    logger.info(f"Изменён файл: {rel_path}")
+                    logger.info(f"ИЗМЕНЕННЫЙ ФАЙЛ: {rel_path}")
                     logger.info(f"  Старый хеш: {old_hash}")
                     logger.info(f"  Новый хеш: {new_hash}")
+            else:
+                if logger:
+                    logger.info(f"ФАЙЛ БЕЗ ИЗМЕНЕНИЙ: {rel_path}")
 
         for rel_path, old_hash in old_hashes.items():
             if rel_path not in new_hashes:
                 changes['removed'].append(rel_path)
                 if logger:
-                    logger.info(f"Удалён файл: {rel_path}")
+                    logger.info(f"УДАЛЕННЫЙ ФАЙЛ: {rel_path}")
 
         if logger:
-            logger.info(f"Результаты сравнения: +{len(changes['new'])} ~{len(changes['updated'])} -{len(changes['removed'])}")
-            logger.info("=== Конец сравнения ===")
+            logger.info(f"ИТОГИ СРАВНЕНИЯ: Новые: {len(changes['new'])}, Измененные: {len(changes['updated'])}, Удаленные: {len(changes['removed'])}")
+            logger.info("=== ЗАВЕРШЕНИЕ СРАВНЕНИЯ ===")
         return changes
 
     @staticmethod
