@@ -1,0 +1,13 @@
+# Основной файл
+Настроить файл env
+
+# VPN
+Закинуть настройку VPN с названием файла config.ovpn
+
+# Конфигарция nginx
+Конфигарция nginx в configs/nginx/confs
+
+# Сертификаты 
+Cертификаты домена в configs/nginx/certs
+
+Далее

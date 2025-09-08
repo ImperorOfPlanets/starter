@@ -18,20 +18,20 @@ class UpdatesModule:
     """
     Модуль для управления обновлениями проектов
     Все файлы хранятся в папке /starter_files/updates/
+    Для каждого проекта создается отдельная папка
+    Логи сохраняются с датой в названии
     """
     
     # Конфигурация путей
     DEFAULT_CONFIG = {
-        'BASE_TEMP_DIR': 'starter_files/updates',
+        'BASE_UPDATES_DIR': 'starter_files/updates',
         'EXTRACTED_SUBDIR': 'extracted',
         'BACKUPS_SUBDIR': 'backups',
         'LOG_DIR': 'starter_files/logs/updates',
         'CLEANUP_DAYS': 7,
         'MAX_RETRIES': 3,
         'TIMEOUT': 30,
-        'STATE_FILE': 'update_state.json',
-        'MIN_CHECK_INTERVAL': 30,
-        'HISTORY_FILE': 'update_history.json'
+        'MIN_CHECK_INTERVAL': 30
     }
     
     @staticmethod
@@ -43,16 +43,14 @@ class UpdatesModule:
         
         # Устанавливаем правильные пути
         script_path = get_global('script_path')
-        base_dir = script_path / 'starter_files' / 'updates'
+        base_updates_dir = script_path / 'starter_files' / 'updates'
         logs_dir = script_path / 'starter_files' / 'logs' / 'updates'
         
-        config['BASE_TEMP_DIR'] = str(base_dir)
-        config['STATE_FILE'] = str(base_dir / 'update_state.json')
-        config['HISTORY_FILE'] = str(base_dir / 'update_history.json')
+        config['BASE_UPDATES_DIR'] = str(base_updates_dir)
         config['LOG_DIR'] = str(logs_dir)
         
         # Создаем директории если не существуют
-        base_dir.mkdir(parents=True, exist_ok=True)
+        base_updates_dir.mkdir(parents=True, exist_ok=True)
         logs_dir.mkdir(parents=True, exist_ok=True)
         
         return config
@@ -60,34 +58,107 @@ class UpdatesModule:
     @staticmethod
     def get_update_history(project_name: str = None) -> Dict:
         """
-        Получение истории обновлений для проекта или всех проектов
+        Получение истории обновлений из лог-файлов
         """
         config = UpdatesModule.get_updates_config()
-        history_file = Path(config['HISTORY_FILE'])
+        log_dir = Path(config['LOG_DIR'])
         
-        if not history_file.exists():
-            return {"history": []}
-
-        try:
-            with open(history_file, 'r', encoding='utf-8') as f:
-                history = json.load(f)
+        history = []
+        
+        # Получаем все лог-файлы
+        log_files = []
+        if log_dir.exists():
+            log_files = list(log_dir.glob("*.log"))
+        
+        # Сортируем по дате изменения (новые сначала)
+        log_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        
+        for log_file in log_files:
+            # Извлекаем информацию из имени файла
+            filename = log_file.stem
+            parts = filename.split('_')
             
-            if project_name and project_name != 'all':
-                project_history = [item for item in history if item.get('project') == project_name]
-                return {"history": project_history}
-            else:
-                return {"history": history}
+            if len(parts) >= 3:  # Формат: {project}_{date}_{time}
+                log_project = parts[0]
+                log_date = parts[1]
+                log_time = parts[2]
                 
-        except Exception as e:
-            return {"error": str(e), "history": []}
+                # Если указан конкретный проект, пропускаем другие
+                if project_name and project_name != 'all' and log_project != project_name:
+                    continue
+                
+                # Парсим дату и время из имени файла
+                try:
+                    timestamp = datetime.strptime(f"{log_date}_{log_time}", "%Y%m%d_%H%M%S")
+                    
+                    # Читаем статус из лог-файла
+                    status = "unknown"
+                    try:
+                        with open(log_file, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            if "Обновление завершено успешно" in content:
+                                status = "completed"
+                            elif "ОШИБКА" in content:
+                                status = "error"
+                            elif "Начало обновления" in content:
+                                status = "in_progress"
+                    except:
+                        pass
+                    
+                    history.append({
+                        "project": log_project,
+                        "update_id": filename,
+                        "status": status,
+                        "timestamp": timestamp.isoformat(),
+                        "log_file": log_file.name
+                    })
+                except ValueError:
+                    continue
+        
+        return {"history": history}
 
     @staticmethod
-    def update_project(project_name: str, project_config: Dict) -> Dict:
+    def get_last_update_time(project_name: str, config: Dict) -> Optional[datetime]:
+        """
+        Получение времени последнего обновления проекта из логов
+        """
+        history = UpdatesModule.get_update_history(project_name)["history"]
+        
+        if history:
+            # Берем самую свежую запись
+            latest = max(history, key=lambda x: x["timestamp"])
+            return datetime.fromisoformat(latest["timestamp"])
+        
+        return None
+
+    @staticmethod
+    def seconds_since_last_update(project_name: str, config: Dict) -> float:
+        """
+        Вычисление секунд, прошедших с последнего обновления
+        """
+        last_update = UpdatesModule.get_last_update_time(project_name, config)
+        if not last_update:
+            return float('inf')  # Никогда не обновлялся
+        return (datetime.now() - last_update).total_seconds()
+
+    @staticmethod
+    def should_check_updates(project_name: str, config: Dict) -> bool:
+        """
+        Проверка необходимости проверки обновлений
+        """
+        seconds_passed = UpdatesModule.seconds_since_last_update(project_name, config)
+        min_interval = config['MIN_CHECK_INTERVAL']
+        return seconds_passed >= min_interval
+
+    @staticmethod
+    def update_project(project_name: str, project_config: Dict) -> str:
         """
         Обновление конкретного проекта
+        Возвращает ID обновления (имя лог-файла)
         """
         config = UpdatesModule.get_updates_config()
-        update_id = str(uuid.uuid4())
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        update_id = f"{project_name}_{timestamp}"
         
         # Создаем директории для логов
         log_dir = Path(config['LOG_DIR'])
@@ -115,58 +186,100 @@ class UpdatesModule:
             logger.info(f"Начало обновления проекта {project_name}")
             
             # Запускаем процесс обновления
-            timestamp, _, _ = UpdatesModule.start_updates_projects(
-                {project_name: project_config},
-                force_check=True
-            )
-            
-            # Добавляем запись в историю
-            UpdatesModule._add_to_history(project_name, timestamp, "completed", config)
+            UpdatesModule._perform_update(project_name, project_config, logger)
             
             logger.info("Обновление завершено успешно")
-            return {
-                "success": True,
-                "update_id": update_id,
-                "project": project_name,
-                "message": "Обновление завершено успешно"
-            }
+            return update_id
             
         except Exception as e:
             logger.error(f"Ошибка при обновлении: {str(e)}")
-            # Добавляем запись об ошибке в историю
-            UpdatesModule._add_to_history(project_name, update_id, f"error: {str(e)}", config)
-            return {
-                "success": False,
-                "update_id": update_id,
-                "project": project_name,
-                "message": str(e)
-            }
+            return update_id
 
     @staticmethod
-    def _add_to_history(project_name: str, update_id: str, status: str, config: Dict):
+    def _perform_update(project_name: str, project_config: Dict, logger: logging.Logger):
         """
-        Добавление записи в историю обновлений
+        Выполнение процесса обновления
         """
-        history_file = Path(config['HISTORY_FILE'])
-        history = []
+        config = UpdatesModule.get_updates_config()
         
-        if history_file.exists():
-            try:
-                with open(history_file, 'r', encoding='utf-8') as f:
-                    history = json.load(f)
-            except:
-                pass
+        logger.info(f"Базовая директория: {project_config['BASE_PATH']}")
+        logger.info(f"URL загрузки: {project_config['DOWNLOAD_URL']}")
         
-        history.append({
-            "project": project_name,
-            "update_id": update_id,
-            "status": status,
-            "timestamp": datetime.now().isoformat(),
-            "log_file": f"{update_id}.log"
-        })
+        # Формирование путей для проекта
+        base_temp_dir = Path(config['BASE_UPDATES_DIR'])
+        launch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        with open(history_file, 'w', encoding='utf-8') as f:
-            json.dump(history, f, indent=2, ensure_ascii=False)
+        project_paths = {
+            'EXTRACTED_DIR': base_temp_dir / config['EXTRACTED_SUBDIR'] / project_name / launch_timestamp,
+            'BACKUPS_DIR': base_temp_dir / config['BACKUPS_SUBDIR'] / project_name / launch_timestamp,
+            'BASE_PATH': Path(project_config['BASE_PATH'])
+        }
+        
+        # Создание необходимых каталогов
+        project_paths['EXTRACTED_DIR'].mkdir(parents=True, exist_ok=True)
+        project_paths['BACKUPS_DIR'].mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Созданы временные директории:")
+        logger.info(f"  - Для распаковки: {project_paths['EXTRACTED_DIR']}")
+        logger.info(f"  - Для резервных копий: {project_paths['BACKUPS_DIR']}")
+
+        # Скачивание и распаковка архива
+        logger.info(f"Скачивание архива для проекта {project_name}")
+        extracted_hashes = UpdatesModule._download_and_extract(
+            url=project_config['DOWNLOAD_URL'],
+            extract_dir=project_paths['EXTRACTED_DIR'],
+            config=config,
+            logger=logger
+        )
+
+        # Проверка новой установки
+        if not project_paths['BASE_PATH'].exists():
+            logger.info(f"Обнаружена новая установка: {project_name}")
+            logger.info(f"Копирование файлов в: {project_paths['BASE_PATH']}")
+            shutil.copytree(
+                project_paths['EXTRACTED_DIR'],
+                project_paths['BASE_PATH'],
+                dirs_exist_ok=True
+            )
+            return
+
+        # Получение текущих хешей
+        logger.info(f"Вычисление хешей текущих файлов проекта {project_name}")
+        current_hashes = UpdatesModule._get_current_hashes(project_config, logger)
+        
+        # Поиск изменений
+        logger.info(f"Поиск изменений в проекте {project_name}")
+        changes = UpdatesModule._find_changes(
+            old_hashes=current_hashes,
+            new_hashes=extracted_hashes,
+            config=project_config,
+            logger=logger
+        )
+
+        # Применение изменений при их наличии
+        if any(changes.values()):
+            logger.info(f"Обнаружены изменения в проекте {project_name}")
+            
+            # Создание резервных копий
+            UpdatesModule._create_backups(
+                project_config=project_config,
+                backup_dir=project_paths['BACKUPS_DIR'],
+                current_hashes=current_hashes,
+                logger=logger
+            )
+            
+            # Применение обновлений
+            UpdatesModule._apply_updates(
+                changes=changes,
+                extracted_dir=project_paths['EXTRACTED_DIR'],
+                base_path=project_paths['BASE_PATH'],
+                logger=logger
+            )
+        else:
+            logger.info("Изменений не обнаружено")
+
+        # Очистка устаревших файлов
+        UpdatesModule._cleanup_old_files(config)
 
     @staticmethod
     def _download_and_extract(
@@ -247,19 +360,11 @@ class UpdatesModule:
         logger.info(f"Резервные копии созданы: {len(current_hashes)} файлов")
 
     @staticmethod
-    def _is_new_installation(config: Dict) -> bool:
-        """
-        Проверка новой установки проекта
-        """
-        base_path = Path(config['BASE_PATH'])
-        return not base_path.exists()
-
-    @staticmethod
     def _cleanup_old_files(config: Dict) -> None:
         """
         Очистка устаревших временных файлов
         """
-        base_temp_dir = Path(config['BASE_TEMP_DIR'])
+        base_temp_dir = Path(config['BASE_UPDATES_DIR'])
         cutoff_date = datetime.now() - timedelta(days=config['CLEANUP_DAYS'])
         
         for dir_type in [config['EXTRACTED_SUBDIR'], config['BACKUPS_SUBDIR']]:
@@ -278,252 +383,6 @@ class UpdatesModule:
                             shutil.rmtree(version_dir)
                     except ValueError:
                         continue
-
-    @staticmethod
-    def get_last_update_time(project_name: str, config: Dict) -> Optional[datetime]:
-        """
-        Получение времени последнего обновления проекта
-        """
-        state_file = Path(config['STATE_FILE'])
-        if not state_file.exists():
-            return None
-        
-        try:
-            with open(state_file, 'r', encoding='utf-8') as f:
-                state = json.load(f)
-            project_state = state.get(project_name, {})
-            return datetime.fromisoformat(project_state.get('last_update'))
-        except:
-            return None
-
-    @staticmethod
-    def seconds_since_last_update(project_name: str, config: Dict) -> float:
-        """
-        Вычисление секунд, прошедших с последнего обновления
-        """
-        last_update = UpdatesModule.get_last_update_time(project_name, config)
-        if not last_update:
-            return 0
-        return (datetime.now() - last_update).total_seconds()
-
-    @staticmethod
-    def should_check_updates(project_name: str, config: Dict) -> bool:
-        """
-        Проверка необходимости проверки обновлений
-        """
-        seconds_passed = UpdatesModule.seconds_since_last_update(project_name, config)
-        min_interval = config['MIN_CHECK_INTERVAL']
-        return seconds_passed >= min_interval
-
-    @staticmethod
-    def _update_state_file(project_name: str, config: Dict) -> None:
-        """
-        Обновление файла состояния после успешной проверки
-        """
-        state_file = Path(config['STATE_FILE'])
-        state = {}
-        
-        if state_file.exists():
-            try:
-                with open(state_file, 'r', encoding='utf-8') as f:
-                    state = json.load(f)
-            except:
-                pass
-        
-        project_state = state.get(project_name, {})
-        project_state['last_update'] = datetime.now().isoformat()
-        state[project_name] = project_state
-        
-        with open(state_file, 'w', encoding='utf-8') as f:
-            json.dump(state, f, indent=2, ensure_ascii=False)
-
-    @staticmethod
-    def _init_logging(config: Dict) -> None:
-        """
-        Инициализация системы логирования
-        """
-        log_dir = Path(config['LOG_DIR'])
-        log_dir.mkdir(parents=True, exist_ok=True)
-        
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_dir / 'updates.log', encoding='utf-8'),
-                logging.StreamHandler(sys.stdout)
-            ]
-        )
-
-    @staticmethod
-    def _init_update_logging(update_id: str, config: Dict) -> logging.Logger:
-        """
-        Инициализация системы логирования для конкретного обновления
-        """
-        log_dir = Path(config['LOG_DIR'])
-        log_dir.mkdir(parents=True, exist_ok=True)
-        
-        logger = logging.getLogger(f'updates_{update_id}')
-        logger.setLevel(logging.INFO)
-        
-        for handler in logger.handlers[:]:
-            logger.removeHandler(handler)
-        
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        
-        log_file = log_dir / f"{update_id}.log"
-        fh = logging.FileHandler(log_file, encoding='utf-8')
-        fh.setLevel(logging.INFO)
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
-        
-        ch = logging.StreamHandler(sys.stdout)
-        ch.setLevel(logging.INFO)
-        ch.setFormatter(formatter)
-        logger.addHandler(ch)
-        
-        return logger
-
-    @staticmethod
-    def get_update_log(update_id: str, config: Dict = None) -> str:
-        """
-        Получение лога конкретного обновления
-        """
-        if config is None:
-            config = UpdatesModule.get_updates_config()
-            
-        log_file = Path(config['LOG_DIR']) / f"{update_id}.log"
-        
-        if not log_file.exists():
-            return "Лог-файл не найден"
-        
-        try:
-            with open(log_file, 'r', encoding='utf-8') as f:
-                return f.read()
-        except Exception as e:
-            return f"Ошибка чтения лог-файла: {str(e)}"
-
-    @staticmethod
-    def start_updates_projects(
-        projects_config: Dict,
-        module_config: Dict = None,
-        force_check: bool = False,
-        custom_logger: logging.Logger = None  # Добавляем параметр для кастомного логгера
-    ) -> Tuple[str, Dict, Dict]:
-        """
-        Основной процесс обновления проектов
-        """
-        config = {**UpdatesModule.get_updates_config(), **(module_config or {})}
-        
-        # Используем кастомный логгер или инициализируем стандартный
-        if custom_logger:
-            logger = custom_logger
-        else:
-            # Метка времени для уникальных путей
-            launch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            update_id = f"update_{launch_timestamp}"
-            logger = UpdatesModule._init_update_logging(update_id, config)
-        
-        logger.info("=== Начало процесса обновления ===")
-        logger.info(f"Время начала: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-        base_temp_dir = Path(config['BASE_TEMP_DIR'])
-        base_temp_dir.mkdir(parents=True, exist_ok=True)
-
-        # Обработка каждого проекта
-        for project_name, project_config in projects_config.items():
-            try:
-                logger.info(f"Обработка проекта: {project_name}")
-                logger.info(f"Базовая директория: {project_config['BASE_PATH']}")
-                
-                # Проверка необходимости обновления
-                last_update_seconds = UpdatesModule.seconds_since_last_update(project_name, config)
-                
-                if not force_check and not UpdatesModule.should_check_updates(project_name, config):
-                    logger.info(f"Проверка пропущена: {project_name}")
-                    continue
-                    
-                logger.info(f"Начало проверки: {project_name}")
-                
-                # Формирование путей для проекта
-                project_paths = {
-                    'EXTRACTED_DIR': base_temp_dir / config['EXTRACTED_SUBDIR'] / project_name / launch_timestamp,
-                    'BACKUPS_DIR': base_temp_dir / config['BACKUPS_SUBDIR'] / project_name / launch_timestamp,
-                    'BASE_PATH': Path(project_config['BASE_PATH'])
-                }
-                
-                # Создание необходимых каталогов
-                project_paths['EXTRACTED_DIR'].mkdir(parents=True, exist_ok=True)
-                project_paths['BACKUPS_DIR'].mkdir(parents=True, exist_ok=True)
-
-                logger.info(f"Созданы временные директории:")
-                logger.info(f"  - Для распаковки: {project_paths['EXTRACTED_DIR']}")
-                logger.info(f"  - Для резервных копий: {project_paths['BACKUPS_DIR']}")
-
-                # Скачивание и распаковка архива
-                logger.info(f"Скачивание архива для проекта {project_name}")
-                extracted_hashes = UpdatesModule._download_and_extract(
-                    url=project_config['DOWNLOAD_URL'],
-                    extract_dir=project_paths['EXTRACTED_DIR'],
-                    config=config,
-                    logger=logger
-                )
-
-                # Проверка новой установки
-                if UpdatesModule._is_new_installation(project_config):
-                    logger.info(f"Обнаружена новая установка: {project_name}")
-                    logger.info(f"Копирование файлов в: {project_paths['BASE_PATH']}")
-                    shutil.copytree(
-                        project_paths['EXTRACTED_DIR'],
-                        project_paths['BASE_PATH'],
-                        dirs_exist_ok=True
-                    )
-                    UpdatesModule._update_state_file(project_name, config)
-                    continue
-
-                # Получение текущих хешей
-                logger.info(f"Вычисление хешей текущих файлов проекта {project_name}")
-                current_hashes = UpdatesModule._get_current_hashes(project_config, logger)
-                
-                # Поиск изменений
-                logger.info(f"Поиск изменений в проекте {project_name}")
-                changes = UpdatesModule._find_changes(
-                    old_hashes=current_hashes,
-                    new_hashes=extracted_hashes,
-                    config=project_config,
-                    logger=logger
-                )
-
-                # Применение изменений при их наличии
-                if any(changes.values()):
-                    logger.info(f"Обнаружены изменения в проекте {project_name}")
-                    
-                    # Создание резервных копий
-                    UpdatesModule._create_backups(
-                        project_config=project_config,
-                        backup_dir=project_paths['BACKUPS_DIR'],
-                        current_hashes=current_hashes,
-                        logger=logger
-                    )
-                    
-                    # Применение обновлений
-                    UpdatesModule._apply_updates(
-                        changes=changes,
-                        extracted_dir=project_paths['EXTRACTED_DIR'],
-                        base_path=project_paths['BASE_PATH'],
-                        logger=logger
-                    )
-                    
-                    # Обновляем состояние после успешного обновления
-                    UpdatesModule._update_state_file(project_name, config)
-
-            except Exception as e:
-                logger.error(f"Ошибка обновления {project_name}: {str(e)}")
-                continue
-
-        # Очистка устаревших файлов
-        UpdatesModule._cleanup_old_files(config)
-        logger.info("=== Процесс обновления завершен ===")
-        return launch_timestamp, {}, {}
 
     @staticmethod
     def _get_current_hashes(project_config: Dict, logger: logging.Logger = None) -> Dict[str, str]:
@@ -587,7 +446,7 @@ class UpdatesModule:
         changes: Dict, 
         extracted_dir: Path, 
         base_path: Path,
-        logger: logging.Logger = None
+        logger: logging.Logger
     ) -> None:
         """
         Применение обновлений к файлам проекта с логированием
@@ -617,3 +476,20 @@ class UpdatesModule:
         
         if logger:
             logger.info(message)
+
+    @staticmethod
+    def get_update_log(update_id: str) -> str:
+        """
+        Получение лога конкретного обновления
+        """
+        config = UpdatesModule.get_updates_config()
+        log_file = Path(config['LOG_DIR']) / f"{update_id}.log"
+        
+        if not log_file.exists():
+            return "Лог-файл не найден"
+        
+        try:
+            with open(log_file, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            return f"Ошибка чтения лог-файла: {str(e)}"

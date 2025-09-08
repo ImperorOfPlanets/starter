@@ -1,0 +1,12 @@
+[mariadb]
+# Общие настройки логов
+log_error = /var/log/mariadb/error.log
+log_warnings = 3
+
+# Медленные запросы
+slow_query_log = 1
+slow_query_log_file = /var/log/mariadb/slow-queries.log
+long_query_time = 2
+
+# Бинарные логи (опционально)
+# log_bin = /var/log/mariadb/mariadb-bin.log

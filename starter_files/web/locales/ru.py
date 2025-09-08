@@ -449,8 +449,12 @@ translations = {
                 'update_available': 'Доступно обновление',
                 'updates_check_success': 'Обновления проверены успешно',
                 'project_not_found': 'Проект не найден',
-                'update_success': 'Обновление успешно',
-                'update_failed': 'Обновление не удалось'
+                'update_started': 'Обновление запущено',
+                'view_history': 'История',
+                'no_projects_configured': 'Нет настроенных проектов',
+                'configure_projects_in_config': 'Настройте проекты в конфигурации',
+                'check_all_updates': 'Проверить все обновления',
+                'updates_check_started': 'Проверка обновлений запущена'
             }
         },
    
