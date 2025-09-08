@@ -305,32 +305,6 @@ class UpdatesModule:
                         continue
 
     @staticmethod
-    def _get_current_hashes(project_name: str, project_config: Dict, logger: logging.Logger = None) -> Dict[str, str]:
-        base_path = Path(get_global(f"{project_name}_path"))
-        current_hashes = {}
-        if logger:
-            logger.info("=== ВЫЧИСЛЕНИЕ ХЕШЕЙ ТЕКУЩИХ ФАЙЛОВ ===")
-            logger.info(f"Директория проекта: {base_path}")
-            logger.info(f"Шаблоны поиска: {project_config['TARGETS']}")
-        for pattern in project_config['TARGETS']:
-            file_count = 0
-            for path in base_path.rglob(pattern):
-                if path.is_file():
-                    rel_path = path.relative_to(base_path)
-                    with open(path, 'rb') as f:
-                        file_hash = hashlib.sha256(f.read()).hexdigest()
-                        current_hashes[str(rel_path)] = file_hash
-                    if logger:
-                        logger.debug(f"Вычислен хеш для: {rel_path} -> {file_hash}")
-                    file_count += 1
-            if logger:
-                logger.info(f"Найдено файлов по шаблону '{pattern}': {file_count}")
-        if logger:
-            logger.info(f"Всего найдено файлов: {len(current_hashes)}")
-            logger.info("=== ЗАВЕРШЕНО ВЫЧИСЛЕНИЕ ХЕШЕЙ ===")
-        return current_hashes
-
-    @staticmethod
     def _find_changes(old_hashes: Dict, new_hashes: Dict, old_dir: Path = None, new_dir: Path = None, logger: logging.Logger = None) -> Dict[str, List]:
         changes = {'new': [], 'updated': [], 'removed': []}
         if logger:
@@ -395,3 +369,48 @@ class UpdatesModule:
                 return f.read()
         except Exception as e:
             return f"Ошибка чтения лог-файла: {str(e)}"
+
+    @staticmethod
+    def _get_current_hashes(project_name: str, project_config: Dict, logger: logging.Logger = None) -> Dict[str, str]:
+        base_path = Path(get_global(f"{project_name}_path"))
+        current_hashes = {}
+
+        if logger:
+            logger.info("=== ВЫЧИСЛЕНИЕ ХЕШЕЙ ТЕКУЩИХ ФАЙЛОВ (С ФИЛЬТРАЦИЕЙ) ===")
+            logger.info(f"Директория проекта: {base_path}")
+            logger.info(f"TARGETS: {project_config['TARGETS']}")
+            logger.info(f"IGNORED: {project_config.get('IGNORED', [])}")
+
+        included_files = set()
+        for pattern in project_config['TARGETS']:
+            matched = list(base_path.rglob(pattern))
+            included_files.update(matched)
+            if logger:
+                logger.debug(f"Шаблон {pattern} → найдено {len(matched)} файлов")
+
+        ignored_files = set()
+        for pattern in project_config.get('IGNORED', []):
+            matched = list(base_path.rglob(pattern))
+            ignored_files.update(matched)
+            if logger:
+                logger.debug(f"Игнор {pattern} → найдено {len(matched)} файлов")
+
+        final_files = included_files - ignored_files
+        if logger:
+            logger.info(f"Файлов после фильтрации: {len(final_files)}")
+
+        for path in final_files:
+            if path.is_file():
+                rel_path = path.relative_to(base_path)
+                with open(path, 'rb') as f:
+                    file_hash = hashlib.sha256(f.read()).hexdigest()
+                    current_hashes[str(rel_path)] = file_hash
+                if logger:
+                    logger.debug(f"Вычислен хеш для: {rel_path} -> {file_hash}")
+
+        if logger:
+            logger.info(f"Всего найдено файлов: {len(current_hashes)}")
+            logger.info("=== ЗАВЕРШЕНО ВЫЧИСЛЕНИЕ ХЕШЕЙ ТЕКУЩИХ ФАЙЛОВ ===")
+
+        return current_hashes
+
