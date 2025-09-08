@@ -417,3 +417,16 @@ class UpdatesModule:
             return (datetime.now() - last_update).total_seconds()
         return float('inf')
 
+    @staticmethod
+    def get_update_log(update_id: str) -> str:
+        config = UpdatesModule.get_updates_config()
+        log_file = Path(config['LOG_DIR']) / f"{update_id}.log"
+        if not log_file.exists():
+            return "Лог-файл не найден"
+        try:
+            with open(log_file, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            return f"Ошибка чтения лог-файла: {str(e)}"
+
+
