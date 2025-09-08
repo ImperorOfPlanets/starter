@@ -49,7 +49,11 @@ class SystemModule(BaseModule):
         set_global('disk_percent', disk_info.get('percent', 'N/A'))
         set_global('disk_free', disk_info.get('free', 'N/A'))
 
+        venv_path = SystemModule.detect_venv_path()
+        python_path = str(Path(venv_path) / 'bin' / 'python') if venv_path else sys.executable
+
         os_name, os_version = SystemModule.detect_os_name_version()
+
         sys_info = {
             # Ядро
             'core': platform.system(),
@@ -72,6 +76,8 @@ class SystemModule(BaseModule):
                 'compiler': platform.python_compiler(),
                 'executable': sys.executable
             },
+            'venv_path': venv_path,
+            'python_path': python_path,
             'is_service': '--service' in sys.argv,
             'environment_vars': {
                 'PATH': os.getenv('PATH'),
@@ -554,6 +560,57 @@ class SystemModule(BaseModule):
         return Path('/.dockerenv').exists() or any(
             'docker' in line for line in open('/proc/1/cgroup', 'r')
         )
+
+    @staticmethod
+    def detect_venv_path() -> str:
+        """Определяет путь к виртуальному окружению (строго POSIX-совместимый)"""
+        # 1. Проверяем переменные окружения
+        env_venv_path = os.environ.get('STARTER_VENV_PATH')
+        if env_venv_path and os.path.exists(env_venv_path):
+            return env_venv_path
+        
+        # 2. Проверяем виртуальное окружение Python
+        if hasattr(sys, 'real_prefix'):
+            # virtualenv
+            return sys.real_prefix
+        elif hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix:
+            # venv module
+            return sys.prefix
+        
+        # 3. Проверяем стандартные пути
+        script_path = get_global('script_path')
+        possible_paths = [
+            os.path.join(script_path, 'venv'),
+            os.path.join(script_path, '.venv'),
+            '/app/starter/venv',
+            os.path.join(os.path.expanduser('~'), 'venv'),
+            '/venv',
+            '/opt/venv'
+        ]
+        
+        for path in possible_paths:
+            # POSIX-совместимая проверка существования Python
+            python_bin = os.path.join(path, 'bin', 'python')
+            if os.path.exists(path) and os.path.exists(python_bin):
+                # Дополнительная проверка, что это действительно Python
+                try:
+                    # Проверяем, что файл исполняемый и является Python
+                    if os.access(python_bin, os.X_OK):
+                        # Проверяем версию Python
+                        result = subprocess.run(
+                            [python_bin, '--version'],
+                            capture_output=True,
+                            text=True,
+                            timeout=5,
+                            check=False
+                        )
+                        if result.returncode == 0 and 'Python' in result.stdout:
+                            return path
+                except (OSError, subprocess.TimeoutExpired, subprocess.SubprocessError):
+                    continue
+        
+        # 4. Возвращаем путь по умолчанию
+        return os.path.join(script_path, 'venv')
 
     @staticmethod
     def set_globals():

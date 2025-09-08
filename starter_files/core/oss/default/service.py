@@ -138,23 +138,16 @@ class ServiceModule(BaseModule):
                 
                 log("Starting starter-service installation...")
 
-                # Определяем путь к Python в виртуальном окружении
+                # Используем глобальные переменные для определения путей
                 script_path = get_global('script_path')
-                python_path = sys.executable
+                python_path = get_global('python_path', sys.executable)
+                venv_path = get_global('venv_path')
                 
-                # Если мы в виртуальном окружении, используем его Python
-                if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
-                    python_path = sys.executable
-                    log(f"Using virtual environment Python: {python_path}")
-                else:
-                    venv_path = script_path / 'venv' / 'bin' / 'python'
-                    if venv_path.exists():
-                        python_path = str(venv_path)
-                        log(f"Using found venv Python: {python_path}")
-                    else:
-                        log("WARNING: No virtual environment found, using system Python")
+                log(f"Script path: {script_path}")
+                log(f"Python path: {python_path}")
+                log(f"Venv path: {venv_path}")
 
-                # Создаем systemd service file
+                # Создаем systemd service file с правильными путями
                 service_content = f"""[Unit]
 Description=Starter Service
 After=network.target
@@ -163,10 +156,12 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory={script_path}
-Environment=PATH={os.environ.get('PATH', '')}
+Environment=PATH={venv_path}/bin:{os.environ.get('PATH', '')}
 ExecStart={python_path} {script_path}/main.py --service
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

@@ -24,8 +24,6 @@ class DockerModule(BaseModule):
             f"{prefix}yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo",
             f"{prefix}yum install -y docker-ce docker-ce-cli containerd.io",
         ]
-        usermod_prefix = "sudo " if not is_root else ""
-        commands.append(f"{usermod_prefix}usermod -aG docker $USER")
         return commands
 
     @staticmethod

@@ -157,30 +157,19 @@ def install_package(data, session):
     install_id = str(uuid.uuid4())
     log_file_path = INSTALL_LOGS_DIR / f"install_{package}_{install_id}.log"
     
-    # Запуск установки в отдельном потоке
     def run_installation():
         try:
             result = get(config['module'], config['install'], log_file_path=str(log_file_path))
+
+            # Просто записываем финальный статус
             
-            # Проверка результата установки
             if result['status'] == 'error':
                 raise Exception(result['message'])
-
-            # Проверка результата установки
-            if result.get('status') == 'error':
-                raise Exception(result.get('message', 'Unknown error'))
-            
-            # Дополнительная проверка через API-вызов
-            if not get(config['module'], config['check']):
-                raise Exception(f"Verification failed after installation")
-                
-            # Запись успешного завершения
-            with open(log_file_path, 'a') as f:
-                f.write("\nInstallation completed and verified successfully!\n")
-                
+                    
         except Exception as e:
             with open(log_file_path, 'a') as f:
                 f.write(f"\nFATAL ERROR: {str(e)}\n")
+                f.write("INSTALL FINISH!\n")
             logger.error(f"{package} installation failed: {str(e)}")
     
     thread = threading.Thread(target=run_installation)
@@ -224,7 +213,9 @@ def get_install_logs(data, session):
         return jsonify({
             'status': 'error',
             'message': 'Installation ID required',
-            'logs': ''
+            'logs': '',
+            'completed': False,
+            'installed': False
         })
     
     log_file_path = INSTALL_LOGS_DIR / f"install_{package}_{install_id}.log"
@@ -233,18 +224,34 @@ def get_install_logs(data, session):
         return jsonify({
             'status': 'error',
             'message': 'Log file not found',
-            'logs': ''
+            'logs': '',
+            'completed': False,
+            'installed': False
         })
     
     try:
         with open(log_file_path, 'r') as f:
             logs = f.read()
         
+        # КРИТИЧЕСКИ ВАЖНО: проверяем наличие маркера завершения
+        completed = "INSTALL FINISH!" in logs
+        installed = completed and "ERROR" not in logs.upper() and "FATAL ERROR" not in logs.upper()
+        
         return jsonify({
             'status': 'success',
-            'logs': logs
+            'logs': logs,
+            'completed': completed,  # ← JS проверяет это поле
+            'installed': installed   # ← JS проверяет это поле
         })
+        
     except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'logs': '',
+            'completed': False,
+            'installed': False
+        })
         return jsonify({
             'status': 'error',
             'message': str(e),

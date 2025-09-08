@@ -48,48 +48,38 @@ class DockerModule(BaseModule):
 
     @staticmethod
     def install_docker(log_file_path: str) -> Dict[str, str]:
-        """Устанавливает Docker и записывает логи в указанный файл"""
         result = {'status': 'success', 'message': '', 'logs': []}
         
         try:
-            # Создаем директорию для логов, если нужно
-            log_dir = Path(log_file_path).parent
-            log_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Открываем файл для записи логов один раз на весь процесс установки
             with open(log_file_path, 'w') as log_file:
                 def log(message):
-                    """Вспомогательная функция для записи в лог и в результат"""
                     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     log_entry = f"[{timestamp}] {message}"
                     log_file.write(log_entry + '\n')
-                    log_file.flush()  # Обеспечиваем немедленную запись
+                    log_file.flush()
                     result['logs'].append(log_entry)
                     logger.info(log_entry)
                 
                 log("Starting Docker installation...")
-
+                
                 commands = get("docker","return_commands_install_docker")
-
-                # Выполняем команды установки
+                
                 for cmd in commands:
                     log(f"Executing: {cmd}")
                     process = subprocess.Popen(
                         cmd,
                         shell=True,
                         stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,  # Объединяем stdout и stderr
+                        stderr=subprocess.STDOUT,
                         text=True,
-                        bufsize=1,  # Построчный буфер
+                        bufsize=1,
                         universal_newlines=True
                     )
                     
-                    # Читаем вывод в реальном времени
                     for line in iter(process.stdout.readline, ''):
                         if line:
                             log(line.strip())
                     
-                    # Проверяем статус завершения
                     return_code = process.wait()
                     if return_code != 0:
                         log(f"Command failed with exit code {return_code}")
@@ -97,22 +87,28 @@ class DockerModule(BaseModule):
                         result['message'] = f"Command failed: {cmd}"
                         return result
                 
-                # Проверяем успешность установки
+                # ПРЯМО ЗДЕСЬ ОБНОВЛЯЕМ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
                 time.sleep(2)
-                if get('docker','check_docker_installed'):
+                docker_installed = DockerModule.check_docker_installed()
+                set_global('docker_installed', docker_installed)
+                
+                if docker_installed:
                     log("Docker installed successfully! Please restart your session.")
                     result['message'] = "Docker installed successfully! Please restart your session."
                 else:
                     log("Installation completed but Docker not detected. Try restarting your system.")
                     result['status'] = 'warning'
                     result['message'] = "Installation completed but Docker not detected. Try restarting your system."
+                
+                # Добавляем маркер завершения
+                log("INSTALL FINISH!")
         
         except Exception as e:
-            # Записываем ошибку в лог
             error_msg = f"Installation failed: {str(e)}"
             try:
                 with open(log_file_path, 'a') as f:
                     f.write(error_msg + '\n')
+                    f.write("INSTALL FINISH!\n")
             except:
                 logger.exception("Failed to write error to log file")
             
@@ -123,49 +119,39 @@ class DockerModule(BaseModule):
         return result
 
     @staticmethod
-    def install_docker_сompose(log_file_path: str) -> Dict[str, str]:
-        """Устанавливает Docker Compose и записывает логи в указанный файл"""
+    def install_docker_compose(log_file_path: str) -> Dict[str, str]:
         result = {'status': 'success', 'message': '', 'logs': []}
         
         try:
-            # Создаем директорию для логов, если нужно
-            log_dir = Path(log_file_path).parent
-            log_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Открываем файл для записи логов один раз на весь процесс установки
             with open(log_file_path, 'w') as log_file:
                 def log(message):
-                    """Вспомогательная функция для записи в лог и в результат"""
                     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     log_entry = f"[{timestamp}] {message}"
                     log_file.write(log_entry + '\n')
-                    log_file.flush()  # Обеспечиваем немедленную запись
+                    log_file.flush()
                     result['logs'].append(log_entry)
                     logger.info(log_entry)
                 
                 log("Starting Docker Compose installation...")
-
+                
                 commands = get("docker","return_commands_install_compose")
-
-                # Выполняем команды установки
+                
                 for cmd in commands:
                     log(f"Executing: {cmd}")
                     process = subprocess.Popen(
                         cmd,
                         shell=True,
                         stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,  # Объединяем stdout и stderr
+                        stderr=subprocess.STDOUT,
                         text=True,
-                        bufsize=1,  # Построчный буфер
+                        bufsize=1,
                         universal_newlines=True
                     )
                     
-                    # Читаем вывод в реальном времени
                     for line in iter(process.stdout.readline, ''):
                         if line:
                             log(line.strip())
                     
-                    # Проверяем статус завершения
                     return_code = process.wait()
                     if return_code != 0:
                         log(f"Command failed with exit code {return_code}")
@@ -173,28 +159,34 @@ class DockerModule(BaseModule):
                         result['message'] = f"Command failed: {cmd}"
                         return result
                 
-                # Проверяем успешность установки
+                # ПРЯМО ЗДЕСЬ ОБНОВЛЯЕМ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
                 time.sleep(2)
-                if get('docker','check_docker_compose_installed'):
-                    log("Docker Compose installed successfully! Please restart your session.")
-                    result['message'] = "Docker Compose installed successfully! Please restart your session."
+                docker_compose_installed = DockerModule.check_docker_compose_installed()
+                set_global('docker_compose_installed', docker_compose_installed)
+                
+                if docker_compose_installed:
+                    log("Docker Compose installed successfully!")
+                    result['message'] = "Docker Compose installed successfully!"
                 else:
-                    log("Installation completed but Docker not detected. Try restarting your system.")
+                    log("Installation completed but Docker Compose not detected.")
                     result['status'] = 'warning'
-                    result['message'] = "Installation completed but Docker not detected. Try restarting your system."
+                    result['message'] = "Installation completed but Docker Compose not detected."
+                
+                # Добавляем маркер завершения
+                log("INSTALL FINISH!")
         
         except Exception as e:
-            # Записываем ошибку в лог
             error_msg = f"Installation failed: {str(e)}"
             try:
                 with open(log_file_path, 'a') as f:
                     f.write(error_msg + '\n')
+                    f.write("INSTALL FINISH!\n")
             except:
                 logger.exception("Failed to write error to log file")
             
             result['status'] = 'error'
             result['message'] = error_msg
-            logger.exception("Docker installation error")
+            logger.exception("Docker Compose installation error")
         
         return result
 
