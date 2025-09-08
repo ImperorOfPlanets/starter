@@ -13,6 +13,8 @@ from typing import Dict, Any
 from starter_files.core.utils.globalVars_utils import get_global, set_global
 from starter_files.core.utils.loader_utils import get
 
+from starter_files.core.oss.default.updates import UpdatesModule
+
 SERVICE_NAME = "starter-service"
 
 from starter_files.core.utils.log_utils import LogManager
@@ -363,6 +365,23 @@ WantedBy=multi-user.target
             return {'status': 'error', 'message': f'Failed to {action} service: {str(e)}'}
 
     @staticmethod
+    def restart_service() -> Dict[str, Any]:
+        """Перезапускает сервис starter-service"""
+        status = ServiceModule.get_service_status()
+        
+        if not status['installed']:
+            return {'status': 'error', 'message': 'Service not installed'}
+        
+        try:
+            if status['os'] == 'linux':
+                subprocess.run(['systemctl', 'restart', SERVICE_NAME], check=True)
+                return {'status': 'success', 'message': 'Service restarted successfully'}
+            else:
+                return {'status': 'error', 'message': f'Unsupported OS: {status["os"]}'}
+        except subprocess.CalledProcessError as e:
+            return {'status': 'error', 'message': f'Failed to restart service: {str(e)}'}
+
+    @staticmethod
     def set_globals():
         """Устанавливает глобальные переменные для SERVICE"""
         systemd_installed = ServiceModule.is_systemd_installed()
@@ -372,3 +391,28 @@ WantedBy=multi-user.target
         set_global('systemd_installed', systemd_installed)
         set_global('service_installed', service_installed)
         set_global('service_status', service_status)
+
+    @staticmethod
+    def handle_rollback(data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Обрабатывает запрос на откат обновления
+        """
+        project_name = data.get('project_name', 'starter')
+        update_id = data.get('update_id')
+        
+        if not update_id:
+            # Если ID не указан, используем последнюю доступную версию
+            rollbacks = UpdatesModule.get_available_rollbacks(project_name)
+            if not rollbacks:
+                return {'status': 'error', 'message': 'Нет доступных версий для отката'}
+            update_id = rollbacks[0]['id']
+        
+        # Выполняем откат
+        result = UpdatesModule.rollback_update(project_name, update_id)
+        
+        if result['status'] == 'success':
+            # Перезапускаем сервис после отката
+            service_result = ServiceModule.restart_service()
+            result['service_restart'] = service_result
+        
+        return result

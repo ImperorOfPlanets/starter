@@ -108,7 +108,7 @@ class UpdatesModule:
             return f"Ошибка чтения лог-файла: {str(e)}"
 
     @staticmethod
-    def update_project(project_name: str, project_config: Dict) -> str:
+    def update_project(project_name: str, project_config: Dict) -> Dict[str, Any]:
         config = UpdatesModule.get_updates_config()
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         update_id = f"{project_name}_{timestamp}"
@@ -134,15 +134,25 @@ class UpdatesModule:
         console_handler.setLevel(logging.INFO)
         logger.addHandler(console_handler)
 
+        need_restart = False
+        changes_count = 0
+
         try:
             logger.info(f"Начало обновления проекта {project_name}")
-            UpdatesModule._perform_update(project_name, project_config, logger)
+            result = UpdatesModule._perform_update(project_name, project_config, logger)
+            need_restart = result['need_restart']
+            changes_count = result['changes_count']
             logger.info("Обновление завершено успешно")
         except Exception as e:
             logger.error(f"ОШИБКА при обновлении: {str(e)}", exc_info=True)
 
         logger.handlers.clear()
-        return update_id
+        
+        return {
+            'update_id': update_id,
+            'need_restart': need_restart,
+            'changes_count': changes_count
+        }
 
     @staticmethod
     def _walk_files_with_ignore(base_path: Path, targets: List[str], ignored: List[str], logger: logging.Logger) -> List[Path]:
@@ -195,7 +205,7 @@ class UpdatesModule:
         return matched_files
 
     @staticmethod
-    def _perform_update(project_name: str, project_config: Dict, logger: logging.Logger):
+    def _perform_update(project_name: str, project_config: Dict, logger: logging.Logger) -> Dict[str, Any]:
         config = UpdatesModule.get_updates_config()
         launch_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         base_temp_dir = Path(config['BASE_UPDATES_DIR'])
@@ -221,7 +231,7 @@ class UpdatesModule:
         if not project_base_path.exists():
             logger.info(f"Обнаружена новая установка: {project_name}")
             shutil.copytree(extracted_dir, project_base_path, dirs_exist_ok=True)
-            return
+            return {'need_restart': True, 'changes_count': -1}  # -1 означает новую установку
 
         current_hashes = UpdatesModule._get_current_hashes(project_name, project_config, logger)
 
@@ -233,7 +243,10 @@ class UpdatesModule:
             logger=logger
         )
 
-        if changes['new'] or changes['updated'] or changes['removed']:
+        changes_count = len(changes['new']) + len(changes['updated']) + len(changes['removed'])
+        need_restart = changes_count > 0 and project_config.get('RESTART_AFTER_UPDATE', False)
+
+        if changes_count > 0:
             logger.info(f"Обнаружены изменения: +{len(changes['new'])} ~{len(changes['updated'])} -{len(changes['removed'])}")
 
             ignored_patterns = project_config.get('IGNORED', [])
@@ -251,10 +264,18 @@ class UpdatesModule:
             UpdatesModule._make_backup_files(project_base_path, backups_dir, files_to_backup, logger)
 
             UpdatesModule._apply_updates(changes, extracted_dir, project_base_path, logger)
+            
+            if need_restart:
+                logger.info("Требуется перезапуск приложения после обновления")
         else:
             logger.info("Изменений не обнаружено")
 
         UpdatesModule._cleanup_old_files(config, logger)
+        
+        return {
+            'need_restart': need_restart,
+            'changes_count': changes_count
+        }
 
     @staticmethod
     def _make_backup_files(base_path: Path, backup_dir: Path, files: List[str], logger: logging.Logger):
@@ -415,21 +436,117 @@ class UpdatesModule:
     @staticmethod
     def _cleanup_old_files(config: Dict, logger: logging.Logger) -> None:
         base_temp_dir = Path(config['BASE_UPDATES_DIR'])
-        cutoff_date = datetime.now() - timedelta(days=config['CLEANUP_DAYS'])
-        logger.info(f"Очистка старых данных старше {config['CLEANUP_DAYS']} дней")
+        logger.info(f"Очистка старых данных, оставляем 3 последние версии")
+        
         for dir_type in [config['EXTRACTED_SUBDIR'], config['BACKUPS_SUBDIR']]:
             type_dir = base_temp_dir / dir_type
             if not type_dir.exists():
                 continue
+                
             for project_dir in type_dir.iterdir():
                 if not project_dir.is_dir():
                     continue
+                    
+                # Получаем все версии и сортируем по дате (новые сначала)
+                version_dirs = []
                 for version_dir in project_dir.iterdir():
                     try:
                         dir_date = datetime.strptime(version_dir.name, '%Y%m%d_%H%M%S')
-                        if dir_date < cutoff_date:
-                            shutil.rmtree(version_dir)
-                            logger.info(f"Удалена устаревшая папка: {version_dir}")
+                        version_dirs.append((dir_date, version_dir))
                     except ValueError:
                         continue
+                
+                # Сортируем по дате (новые сначала)
+                version_dirs.sort(key=lambda x: x[0], reverse=True)
+                
+                # Удаляем все, кроме 3 последних версий
+                for dir_date, version_dir in version_dirs[3:]:
+                    try:
+                        shutil.rmtree(version_dir)
+                        logger.info(f"Удалена устаревшая папка: {version_dir}")
+                    except Exception as e:
+                        logger.error(f"Ошибка удаления папки {version_dir}: {str(e)}")
+        
         logger.info("Очистка завершена")
+
+    @staticmethod
+    def rollback_update(project_name: str, update_id: str) -> Dict[str, Any]:
+        """
+        Откатывает обновление до указанной версии
+        """
+        config = UpdatesModule.get_updates_config()
+        backups_dir = Path(config['BASE_UPDATES_DIR']) / config['BACKUPS_SUBDIR'] / project_name / update_id
+        
+        if not backups_dir.exists():
+            return {'status': 'error', 'message': 'Резервная копия для отката не найдена'}
+        
+        project_base_path = Path(get_global(f"{project_name}_path"))
+        
+        # Создаем логгер для отката
+        log_dir = Path(config['LOG_DIR'])
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"rollback_{update_id}.log"
+        
+        logger = logging.getLogger(f'rollback_{update_id}')
+        logger.setLevel(logging.INFO)
+        
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
+        
+        try:
+            logger.info(f"Начало отката проекта {project_name} до версии {update_id}")
+            
+            # Восстанавливаем файлы из резервной копии
+            for backup_file in backups_dir.rglob('*'):
+                if backup_file.is_file():
+                    rel_path = backup_file.relative_to(backups_dir)
+                    target_path = project_base_path / rel_path
+                    
+                    # Создаем директорию, если нужно
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Копируем файл обратно
+                    shutil.copy2(backup_file, target_path)
+                    logger.info(f"Восстановлен файл: {rel_path}")
+            
+            logger.info("Откат завершен успешно")
+            return {'status': 'success', 'message': 'Откат выполнен успешно'}
+            
+        except Exception as e:
+            logger.error(f"Ошибка при откате: {str(e)}", exc_info=True)
+            return {'status': 'error', 'message': f'Ошибка при откате: {str(e)}'}
+        
+        finally:
+            logger.handlers.clear()
+
+    @staticmethod
+    def get_available_rollbacks(project_name: str) -> List[Dict[str, Any]]:
+        """
+        Возвращает список доступных версий для отката
+        """
+        config = UpdatesModule.get_updates_config()
+        backups_dir = Path(config['BASE_UPDATES_DIR']) / config['BACKUPS_SUBDIR'] / project_name
+        
+        if not backups_dir.exists():
+            return []
+        
+        available_versions = []
+        
+        for version_dir in backups_dir.iterdir():
+            if version_dir.is_dir():
+                try:
+                    dir_date = datetime.strptime(version_dir.name, '%Y%m%d_%H%M%S')
+                    available_versions.append({
+                        'id': version_dir.name,
+                        'timestamp': dir_date.isoformat(),
+                        'date': dir_date.strftime('%Y-%m-%d %H:%M:%S')
+                    })
+                except ValueError:
+                    continue
+        
+        # Сортируем по дате (новые сначала)
+        available_versions.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        return available_versions
