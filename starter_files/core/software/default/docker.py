@@ -534,22 +534,67 @@ class DockerModule(BaseModule):
         try:
             docker_path = Path(get_global("docker_path"))
             compose_file = docker_path / "docker-compose.yml"
-            logger.info(f"[run_compose] Starting docker-compose run at {docker_path}")
+            
+            # ДОБАВЛЯЕМ ПРОВЕРКУ РАБОЧЕЙ ПАПКИ
+            logger.info(f"[run_compose] ===== START DOCKER COMPOSE =====")
+            logger.info(f"[run_compose] Docker path: {docker_path}")
+            logger.info(f"[run_compose] Absolute path: {docker_path.absolute()}")
+            logger.info(f"[run_compose] Compose file exists: {compose_file.exists()}")
+            
+            # Проверяем содержимое директории
+            if docker_path.exists():
+                logger.info(f"[run_compose] Contents of {docker_path}:")
+                for item in docker_path.iterdir():
+                    if item.is_dir():
+                        logger.info(f"[run_compose]   DIR:  {item.name}/")
+                    else:
+                        logger.info(f"[run_compose]   FILE: {item.name}")
+            
+            # Проверяем существование critical files
+            critical_files = [
+                "configs/init/start-php.sh",
+                "configs/init/start-vpn.sh", 
+                "configs/init/healthcheck-vpn.sh",
+                "docker-compose.example"
+            ]
+            
+            logger.info("[run_compose] Checking critical files:")
+            for rel_path in critical_files:
+                file_path = docker_path / rel_path
+                exists = file_path.exists()
+                is_file = file_path.is_file() if exists else False
+                logger.info(f"[run_compose]   {rel_path}: {'FILE' if is_file else 'DIR' if exists else 'MISSING'}")
+                if exists and is_file:
+                    try:
+                        perms = oct(file_path.stat().st_mode)[-3:]
+                        logger.info(f"[run_compose]     Permissions: {perms}")
+                    except Exception as e:
+                        logger.warning(f"[run_compose]     Cannot check permissions: {e}")
 
             # ВОССТАНАВЛИВАЕМ ПРАВА ПЕРЕД ЗАПУСКОМ
             permission_result = DockerModule.fix_executable_permissions(docker_path)
             if permission_result['status'] == 'error':
-                logger.warning(f"Ошибка при восстановлении прав: {permission_result['message']}")
+                logger.warning(f"[run_compose] Ошибка при восстановлении прав: {permission_result['message']}")
             else:
-                logger.info(f"Восстановление прав: {permission_result['message']}")
+                logger.info(f"[run_compose] Восстановление прав: {permission_result['message']}")
 
             # Генерация .env и compose
+            logger.info("[run_compose] Generating .env and docker-compose.yml...")
             env_vars = DockerModule.ensure_docker_env(docker_path)
             if not DockerModule.generate_docker_compose(settings or {}):
                 logger.error("[run_compose] Failed to generate docker-compose.yml")
                 return False
 
+            # Проверяем что compose файл создался
+            if compose_file.exists():
+                compose_size = compose_file.stat().st_size
+                logger.info(f"[run_compose] Compose file generated: {compose_size} bytes")
+            else:
+                logger.error("[run_compose] Compose file was not generated!")
+                return False
+
             # Проверка Docker daemon
+            logger.info("[run_compose] Checking Docker daemon...")
             if not DockerModule.is_docker_available():
                 RUNNING_IN_CONTAINER = Path("/.dockerenv").exists()
                 if RUNNING_IN_CONTAINER:
@@ -562,28 +607,36 @@ class DockerModule(BaseModule):
             try:
                 subprocess.run(["docker", "compose", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 compose_cmd = ["docker", "compose"]
+                logger.info("[run_compose] Using: docker compose")
             except Exception:
                 compose_cmd = ["docker-compose"]
+                logger.info("[run_compose] Using: docker-compose")
 
             # Используем sudo, если нужно
             use_sudo = get_global("use_sudo")
             if use_sudo and not Path("/.dockerenv").exists():
                 compose_cmd.insert(0, "sudo")
+                logger.info("[run_compose] Using sudo for docker commands")
 
             # -------------------------------
             # 1. Очищаем старые контейнеры и сети
             # -------------------------------
+            logger.info("[run_compose] Cleaning up old containers...")
             down_cmd = compose_cmd + ["-f", str(compose_file), "down", "--remove-orphans"]
             logger.info(f"[run_compose] Running: {' '.join(down_cmd)}")
+            logger.info(f"[run_compose] Working directory: {docker_path}")
+            
             subprocess.run(down_cmd, cwd=str(docker_path), check=True)
 
             # -------------------------------
             # 2. Получаем список образов из docker-compose
             # -------------------------------
             try:
+                logger.info("[run_compose] Checking existing images...")
                 result = subprocess.run(compose_cmd + ["-f", str(compose_file), "images", "-q"],
                                         cwd=str(docker_path), capture_output=True, text=True, check=True)
                 image_ids = [i.strip() for i in result.stdout.splitlines() if i.strip()]
+                logger.info(f"[run_compose] Found {len(image_ids)} existing images")
                 for img_id in image_ids:
                     logger.info(f"[run_compose] Removing old image: {img_id}")
                     subprocess.run(["docker", "rmi", "-f", img_id], check=False)
@@ -593,13 +646,19 @@ class DockerModule(BaseModule):
             # -------------------------------
             # 3. Запуск docker-compose с билдом и логами в реальном времени
             # -------------------------------
+            logger.info("[run_compose] Starting docker-compose...")
             up_cmd = compose_cmd + ["-f", str(compose_file), "up", "--build", "--force-recreate"]
-            logger.info(f"[run_compose] Running: {' '.join(up_cmd)}")
+            logger.info(f"[run_compose] Command: {' '.join(up_cmd)}")
+            logger.info(f"[run_compose] Working dir: {docker_path}")
+            
             process = subprocess.Popen(up_cmd, cwd=str(docker_path), stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True)
+            
+            logger.info("[run_compose] === DOCKER COMPOSE OUTPUT ===")
             for line in iter(process.stdout.readline, ''):
                 if line:
-                    logger.info(line.strip())
+                    logger.info(f"[compose] {line.strip()}")
+            
             return_code = process.wait()
             if return_code != 0:
                 logger.error(f"[run_compose] docker-compose exited with code {return_code}")
@@ -609,7 +668,7 @@ class DockerModule(BaseModule):
             return True
 
         except Exception as e:
-            logger.error(f"[run_compose] Unexpected error: {e}")
+            logger.error(f"[run_compose] Unexpected error: {e}", exc_info=True)
             return False
 
     @staticmethod
