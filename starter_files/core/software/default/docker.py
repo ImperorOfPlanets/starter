@@ -10,7 +10,7 @@ import time
 
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple, Union
 
 from starter_files.core.utils.loader_utils import get
 from starter_files.core.utils.globalVars_utils import get_global, set_global
@@ -416,6 +416,7 @@ class DockerModule(BaseModule):
     # ---------------------------
     # Глобальные переменные Docker
     # ---------------------------
+
     @staticmethod
     def set_globals():
         docker_installed = DockerModule.check_docker_installed()
@@ -437,12 +438,13 @@ class DockerModule(BaseModule):
     # ---------------------------
     # Генерация docker-compose.yml
     # ---------------------------
+
     @staticmethod
     def generate_docker_compose(settings: Dict[str, Any]) -> bool:
         try:
             docker_path = Path(get_global("docker_path"))
             env_path = docker_path / ".env"
-            env_vars = DockerModule.read_env_file(env_path)
+            env_vars = DockerModule.read_docker_env(docker_path)
 
             content = DockerModule._generate_compose_content(settings, env_vars)
             compose_file = docker_path / "docker-compose.yml"
@@ -519,3 +521,101 @@ services:
         except Exception as e:
             logger.error(f"Error running docker-compose: {e}")
             return False
+
+    # ---------------------------
+    # Проверка запуска проекта
+    # ---------------------------
+
+    @staticmethod
+    def is_project_running(project_name: str) -> bool:
+        """
+        Проверяет, запущен ли ключевой контейнер проектного проекта (например php-${PROJECTNAME}).
+        """
+        from starter_files.core.utils.loader_utils import get
+
+        containers = get('docker', 'get_containers', all=True) or []
+        project_container_name = f"php-{project_name}"  # ключевой контейнер проекта
+        return any(c['name'] == project_container_name and 'running' in c['status'].lower() for c in containers)
+
+    # ---------------------------
+    # ENV DOCKER READ AND GENERATE
+    # ---------------------------
+
+    @staticmethod
+    def parse_env_content(content: str) -> Tuple[Dict[str, str], List[Union[str, Tuple[str, str]]]]:
+        variables = {}
+        lines = []
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                lines.append(line)
+                continue
+            if '=' in stripped:
+                key, value = stripped.split('=', 1)
+                key = key.strip()
+                variables[key] = value.strip()
+                lines.append((key, line))
+            else:
+                lines.append(line)
+        return variables, lines
+
+    @staticmethod
+    def generate_env_content(vars_dict: Dict[str, str], template_lines: List[Union[str, Tuple[str, str]]]) -> str:
+        result = []
+        vars_to_add = vars_dict.copy()
+        for line in template_lines:
+            if isinstance(line, tuple):
+                key, original_line = line
+                if key in vars_to_add:
+                    result.append(f"{key}={vars_to_add.pop(key)}")
+                else:
+                    result.append(original_line)
+            else:
+                result.append(line)
+        if vars_to_add:
+            result.append('\n# Custom variables')
+            for k, v in vars_to_add.items():
+                result.append(f"{k}={v}")
+        return '\n'.join(result)
+
+    @staticmethod
+    def ensure_docker_env(project_path: Path) -> Dict[str, str]:
+        env_example_path = project_path / '.env.example'
+        env_path = project_path / '.env'
+
+        if not env_example_path.exists():
+            return {}
+
+        example_vars, example_lines = DockerModule.parse_env_content(env_example_path.read_text(encoding='utf-8'))
+
+        if env_path.exists():
+            current_vars, _ = DockerModule.parse_env_content(env_path.read_text(encoding='utf-8'))
+        else:
+            current_vars = {}
+
+        merged_vars = {**example_vars, **current_vars}
+        content = DockerModule.generate_env_content(merged_vars, example_lines)
+        env_path.write_text(content, encoding='utf-8')
+        return merged_vars
+
+    @staticmethod
+    def read_docker_env(project_path: Path) -> Dict[str, str]:
+        env_path = project_path / '.env'
+        if not env_path.exists():
+            return {}
+        vars_dict, _ = DockerModule.parse_env_content(env_path.read_text(encoding='utf-8'))
+        return vars_dict
+
+    @staticmethod
+    def write_docker_env(project_path: Path, vars_dict: Dict[str, str]):
+        env_example_path = project_path / '.env.example'
+        env_path = project_path / '.env'
+
+        if env_example_path.exists():
+            _, template_lines = DockerModule.parse_env_content(env_example_path.read_text(encoding='utf-8'))
+        else:
+            # Если шаблона нет, создаём просто по ключам в vars_dict
+            template_lines = [(k, f"{k}={v}") for k, v in vars_dict.items()]
+
+        content = DockerModule.generate_env_content(vars_dict, template_lines)
+        env_path.write_text(content, encoding='utf-8')

@@ -58,12 +58,9 @@ def index(data, session):
     )
 
 def info(data, session):
-    """Функция модуля docker, возвращает HTML с информацией"""
-    # Получаем информацию о Docker из глобальных переменных
     docker_installed = get_global('docker_installed', False)
     docker_compose_installed = get_global('docker_compose_installed', False)
     
-    # Получаем полную информацию о Docker
     docker_info = DEFAULT_DOCKER_INFO.copy()
     if docker_installed:
         try:
@@ -73,18 +70,23 @@ def info(data, session):
         except Exception as e:
             logger.error(f"Error getting docker info: {str(e)}")
     
-    # Устанавливаем статусы установки из глобальных переменных
     docker_info['installed'] = docker_installed
     docker_info['compose_installed'] = docker_compose_installed
-    
-    # Текущее время для шаблона
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Получаем PROJECTNAME
+    project_name = get_global('project_name', 'default_project')  # пример
+    
+    # Проверяем статус проектного контейнера
+    project_running = DockerModule.is_project_running(project_name)
     
     return render_template(
         'sections/docker/info.html',
         t=t,
         docker_info=docker_info,
-        current_time=current_time
+        current_time=current_time,
+        project_name=project_name,
+        project_running=project_running
     )
 
 def containers(data, session):

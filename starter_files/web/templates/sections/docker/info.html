@@ -159,7 +159,7 @@
 </div>
 
 <hr />
-{% if docker_info.containers.running == 0 %}
+{% if not project_running %}
 <div class="d-grid gap-2 mt-3">
     <button class="btn btn-success" id="startProjectBtn">
         <i class="bi bi-play-circle me-2"></i> {{ t('start_project') }}
