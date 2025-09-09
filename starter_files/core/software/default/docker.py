@@ -223,50 +223,52 @@ class DockerModule(BaseModule):
     # ---------------------------
     @staticmethod
     def generate_compose(docker_dir: Union[str, Path], env_vars: Dict[str, str], pull_from_registry: bool = False) -> bool:
-        """
-        Генерирует docker-compose.yml на основе docker-compose.example (или docker-compose.template)
-        docker_dir может быть строкой или Path.
-        """
         try:
             docker_dir = Path(docker_dir)
             compose_example = docker_dir / "docker-compose.example"
-            # fallback: docker-compose.template
             if not compose_example.exists():
                 compose_example = docker_dir / "docker-compose.template"
             compose_output = docker_dir / "docker-compose.yml"
 
             if not compose_example.exists():
-                logger.error(f"Compose example not found: {compose_example}")
+                logger.error(f"[generate_compose] Compose template not found: {compose_example}")
                 return False
 
             content = compose_example.read_text(encoding='utf-8')
-            logger.info(f"Read compose template: {compose_example}")
+            logger.info(f"[generate_compose] Read compose template ({compose_example}): {len(content)} chars")
 
             if pull_from_registry:
                 content = DockerModule.remove_build_sections(content)
-                logger.info("Removed build sections because pull_from_registry=True")
+                logger.info("[generate_compose] Removed build sections (pull_from_registry=True)")
 
-            enabled_services = [
-                s.strip().upper() for s in env_vars.get("ENABLED_SERVICES", "").split(",") if s.strip()
-            ]
-            logger.info(f"Enabled services: {enabled_services}")
+            enabled_services = [s.strip().upper() for s in env_vars.get("ENABLED_SERVICES", "").split(",") if s.strip()]
+            logger.info(f"[generate_compose] Enabled services: {enabled_services}")
 
-            # Обрабатываем блоки сервисов и подставляем переменные
+            # Логируем весь исходный контент до обработки блоков
+            logger.debug(f"[generate_compose] Template content before processing:\n{content[:1000]}...")
+
+            # Обрабатываем блоки сервисов
             content = DockerModule.process_service_blocks(content, enabled_services, env_vars, remove_markers=True)
+            logger.info("[generate_compose] Processed service blocks")
+
+            # Логируем контент после подстановки переменных
+            logger.debug(f"[generate_compose] Content after processing:\n{content[:1000]}...")
 
             # Заменяем переменные окружения вне блоков
             content = DockerModule.replace_env_variables(content, env_vars)
+            logger.info("[generate_compose] Replaced environment variables")
 
             # Убедимся, что папка существует
             compose_output.parent.mkdir(parents=True, exist_ok=True)
 
             # Сохраняем файл
             compose_output.write_text(content, encoding='utf-8')
-            logger.info(f"docker-compose.yml generated successfully at {compose_output}")
+            logger.info(f"[generate_compose] docker-compose.yml generated at {compose_output}")
+
             return True
 
         except Exception as e:
-            logger.error(f"Error generating compose: {str(e)}")
+            logger.exception(f"[generate_compose] Error generating compose: {str(e)}")
             return False
 
     @staticmethod
@@ -533,55 +535,100 @@ class DockerModule(BaseModule):
             docker_path = Path(get_global("docker_path"))
             compose_file = docker_path / "docker-compose.yml"
 
-            # Если нужно — обновляем/генерируем .env и compose перед запуском
+            logger.info(f"[run_compose] Starting docker-compose run at {docker_path}")
+            logger.info(f"[run_compose] Compose file expected at: {compose_file}")
+
+            # -------------------------------
+            # 1. Обновляем/генерируем .env
+            # -------------------------------
+            logger.info("[run_compose] Ensuring .env file exists and up-to-date...")
             try:
                 env_vars = DockerModule.ensure_docker_env(docker_path)
-                logger.info(f".env обновлен/сгенерирован: {list(env_vars.keys())}")
+                logger.info(f"[run_compose] .env vars ({len(env_vars)}): {env_vars}")
             except Exception as e:
-                logger.error(f"Error ensuring .env: {e}")
+                logger.error(f"[run_compose] Error ensuring .env: {e}")
 
-            # генерируем compose если нет или хотим пересоздать
-            if not compose_file.exists():
-                logger.warning("docker-compose.yml missing, generating...")
-                if not DockerModule.generate_docker_compose(settings or {}):
-                    return False
+            # -------------------------------
+            # 2. Генерируем docker-compose.yml всегда
+            # -------------------------------
+            logger.info("[run_compose] Generating docker-compose.yml...")
+            if not DockerModule.generate_docker_compose(settings or {}):
+                logger.error("[run_compose] Failed to generate docker-compose.yml")
+                return False
+            logger.info("[run_compose] docker-compose.yml generated successfully")
 
+            # -------------------------------
+            # 3. Проверяем Docker daemon
+            # -------------------------------
+            logger.info("[run_compose] Checking Docker availability...")
             if not DockerModule.is_docker_available():
                 RUNNING_IN_CONTAINER = Path("/.dockerenv").exists()
                 if RUNNING_IN_CONTAINER:
-                    logger.warning("Inside container without Docker. Compose skipped.")
+                    logger.warning("[run_compose] Inside container without Docker. Compose skipped.")
                     return True
                 else:
-                    logger.error("Docker daemon not available. Compose cannot run.")
+                    logger.error("[run_compose] Docker daemon not available. Compose cannot run.")
                     return False
+            logger.info("[run_compose] Docker daemon is available")
 
+            # -------------------------------
+            # 4. Определяем команду docker compose
+            # -------------------------------
             try:
                 subprocess.run(["docker", "compose", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 compose_cmd = ["docker", "compose"]
+                logger.info("[run_compose] Using `docker compose` command")
             except Exception:
                 compose_cmd = ["docker-compose"]
+                logger.info("[run_compose] Falling back to `docker-compose` command")
 
+            # -------------------------------
+            # 5. Подготовка окружения и sudo
+            # -------------------------------
             env_for_proc = os.environ.copy()
-            logger.info(f"Running docker-compose with env: {env_for_proc}")
+            logger.info(f"[run_compose] Environment for subprocess contains {len(env_for_proc)} keys")
 
             use_sudo = get_global("use_sudo")
             RUNNING_IN_CONTAINER = Path("/.dockerenv").exists()
             if use_sudo and not RUNNING_IN_CONTAINER:
                 compose_cmd.insert(0, "sudo")
+                logger.info("[run_compose] Prepending sudo to command")
 
-            subprocess.run(
-                compose_cmd + ["-f", str(compose_file), "up", "-d", "--build"],
-                cwd=str(docker_path), check=True
-            )
-            logger.info("Docker Compose started successfully")
+            # -------------------------------
+            # 6. Сбрасываем старые контейнеры и сети
+            # -------------------------------
+            down_cmd = compose_cmd + ["-f", str(compose_file), "down", "--remove-orphans"]
+            logger.info(f"[run_compose] Running command: {' '.join(down_cmd)}")
+            try:
+                result = subprocess.run(down_cmd, cwd=str(docker_path), check=True, capture_output=True, text=True)
+                logger.debug(f"[run_compose] down stdout: {result.stdout}")
+                logger.debug(f"[run_compose] down stderr: {result.stderr}")
+            except subprocess.CalledProcessError as e:
+                logger.warning(f"[run_compose] docker compose down failed: {e}. Continuing...")
+
+            # -------------------------------
+            # 7. Запуск docker-compose
+            # -------------------------------
+            up_cmd = compose_cmd + ["-f", str(compose_file), "up", "-d", "--build", "--force-recreate"]
+            logger.info(f"[run_compose] Running command: {' '.join(up_cmd)}")
+            try:
+                result = subprocess.run(up_cmd, cwd=str(docker_path), check=True, capture_output=True, text=True)
+                logger.info(f"[run_compose] Docker Compose started successfully")
+                logger.debug(f"[run_compose] up stdout: {result.stdout}")
+                logger.debug(f"[run_compose] up stderr: {result.stderr}")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"[run_compose] Docker Compose error (CalledProcessError): {e}")
+                logger.error(f"[run_compose] stdout: {e.stdout}")
+                logger.error(f"[run_compose] stderr: {e.stderr}")
+                return False
+
             return True
 
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Docker Compose error: {e}")
-            return False
         except Exception as e:
-            logger.error(f"Error running docker-compose: {e}")
+            logger.error(f"[run_compose] Unexpected error: {e}")
             return False
+
+
 
     # ---------------------------
     # Проверка запуска проекта
