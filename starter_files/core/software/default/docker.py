@@ -536,6 +536,13 @@ class DockerModule(BaseModule):
             compose_file = docker_path / "docker-compose.yml"
             logger.info(f"[run_compose] Starting docker-compose run at {docker_path}")
 
+            # ВОССТАНАВЛИВАЕМ ПРАВА ПЕРЕД ЗАПУСКОМ
+            permission_result = DockerModule.fix_executable_permissions(docker_path)
+            if permission_result['status'] == 'error':
+                logger.warning(f"Ошибка при восстановлении прав: {permission_result['message']}")
+            else:
+                logger.info(f"Восстановление прав: {permission_result['message']}")
+
             # Генерация .env и compose
             env_vars = DockerModule.ensure_docker_env(docker_path)
             if not DockerModule.generate_docker_compose(settings or {}):
@@ -605,6 +612,102 @@ class DockerModule(BaseModule):
             logger.error(f"[run_compose] Unexpected error: {e}")
             return False
 
+    @staticmethod
+    def fix_executable_permissions(project_path: Path) -> Dict[str, Any]:
+        """
+        Восстанавливает права на выполнение для всех скриптов и исполняемых файлов
+        """
+        result = {'status': 'success', 'fixed_files': [], 'errors': []}
+        
+        # Получаем настройку use_sudo из глобальных переменных
+        use_sudo = get_global("use_sudo", False)
+        
+        # Проверяем, установлен ли sudo если он нужен
+        if use_sudo:
+            try:
+                # Проверяем доступность sudo
+                subprocess.run(['sudo', '--version'], capture_output=True, check=True)
+                sudo_available = True
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                sudo_available = False
+                logger.warning("sudo requested but not available, continuing without sudo")
+                use_sudo = False
+        else:
+            sudo_available = False
+
+        # Паттерны для определения исполняемых файлов
+        executable_extensions = {'.sh', '.py', '.pl', '.rb', '.js', '.php', '.bash'}
+        executable_names = {
+            'start', 'stop', 'restart', 'init', 'setup', 'install', 'configure',
+            'entrypoint', 'docker-entrypoint', 'run', 'main', 'app'
+        }
+        script_directories = {
+            'configs/init', 'configs/scripts', 'bin', 'scripts', 
+            'dockerfiles', 'entrypoints', 'starters'
+        }
+        
+        try:
+            logger.info(f"Восстановление прав на исполняемые файлы (use_sudo={use_sudo})...")
+            
+            fixed_count = 0
+            for root, dirs, files in os.walk(project_path):
+                for file in files:
+                    file_path = Path(root) / file
+                    rel_path = file_path.relative_to(project_path)
+                    rel_path_str = str(rel_path).replace('\\', '/')
+                    file_lower = file.lower()
+                    
+                    # Проверяем критерии для исполняемого файла
+                    is_executable = (
+                        file_path.suffix.lower() in executable_extensions or
+                        any(name in file_lower for name in executable_names) or
+                        any(script_dir in rel_path_str for script_dir in script_directories)
+                    )
+                    
+                    if is_executable:
+                        try:
+                            # Проверяем текущие права
+                            current_mode = file_path.stat().st_mode
+                            is_currently_executable = bool(current_mode & 0o111)  # Проверяем +x
+                            
+                            if not is_currently_executable:
+                                # Устанавливаем права на выполнение
+                                if use_sudo and sudo_available:
+                                    # Используем sudo если нужно и доступен
+                                    subprocess.run(
+                                        ['sudo', 'chmod', '+x', str(file_path)], 
+                                        check=True, 
+                                        capture_output=True
+                                    )
+                                else:
+                                    # Без sudo или если sudo недоступен
+                                    new_mode = current_mode | 0o111  # Добавляем +x для всех
+                                    file_path.chmod(new_mode)
+                                
+                                result['fixed_files'].append(rel_path_str)
+                                fixed_count += 1
+                                logger.debug(f"Установлены права на выполнение: {rel_path_str}")
+                                
+                        except Exception as e:
+                            error_msg = f"Не удалось установить права для {rel_path_str}: {e}"
+                            result['errors'].append(error_msg)
+                            logger.warning(error_msg)
+            
+            logger.info(f"Восстановлены права для {fixed_count} файлов")
+            if result['errors']:
+                result['status'] = 'warning'
+                result['message'] = f"Восстановлены права для {fixed_count} файлов, но были ошибки"
+            else:
+                result['message'] = f"Восстановлены права для {fixed_count} файлов"
+                
+        except Exception as e:
+            error_msg = f"Ошибка при восстановлении прав: {e}"
+            result['status'] = 'error'
+            result['message'] = error_msg
+            result['errors'].append(error_msg)
+            logger.error(error_msg)
+        
+        return result
 
     # ---------------------------
     # Проверка запуска проекта
