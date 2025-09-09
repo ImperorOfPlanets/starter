@@ -1,27 +1,22 @@
 from starter_files.core.base_module import BaseModule
+
 import json
 import logging
-import platform
-import subprocess
-import re
-from pathlib import Path
 import os
+import platform
+import re
+import subprocess
 import time
+
+from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional, Any
+
 from starter_files.core.utils.loader_utils import get
 from starter_files.core.utils.globalVars_utils import get_global, set_global
-from datetime import datetime
+from starter_files.core.utils.log_utils import LogManager
 
-LOG_PATH = Path("starter_files/logs/docker_module.log")
-LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-logger = logging.getLogger('docker_module')
-logger.setLevel(logging.INFO)
-
-file_handler = logging.FileHandler(LOG_PATH, encoding='utf-8')
-formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s')
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
+logger = LogManager.get_logger('docker_module')
 
 class DockerModule(BaseModule):
     """Реализация Docker утилит"""
@@ -445,7 +440,7 @@ class DockerModule(BaseModule):
     @staticmethod
     def generate_docker_compose(settings: Dict[str, Any]) -> bool:
         try:
-            docker_path = get_global("docker_path")
+            docker_path = Path(get_global("docker_path"))
             env_path = docker_path / ".env"
             env_vars = DockerModule.read_env_file(env_path)
 
@@ -480,7 +475,7 @@ services:
     @staticmethod
     def run_compose(settings: Dict[str, Any] = None) -> bool:
         try:
-            docker_path = get_global("docker_path")
+            docker_path = Path(get_global("docker_path"))
             compose_file = docker_path / "docker-compose.yml"
 
             if not DockerModule.is_docker_available():
