@@ -237,6 +237,9 @@ class DockerModule(BaseModule):
             content = compose_example.read_text(encoding='utf-8')
             logger.info(f"[generate_compose] Read compose template ({compose_example}): {len(content)} chars")
 
+            env_vars['DOCKER_PATH'] = str(docker_dir.absolute())
+            logger.info(f"[generate_compose] Set DOCKER_PATH: {env_vars['DOCKER_PATH']}")
+
             if pull_from_registry:
                 content = DockerModule.remove_build_sections(content)
                 logger.info("[generate_compose] Removed build sections (pull_from_registry=True)")
