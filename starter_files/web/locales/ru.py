@@ -75,9 +75,9 @@ translations = {
         # ==================== DASHBOARD ====================
         'dashboard': {
             # Базовые настройки модуля
-            'basic':{
+            "basic":{
                 # Отображаемое в панели управления
-                'title':"Система",
+                "title":"Система",
                 "description": "Основная информационная панель"
             },
 
@@ -132,7 +132,22 @@ translations = {
                 "total": "Всего",
                 "used": "Использовано",
                 "available": "Доступно",
-                "install": "Установить"
+                "install": "Установить",
+                "package_installation": "Установка пакета",
+                "close": "Закрыть",
+                "loading": "Загрузка",
+                "preparing_installation": "Подготовка к установке",
+                "installation_logs": "Логи установки",
+                "finish": "Завершить",
+                "download_logs": "Скачать логи",
+                "confirm_install_package": "Подтвердите установку пакета",
+                "starting_installation": "Запуск установки",
+                "installation_completed_success": "Установка завершена успешно!",
+                "installation_failed": "Установка завершена с ошибками",
+                "log_request_failed": "Не удалось получить логи",
+                "start_install_failed": "Не удалось начать установку",
+                "request_failed": "Ошибка запроса",
+                "compiler":"Компилятор"
             }
         },
 
@@ -192,7 +207,19 @@ translations = {
                 "close": "Закрыть",
                 "refresh": "Обновить",
                 "installation_started": "Установка начата",
-                "docker_installation": "Установка Docker"
+                "docker_installation": "Установка Docker",
+                "docker_not_installed": "Docker не установлен",
+                "docker_installation_required": "Требуется установка Docker",
+                "install_docker_guide": "Руководство по установке Docker",
+                "docker_required_for_actions": "Docker требуется для выполнения действий",
+                "loading": "Загрузка",
+                "preparing_installation": "Подготовка к установке",
+                "installation_logs": "Логи установки",
+                "finish": "Завершить",
+                "starting_installation": "Запуск установки",
+                "installation_completed_success": "Установка завершена успешно!",
+                "installation_completed_warning": "Установка завершена с предупреждениями",
+                "installation_failed": "Установка завершена с ошибками"
             },
 
             'containers': {
@@ -213,7 +240,10 @@ translations = {
                 "view_logs": "Просмотр логов",
                 "no_containers_found": "Контейнеры не найдены",
                 "confirm_remove_container": "Вы уверены, что хотите удалить контейнер?",
-                "request_failed": "Не удалось выполнить запрос"
+                "request_failed": "Не удалось выполнить запрос",
+                "docker_not_installed": "Docker не установлен",
+                "docker_required_for_containers": "Docker требуется для управления контейнерами",
+                "install_docker_guide": "Руководство по установке Docker"
             },
 
             'volumes': {
@@ -349,6 +379,14 @@ translations = {
                 "logs_how_to_use": "Как использовать:",
                 "logs_step1": "Выберите тип логов из списка слева",
                 "logs_step2": "Выберите конкретный файл логов",
+                "logs_step3": "Используйте фильтры для поиска нужных записей",
+                "logs_types": "Типы логов",
+                "logs_info": "Информация о логах",
+                "logs_about": "О системных логах",
+                "logs_description": "Здесь вы можете просматривать и анализировать логи системы, приложений и служб.",
+                "logs_how_to_use": "Как использовать:",
+                "logs_step1": "Выберите тип логов из списка слева",
+                "logs_step2": "Выберите конкретный файл логов",
                 "logs_step3": "Используйте фильтры для поиска нужных записей"
             },
             "view": {
@@ -376,7 +414,8 @@ translations = {
                 "logs_time": "Время",
                 "logs_message": "Сообщение",
                 "logs_no_entries": "Нет записей в логах",
-                "logs_entries_shown": "записей показано"
+                "logs_entries_shown": "записей показано",
+                "refresh":"Обновить"
             }
         },
 
@@ -513,7 +552,28 @@ translations = {
                 "task_added_successfully": "Задача успешно добавлена",
                 "task_addition_failed": "Ошибка добавления задачи",
                 "active": "Активна",
-                "status": "Статус"
+                "status": "Статус",
+                "service_diagnose": "Диагностика",
+                "service_diagnosis": "Диагностика сервиса",
+                "diagnosing_service": "Выполняется диагностика сервиса...",
+                "diagnosis_results": "Результаты диагностики",
+                "diagnosis_completed": "Диагностика завершена",
+                "diagnosis_failed": "Диагностика не удалась",
+                "problems_detected": "Обнаружены проблемы",
+                "detailed_status": "Детальный статус",
+                "journal_logs": "Логи журнала",
+                "service_configuration": "Конфигурация сервиса",
+                "permissions": "Права доступа",
+                "paths": "Пути",
+                "errors": "Ошибки",
+                "copy_to_clipboard": "Копировать в буфер",
+                "copied_to_clipboard": "Скопировано в буфер обмена",
+                "copy_failed": "Не удалось скопировать",
+                "installed": "Установлен",
+                "running":"Запущен",
+                "enabled":"Включен",
+                "close": "Закрыть",
+                "loading":"Загрузка"
             }
         },
 

@@ -1,3 +1,7 @@
+<!-- Блок с утилитами -->
+{% include 'sections/network/tools_info.html' %}
+
+<!-- Блок с устройствами -->
 <div class="row">
     <div class="col-md-4">
         <div class="card">
@@ -70,99 +74,127 @@
 </div>
 
 <script>
-$(document).ready(function() {
-    let showDisabled = true;
-    
-    // Инициализация - выделяем первое устройство
-    $('.device-item:first').addClass('active');
-    loadDeviceDetails($('.device-item.active').data('device-name'));
-    
-    // Обработчик выбора устройства
-    $('.device-item').on('click', function(e) {
-        e.preventDefault();
-        selectDevice($(this));
-    });
-
-    // Кнопка скрыть/показать отключенные
-    $('#toggle-disabled').on('click', function() {
-        showDisabled = !showDisabled;
-        $(this).html(showDisabled ? 
-            '<i class="bi bi-eye-slash"></i> Скрыть отключенные' : 
-            '<i class="bi bi-eye"></i> Показать отключенные');
-        
-        if (showDisabled) {
-            $('.device-disabled').show();
-        } else {
-            $('.device-disabled').hide();
-            // Если текущее выбранное устройство скрыто, выбираем следующее
-            if ($('.device-item.active').hasClass('device-disabled')) {
-                const nextDevice = $('.device-item.active').nextAll('.device-enabled:first');
-                if (nextDevice.length) {
-                    selectDevice(nextDevice);
-                } else {
-                    const prevDevice = $('.device-item.active').prevAll('.device-enabled:first');
-                    if (prevDevice.length) selectDevice(prevDevice);
-                }
-            }
-        }
-    });
-    
-    // Обработка клавиш вверх/вниз
-    $(document).on('keydown', function(e) {
-        const $active = $('.device-item.active');
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            const $next = showDisabled ? 
-                $active.next('.device-item') : 
-                $active.nextAll('.device-enabled:first');
-            if ($next.length) selectDevice($next);
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            const $prev = showDisabled ? 
-                $active.prev('.device-item') : 
-                $active.prevAll('.device-enabled:first');
-            if ($prev.length) selectDevice($prev);
-        }
-    });
-    
-    // Функция выбора устройства
-    function selectDevice($device) {
-        $('.device-item').removeClass('active');
-        $device.addClass('active');
-        $device[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        loadDeviceDetails($device.data('device-name'));
-    }
-
-    // Функция загрузки деталей устройства
-    function loadDeviceDetails(deviceName) {
-        $('#device-details-container').html(`
-            <div class="text-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Загрузка...</span>
+    $(document).ready(function() {
+        // Функция загрузки деталей устройства
+        function loadDeviceDetails(deviceName) {
+            $('#device-details-container').html(`
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Загрузка...</span>
+                    </div>
+                    <p class="mt-2">Загрузка данных устройства</p>
                 </div>
-                <p class="mt-2">Загрузка данных устройства</p>
-            </div>
-        `);
-        
-        $.ajax({
-            url: '/',
-            method: 'POST',
-            data: {
-                section: 'network',
-                action: 'get_device_details',
-                device_name: deviceName
-            },
-            success: function(html) {  // Принимаем чистый HTML
+            `);
+            
+            // Создаем форму для отправки POST запроса
+            const formData = new FormData();
+            formData.append('section', 'network');
+            formData.append('action', 'get_device_details');
+            formData.append('device_name', deviceName);
+            
+            fetch('/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(html => {
                 $('#device-details-container').html(html);
-            },
-            error: function(xhr, status, error) {
+            })
+            .catch(error => {
                 $('#device-details-container').html(`
                     <div class="alert alert-danger">
                         Ошибка при загрузке данных: ${error || 'Неизвестная ошибка'}
                     </div>
                 `);
+            });
+        }
+        
+        // Обработчик выбора устройства
+        $('.device-item').on('click', function(e) {
+            e.preventDefault();
+            selectDevice($(this));
+        });
+        
+        function selectDevice($device) {
+            $('.device-item').removeClass('active');
+            $device.addClass('active');
+            $device[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            loadDeviceDetails($device.data('device-name'));
+        }
+        
+        // Кнопка обновления сетевой информации
+        $('#refreshNetworkBtn').on('click', function() {
+            const $btn = $(this);
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Обновление...');
+            
+            // Создаем форму для отправки POST запроса
+            const formData = new FormData();
+            formData.append('section', 'network');
+            formData.append('action', 'refresh_network');
+            
+            fetch('/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    location.reload();
+                } else {
+                    alert('Ошибка обновления: ' + (data.message || 'Неизвестная ошибка'));
+                }
+            })
+            .catch(error => {
+                alert('Ошибка сети при обновлении: ' + error);
+            })
+            .finally(() => {
+                $btn.prop('disabled', false).html('<i class="bi bi-arrow-repeat"></i> Обновить');
+            });
+        });
+        
+        // Инициализация - выделяем первое устройство
+        if ($('.device-item').length > 0) {
+            $('.device-item:first').addClass('active');
+            loadDeviceDetails($('.device-item:first').data('device-name'));
+        }
+        
+        // Обработчик клавиш вверх/вниз
+        $(document).on('keydown', function(e) {
+            const $active = $('.device-item.active');
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const $next = $active.next('.device-item');
+                if ($next.length) selectDevice($next);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const $prev = $active.prev('.device-item');
+                if ($prev.length) selectDevice($prev);
             }
         });
-    }
-});
+        
+        // Кнопка скрыть/показать отключенные
+        let showDisabled = true;
+        $('#toggle-disabled').on('click', function() {
+            showDisabled = !showDisabled;
+            $(this).html(showDisabled ? 
+                '<i class="bi bi-eye-slash"></i> Скрыть отключенные' : 
+                '<i class="bi bi-eye"></i> Показать отключенные');
+            
+            if (showDisabled) {
+                $('.device-disabled').show();
+            } else {
+                $('.device-disabled').hide();
+                // Если текущее выбранное устройство скрыто, выбираем следующее
+                if ($('.device-item.active').hasClass('device-disabled')) {
+                    const nextDevice = $('.device-item.active').nextAll('.device-enabled:first');
+                    if (nextDevice.length) {
+                        selectDevice(nextDevice);
+                    } else {
+                        const prevDevice = $('.device-item.active').prevAll('.device-enabled:first');
+                        if (prevDevice.length) selectDevice(prevDevice);
+                    }
+                }
+            }
+        });
+    });
 </script>

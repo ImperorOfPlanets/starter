@@ -147,31 +147,47 @@ class ServiceModule(BaseModule):
                 log(f"Python path: {python_path}")
                 log(f"Venv path: {venv_path}")
 
+                # Проверяем существование путей
+                if not os.path.exists(script_path / 'starter.py'):
+                    log(f"ERROR: starter.py not found at {script_path}/starter.py")
+                    result['status'] = 'error'
+                    result['message'] = f"starter.py not found at {script_path}"
+                    return result
+                
+                if not os.path.exists(python_path):
+                    log(f"ERROR: Python not found at {python_path}")
+                    result['status'] = 'error'
+                    result['message'] = f"Python not found at {python_path}"
+                    return result
+
                 # Создаем systemd service file с правильными путями
                 service_content = f"""[Unit]
-Description=Starter Service
-After=network.target
+    Description=Starter Service
+    After=network.target
 
-[Service]
-Type=simple
-User=root
-WorkingDirectory={script_path}
-Environment=PATH={venv_path}/bin:{os.environ.get('PATH', '')}
-ExecStart={python_path} {script_path}/main.py --service
-Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
+    [Service]
+    Type=simple
+    User=root
+    WorkingDirectory={script_path}
+    Environment=PATH={venv_path}/bin:{os.environ.get('PATH', '')}
+    ExecStart={python_path} {script_path}/starter.py --service
+    Restart=always
+    RestartSec=5
+    StandardOutput=journal
+    StandardError=journal
 
-[Install]
-WantedBy=multi-user.target
-"""
+    [Install]
+    WantedBy=multi-user.target
+    """
 
                 service_path = "/etc/systemd/system/starter-service.service"
                 
                 log(f"Creating service file: {service_path}")
                 with open(service_path, 'w') as f:
                     f.write(service_content)
+                
+                # Устанавливаем правильные права
+                subprocess.run(['chmod', '644', service_path], check=True)
                 
                 # Reload systemd and enable service
                 commands = [
@@ -199,34 +215,142 @@ WantedBy=multi-user.target
                     return_code = process.wait()
                     if return_code != 0:
                         log(f"Command failed with exit code {return_code}")
-                        # Не прерываем выполнение полностью, а только записываем ошибку
                         result['status'] = 'warning'
                         result['message'] = f"Command completed with warnings: {cmd}"
                 
                 # Wait for service to start and verify installation
                 log("Waiting for service to start...")
-                time.sleep(3)
+                time.sleep(5)  # Увеличиваем время ожидания
+                
+                # Детальная проверка статуса
+                log("Checking service status in detail...")
+                status_result = subprocess.run(
+                    ['systemctl', 'status', 'starter-service', '--no-pager'],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if status_result.stdout:
+                    log(f"Service status:\n{status_result.stdout}")
+                
+                if status_result.stderr:
+                    log(f"Service status errors:\n{status_result.stderr}")
+                
+                # Проверяем журналы
+                journal_result = subprocess.run(
+                    ['journalctl', '-u', 'starter-service', '-n', '10', '--no-pager'],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if journal_result.stdout:
+                    log(f"Service logs:\n{journal_result.stdout}")
                 
                 # Verify service is installed and running
                 status = ServiceModule.get_service_status()
                 if status['installed']:
                     log("starter-service installed successfully!")
+                    
                     if status['running']:
                         log("starter-service is running!")
                         result['message'] = "starter-service installed and running successfully!"
                     else:
-                        log("starter-service installed but not running")
-                        result['message'] = "starter-service installed but not running"
+                        log("starter-service installed but not running. Checking logs...")
+                        
+                        # Дополнительная диагностика
+                        diagnosis = ServiceModule.diagnose_service()
+                        if 'journal_logs' in diagnosis:
+                            log(f"Journal logs: {diagnosis['journal_logs']}")
+                        
+                        result['status'] = 'warning'
+                        result['message'] = "starter-service installed but not running. Check journalctl for details."
                 else:
                     log("starter-service installation failed")
                     result['status'] = 'error'
                     result['message'] = "starter-service installation failed"
+                
+                # ОБНОВЛЯЕМ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+                ServiceModule.set_globals()
+                log("Global variables updated")
+                
+                # Добавляем маркер завершения
+                log("INSTALL FINISH!")
         
         except Exception as e:
             error_msg = f"Installation failed: {str(e)}"
             result['status'] = 'error'
             result['message'] = error_msg
             logger.exception("starter-service installation error")
+        
+        return result
+
+    @staticmethod
+    def diagnose_service() -> Dict[str, Any]:
+        """Диагностика проблем с сервисом"""
+        result = {'status': 'success', 'logs': [], 'problems': []}
+        
+        try:
+            # Проверяем статус сервиса
+            status = ServiceModule.get_service_status()
+            result['status_info'] = status
+            
+            if not status['installed']:
+                result['problems'].append('Service file not found')
+                return result
+            
+            # Проверяем журналы сервиса
+            journal = subprocess.run(
+                ['journalctl', '-u', 'starter-service', '-n', '20', '--no-pager'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if journal.stdout:
+                result['journal_logs'] = journal.stdout
+            
+            if journal.stderr:
+                result['journal_errors'] = journal.stderr
+            
+            # Проверяем статус более детально
+            detailed_status = subprocess.run(
+                ['systemctl', 'status', 'starter-service', '--no-pager'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if detailed_status.stdout:
+                result['detailed_status'] = detailed_status.stdout
+            
+            if detailed_status.stderr:
+                result['detailed_errors'] = detailed_status.stderr
+            
+            # Проверяем конфигурацию сервиса
+            service_path = "/etc/systemd/system/starter-service.service"
+            if os.path.exists(service_path):
+                with open(service_path, 'r') as f:
+                    result['service_config'] = f.read()
+            
+            # Проверяем права доступа
+            if os.path.exists(service_path):
+                result['service_permissions'] = oct(os.stat(service_path).st_mode)[-3:]
+            
+            # Проверяем пути
+            script_path = get_global('script_path')
+            python_path = get_global('python_path', sys.executable)
+            result['paths'] = {
+                'script_path': str(script_path),
+                'python_path': python_path,
+                'starter_py_exists': os.path.exists(script_path / 'starter.py'),
+                'python_executable': os.path.exists(python_path)
+            }
+        
+        except Exception as e:
+            result['status'] = 'error'
+            result['error'] = str(e)
         
         return result
 

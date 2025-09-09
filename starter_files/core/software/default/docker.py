@@ -99,6 +99,17 @@ class DockerModule(BaseModule):
                     log("Installation completed but Docker not detected. Try restarting your system.")
                     result['status'] = 'warning'
                     result['message'] = "Installation completed but Docker not detected. Try restarting your system."
+
+                # ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: не установился ли Docker Compose в комплекте?
+                log("Checking if Docker Compose was installed automatically...")
+                docker_compose_installed = DockerModule.check_docker_compose_installed()
+                
+                if docker_compose_installed:
+                    log("Docker Compose was automatically installed with Docker!")
+                    set_global('docker_compose_installed', True)
+                    result['message'] += " Docker Compose was also installed."
+                else:
+                    log("Docker Compose was not installed automatically.")
                 
                 # Добавляем маркер завершения
                 log("INSTALL FINISH!")

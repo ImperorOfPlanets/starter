@@ -3,8 +3,9 @@ import subprocess
 import logging
 from pathlib import Path
 from typing import Dict, List
-from datetime import datetime, time
+from datetime import datetime
 import re
+import time
 from starter_files.core.utils.loader_utils import get
 from starter_files.core.utils.globalVars_utils import get_global, set_global
 
@@ -21,11 +22,54 @@ class GitModule(BaseModule):
                 ['git', '--version'],
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
+                timeout=5  # Добавляем таймаут для безопасности
             )
             return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
             return False
+
+    @staticmethod
+    def check_git_authentication() -> str:
+        """Проверяет наличие настроенной аутентификации в Git"""
+        try:
+            # Проверка наличия сохраненных учетных данных
+            result = subprocess.run(
+                ['git', 'config', '--global', '--get', 'credential.helper'],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return 'credential_helper'
+            
+            # Проверка SSH ключей
+            ssh_path = Path.home() / '.ssh'
+            if ssh_path.exists():
+                # Проверяем приватные ключи (без .pub)
+                key_files = [f for f in ssh_path.iterdir() 
+                            if f.is_file() and f.name.startswith('id_') and not f.name.endswith('.pub')]
+                if key_files:
+                    return 'ssh_keys'
+            
+            # Проверка наличия токена в конфиге
+            try:
+                result = subprocess.run(
+                    ['git', 'config', '--global', '--get', 'github.token'],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    return 'token'
+            except:
+                pass
+                
+            return 'not_configured'
+            
+        except Exception as e:
+            logger.error(f"Git authentication check failed: {str(e)}")
+            return 'error'
 
     @staticmethod
     def install_git(log_file_path: str) -> Dict[str, str]:
@@ -72,17 +116,42 @@ class GitModule(BaseModule):
                         result['message'] = f"Command failed: {cmd}"
                         return result
                 
+                # Используем time.sleep вместо datetime.time.sleep
                 time.sleep(2)
-                if GitModule.check_git_installed():
+                
+                git_installed = GitModule.check_git_installed()
+                # ОБНОВЛЯЕМ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+                set_global('git_installed', git_installed)
+                
+                if git_installed:
                     log("Git installed successfully!")
                     result['message'] = "Git installed successfully!"
+                    
+                    # ПРОВЕРЯЕМ АУТЕНТИФИКАЦИЮ ТОЖЕ
+                    git_auth = GitModule.check_git_authentication()
+                    set_global('git_authentication', git_auth)
+                    if git_auth:
+                        log("Git authentication is configured")
+                    else:
+                        log("Git authentication is not configured")
+                        
                 else:
                     log("Installation completed but Git not detected.")
                     result['status'] = 'warning'
                     result['message'] = "Installation completed but Git not detected."
+                
+                # Добавляем маркер завершения
+                log("INSTALL FINISH!")
         
         except Exception as e:
             error_msg = f"Installation failed: {str(e)}"
+            try:
+                with open(log_file_path, 'a') as f:
+                    f.write(error_msg + '\n')
+                    f.write("INSTALL FINISH!\n")
+            except:
+                logger.exception("Failed to write error to log file")
+            
             result['status'] = 'error'
             result['message'] = error_msg
             logger.exception("Git installation error")
@@ -146,13 +215,14 @@ class GitModule(BaseModule):
         
         for repo in repos:
             repo_url = repo['url']
-            repo_name = re.search(r'/([^/]+)\.git$', repo_url).group(1)
-            repo_path = base_path / repo_name
-            
             try:
+                # Извлекаем имя репозитория более надежным способом
+                repo_name = repo_url.split('/')[-1].replace('.git', '')
+                repo_path = base_path / repo_name
+                
                 if repo_path.exists():
                     results[repo_url] = {
-                        'status': 'skipped',
+                        'status': 'skipped', 
                         'message': 'Repository already exists'
                     }
                     continue
@@ -238,8 +308,12 @@ class GitModule(BaseModule):
     @staticmethod
     def set_globals():
         """Устанавливает глобальные переменные для Git"""
-        git_installed = get('git','check_git_installed')
-        # git_authentication = get('git','check_git_authentication')
+        git_installed = GitModule.check_git_installed()
+        git_authentication = GitModule.check_git_authentication()
 
         set_global('git_installed', git_installed)
-        # set_global('git_authentication', git_authentication)
+        set_global('git_authentication', git_authentication)
+        
+        # Логируем для отладки
+        logger.info(f"Git installed: {git_installed}")
+        logger.info(f"Git authentication: {git_authentication}")

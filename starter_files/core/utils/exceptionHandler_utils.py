@@ -52,7 +52,7 @@ class ExceptionHandler:
         }
         
         error_path = self._save_error_report(error_data)
-        logger.info(f"\nCritical error logged to: {error_path}", file=sys.stderr)
+        logger.info(f"\nCritical error logged to: {error_path}")
         
         # Вызываем стандартный обработчик
         sys.__excepthook__(exc_type, exc_value, exc_traceback)

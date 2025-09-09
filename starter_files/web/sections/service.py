@@ -113,3 +113,17 @@ def get_scheduled_tasks(data, session):
     except Exception as e:
         logger.error(f"Error getting scheduled tasks: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)})
+
+def diagnose_service(data, session):
+    """Диагностика сервиса"""
+    try:
+        # Используем модуль service для диагностики
+        result = get('service', 'diagnose_service')
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error diagnosing service: {str(e)}")
+        return jsonify({
+            'status': 'error', 
+            'message': str(e),
+            'problems': ['Diagnosis failed']
+        })

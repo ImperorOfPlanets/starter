@@ -22,35 +22,51 @@ def get_current_sections_in_panel():
     sections_in_control_panel = []
     
     starter_path = get_global('script_path')
-
     sections_dir = starter_path / 'starter_files' / 'web' / 'sections'
+    
+    # Добавим отладочную информацию
+    logger.debug(f"Searching for sections in: {sections_dir}")
     
     for section_file in sections_dir.glob('*.py'):
         if section_file.stem == '__init__':
             continue
             
         section_slug = section_file.stem
+        logger.debug(f"Processing section: {section_slug}")
 
         try:
             section = import_module(f'starter_files.web.sections.{section_slug}')
             
             if getattr(section, 'this_section_in_control_panel', False):
-                # Получаем мета-информацию через функцию t()
-                section_title = t(f'sections.{section_slug}.basic.title', default=getattr(section, 'section_name', section_slug.replace('_', ' ').title()))
+                # ИСПРАВЛЕННЫЙ КОД: используем только return_basic
+                section_name = return_basic(section_slug, 'title')
+                
+                # Если перевод не найден, используем fallback
+                if section_name is None:
+                    section_name = getattr(section, 'section_name', section_slug.replace('_', ' ').title())
+                    logger.warning(f"Translation not found for section '{section_slug}', using fallback: '{section_name}'")
+                else:
+                    logger.debug(f"Found translation for '{section_slug}': '{section_name}'")
 
                 section_info = {
                     'section_slug': section_slug,
-                    'section_name': return_basic(section_slug, 'title', getattr(section, 'section_name', section_slug.replace('_', ' ').title())),
+                    'section_name': section_name,
                     'section_icon': getattr(section, 'section_icon', 'bi-box'),
                     'section_order': getattr(section, 'section_order', 99)
                 }
                 sections_in_control_panel.append(section_info)
                 
+        except ImportError as e:
+            logger.error(f"Error importing section {section_slug}: {str(e)}")
+            continue
         except Exception as e:
-            logger.exception(f"Error loading section {section_slug}")
-            raise
+            logger.exception(f"Unexpected error loading section {section_slug}")
+            continue
     
-    return sorted(sections_in_control_panel, key=lambda x: x['section_order'])
+    # Отсортируем и вернем результат
+    sorted_sections = sorted(sections_in_control_panel, key=lambda x: x['section_order'])
+    logger.debug(f"Final sections list: {[s['section_slug'] for s in sorted_sections]}")
+    return sorted_sections
 
 @routes.context_processor
 def inject_variables():
