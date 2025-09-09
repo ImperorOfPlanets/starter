@@ -82,7 +82,6 @@ PROJECTS = {
         'CRITICAL_FILES': [
             'docker-compose.example'
         ],
-        'BASE_PATH':'docker',
         'RESTART_AFTER_UPDATE': True,
         
         # Специальные функции для обработки обновлений (опционально)

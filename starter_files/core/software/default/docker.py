@@ -18,15 +18,15 @@ from starter_files.core.utils.log_utils import LogManager
 
 logger = LogManager.get_logger('docker_module')
 
+
 class DockerModule(BaseModule):
-    """Реализация Docker утилит"""
+    """Реализация Docker утилит (включая генерацию .env и docker-compose.yml)"""
 
     # ---------------------------
     # Проверки установки Docker
     # ---------------------------
     @staticmethod
     def check_docker_installed() -> bool:
-        """Проверяет установлен ли Docker и возвращает статус"""
         try:
             subprocess.run(['docker', '--version'], capture_output=True, text=True, check=True)
             return True
@@ -35,7 +35,6 @@ class DockerModule(BaseModule):
 
     @staticmethod
     def check_docker_compose_installed() -> bool:
-        """Проверка наличия Docker Compose (v1 и v2)"""
         try:
             subprocess.check_output(["docker", "compose", "version"], stderr=subprocess.DEVNULL)
             return True
@@ -47,7 +46,7 @@ class DockerModule(BaseModule):
                 return False
 
     # ---------------------------
-    # Установка Docker
+    # Установка Docker / Compose
     # ---------------------------
     @staticmethod
     def install_docker(log_file_path: str) -> Dict[str, Any]:
@@ -157,7 +156,7 @@ class DockerModule(BaseModule):
         return result
 
     # ---------------------------
-    # Работа с Dockerfile и compose
+    # Работа с Dockerfile и compose (legacy helper)
     # ---------------------------
     @staticmethod
     def check_dockerfiles(docker_dir: str) -> bool:
@@ -170,42 +169,134 @@ class DockerModule(BaseModule):
                 return False
         return True
 
+    # ---------------------------
+    # Общие утилиты для подстановки переменных и блоков
+    # ---------------------------
     @staticmethod
     def replace_env_variables(content: str, env_vars: Dict[str, str]) -> str:
-        def replace_match(match):
-            return env_vars.get("PROJECTNAME", match.group(0))
-        return re.sub(r'\$\{PROJECTNAME\}', replace_match, content)
+        """Заменяет ${VAR} на значение из env_vars (если есть)"""
+        def repl(match):
+            var = match.group(1)
+            return env_vars.get(var, match.group(0))
+        return re.sub(r'\$\{(\w+)\}', repl, content)
 
     @staticmethod
-    def process_service_blocks(content: str, enabled_services: List[str], env_vars: Dict[str, str]) -> str:
-        pattern = re.compile(r'### START (.+?) ###(.*?)### END \1 ###', re.DOTALL)
+    def process_service_blocks(content: str, enabled_services: List[str], env_vars: Dict[str, str], remove_markers: bool = False) -> str:
+        """
+        Обрабатывает блоки ### START SERVICE ### ... ### END SERVICE ###
+        - Подставляет переменные окружения
+        - Убирает полностью блоки для не включенных сервисов
+        - Если remove_markers=True, то активные блоки тоже очищают маркеры
+        """
+        pattern = re.compile(r'### START (\w+) ###(.*?)### END \1 ###', re.DOTALL | re.IGNORECASE)
+
         def replace_block(match):
             service_name = match.group(1).strip().upper()
             block_content = match.group(2)
-            if service_name in enabled_services:
-                replaced_content = DockerModule.replace_env_variables(block_content, env_vars)
-                return f"### START {service_name} ###{replaced_content}### END {service_name} ###"
+            if service_name in [s.upper() for s in enabled_services]:
+                # логируем включённый сервис
+                logger.info(f"Including service block: {service_name}")
+                # подставляем переменные
+                block_content = DockerModule.replace_env_variables(block_content, env_vars)
+                if remove_markers:
+                    return block_content
+                else:
+                    return match.group(0).replace(match.group(2), block_content)
+            # логируем пропуск сервиса
+            logger.info(f"Skipping service block: {service_name}")
             return ''
+
         return pattern.sub(replace_block, content)
 
     @staticmethod
-    def generate_compose(docker_dir: str, env_vars: Dict[str, str], pull_from_registry: bool = False) -> bool:
-        docker_dir = Path(docker_dir)
-        compose_example = docker_dir / "docker-compose.example"
-        compose_output = docker_dir / "docker-compose.yml"
+    def remove_build_sections(content: str) -> str:
+        """
+        Убирает блоки 'build:' и вложенные отступленные строки.
+        Регулярка удаляет 'build:' и все последующие строк с большим отступом.
+        """
+        # Удаляем секции build: вместе с их вложенными строками
+        content = re.sub(r'(?m)^[ \t]*build:.*(?:\n[ \t]+.*)*', '', content)
+        return content
+
+    # ---------------------------
+    # Генерация docker-compose (низкоуровневая и высокоуровневая)
+    # ---------------------------
+    @staticmethod
+    def generate_compose(docker_dir: Union[str, Path], env_vars: Dict[str, str], pull_from_registry: bool = False) -> bool:
+        """
+        Генерирует docker-compose.yml на основе docker-compose.example (или docker-compose.template)
+        docker_dir может быть строкой или Path.
+        """
         try:
+            docker_dir = Path(docker_dir)
+            compose_example = docker_dir / "docker-compose.example"
+            # fallback: docker-compose.template
+            if not compose_example.exists():
+                compose_example = docker_dir / "docker-compose.template"
+            compose_output = docker_dir / "docker-compose.yml"
+
+            if not compose_example.exists():
+                logger.error(f"Compose example not found: {compose_example}")
+                return False
+
             content = compose_example.read_text(encoding='utf-8')
+            logger.info(f"Read compose template: {compose_example}")
+
             if pull_from_registry:
-                content = re.sub(r'\n\s+build:.?dockerfile:.?\n', '\n', content, flags=re.DOTALL)
+                content = DockerModule.remove_build_sections(content)
+                logger.info("Removed build sections because pull_from_registry=True")
+
             enabled_services = [
                 s.strip().upper() for s in env_vars.get("ENABLED_SERVICES", "").split(",") if s.strip()
             ]
-            content = DockerModule.process_service_blocks(content, enabled_services, env_vars)
+            logger.info(f"Enabled services: {enabled_services}")
+
+            # Обрабатываем блоки сервисов и подставляем переменные
+            content = DockerModule.process_service_blocks(content, enabled_services, env_vars, remove_markers=True)
+
+            # Заменяем переменные окружения вне блоков
             content = DockerModule.replace_env_variables(content, env_vars)
+
+            # Убедимся, что папка существует
+            compose_output.parent.mkdir(parents=True, exist_ok=True)
+
+            # Сохраняем файл
             compose_output.write_text(content, encoding='utf-8')
+            logger.info(f"docker-compose.yml generated successfully at {compose_output}")
             return True
+
         except Exception as e:
             logger.error(f"Error generating compose: {str(e)}")
+            return False
+
+    @staticmethod
+    def generate_docker_compose(settings: Dict[str, Any]) -> bool:
+        """
+        Высокоуровневая обёртка: берёт docker_path из глобальных, обновляет .env (ensure_docker_env),
+        читает env и генерирует compose.
+        """
+        try:
+            docker_path = Path(get_global("docker_path"))
+            # если директории нет — создадим (не критично)
+            docker_path.mkdir(parents=True, exist_ok=True)
+
+            # Обновим/создадим .env на основе .env.example
+            env_vars = DockerModule.ensure_docker_env(docker_path)
+            logger.info(f"Generated env_vars: {env_vars}")
+
+            # pull_from_registry можно передавать через settings
+            pull = False
+            if isinstance(settings, dict):
+                pull = settings.get("pull_from_registry", False)
+
+            if not DockerModule.generate_compose(docker_path, env_vars, pull_from_registry=pull):
+                logger.error("Failed to generate compose file")
+                return False
+
+            logger.info("docker-compose.yml generated successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Error generating docker-compose: {e}")
             return False
 
     # ---------------------------
@@ -367,9 +458,8 @@ class DockerModule(BaseModule):
 
     @staticmethod
     def image_action(data: Dict) -> Dict:
-        action = data.get('action')
         image_id = data.get('image_id')
-        if not action or not image_id:
+        if not image_id:
             return {'status': 'error', 'message': 'Invalid parameters'}
         try:
             subprocess.run(['docker', 'rmi', image_id], check=True)
@@ -416,7 +506,6 @@ class DockerModule(BaseModule):
     # ---------------------------
     # Глобальные переменные Docker
     # ---------------------------
-
     @staticmethod
     def set_globals():
         docker_installed = DockerModule.check_docker_installed()
@@ -436,49 +525,26 @@ class DockerModule(BaseModule):
             return False
 
     # ---------------------------
-    # Генерация docker-compose.yml
-    # ---------------------------
-
-    @staticmethod
-    def generate_docker_compose(settings: Dict[str, Any]) -> bool:
-        try:
-            docker_path = Path(get_global("docker_path"))
-            env_path = docker_path / ".env"
-            env_vars = DockerModule.read_docker_env(docker_path)
-
-            content = DockerModule._generate_compose_content(settings, env_vars)
-            compose_file = docker_path / "docker-compose.yml"
-            with open(compose_file, "w", encoding="utf-8") as f:
-                f.write(content)
-
-            logger.info("docker-compose.yml generated successfully")
-            return True
-        except Exception as e:
-            logger.error(f"Error generating docker-compose: {e}")
-            return False
-
-    @staticmethod
-    def _generate_compose_content(settings: Dict[str, Any], env_vars: Dict[str, str]) -> str:
-        project_name = env_vars.get("PROJECTNAME", "my_project")
-        return f"""
-version: '3.9'
-services:
-  app:
-    image: {project_name}:latest
-    build:
-      context: {settings.get("project_path", ".")}
-    environment:
-      - ENVIRONMENT={settings.get("environment", "production")}
-"""
-
-    # ---------------------------
-    # Запуск docker-compose
+    # Запуск docker-compose (включая подготовку .env и compose)
     # ---------------------------
     @staticmethod
     def run_compose(settings: Dict[str, Any] = None) -> bool:
         try:
             docker_path = Path(get_global("docker_path"))
             compose_file = docker_path / "docker-compose.yml"
+
+            # Если нужно — обновляем/генерируем .env и compose перед запуском
+            try:
+                env_vars = DockerModule.ensure_docker_env(docker_path)
+                logger.info(f".env обновлен/сгенерирован: {list(env_vars.keys())}")
+            except Exception as e:
+                logger.error(f"Error ensuring .env: {e}")
+
+            # генерируем compose если нет или хотим пересоздать
+            if not compose_file.exists():
+                logger.warning("docker-compose.yml missing, generating...")
+                if not DockerModule.generate_docker_compose(settings or {}):
+                    return False
 
             if not DockerModule.is_docker_available():
                 RUNNING_IN_CONTAINER = Path("/.dockerenv").exists()
@@ -489,19 +555,14 @@ services:
                     logger.error("Docker daemon not available. Compose cannot run.")
                     return False
 
-            if not compose_file.exists():
-                logger.warning("docker-compose.yml missing, generating...")
-                if not DockerModule.generate_docker_compose(settings or {}):
-                    return False
-
             try:
                 subprocess.run(["docker", "compose", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 compose_cmd = ["docker", "compose"]
             except Exception:
                 compose_cmd = ["docker-compose"]
 
-            env_vars = os.environ.copy()
-            logger.info(f"Running docker-compose with env: {env_vars}")
+            env_for_proc = os.environ.copy()
+            logger.info(f"Running docker-compose with env: {env_for_proc}")
 
             use_sudo = get_global("use_sudo")
             RUNNING_IN_CONTAINER = Path("/.dockerenv").exists()
@@ -525,31 +586,30 @@ services:
     # ---------------------------
     # Проверка запуска проекта
     # ---------------------------
-
     @staticmethod
     def is_project_running(project_name: str) -> bool:
-        """
-        Проверяет, запущен ли ключевой контейнер проектного проекта (например php-${PROJECTNAME}).
-        """
         from starter_files.core.utils.loader_utils import get
-
         containers = get('docker', 'get_containers', all=True) or []
-        project_container_name = f"php-{project_name}"  # ключевой контейнер проекта
+        project_container_name = f"php-{project_name}"
         return any(c['name'] == project_container_name and 'running' in c['status'].lower() for c in containers)
 
     # ---------------------------
-    # ENV DOCKER READ AND GENERATE
+    # ENV: парсинг, генерация и работа с .env
     # ---------------------------
-
     @staticmethod
     def parse_env_content(content: str) -> Tuple[Dict[str, str], List[Union[str, Tuple[str, str]]]]:
-        variables = {}
-        lines = []
+        """
+        Парсит .env (или .env.example) и возвращает (variables_dict, template_lines)
+        template_lines — список строк и (key, original_line) для сохранения структуры.
+        """
+        variables: Dict[str, str] = {}
+        lines: List[Union[str, Tuple[str, str]]] = []
         for line in content.splitlines():
             stripped = line.strip()
             if not stripped or stripped.startswith('#'):
                 lines.append(line)
                 continue
+
             if '=' in stripped:
                 key, value = stripped.split('=', 1)
                 key = key.strip()
@@ -560,30 +620,51 @@ services:
         return variables, lines
 
     @staticmethod
-    def generate_env_content(vars_dict: Dict[str, str], template_lines: List[Union[str, Tuple[str, str]]]) -> str:
-        result = []
-        vars_to_add = vars_dict.copy()
+    def generate_env_content(vars_dict: Dict[str, str],
+                             template_lines: List[Union[str, Tuple[str, str]]]) -> str:
+        """
+        Генерирует текст .env:
+         - сначала по порядку template_lines (заменяет значения, если ключ есть в vars_dict)
+         - затем добавляет оставшиеся ключи из vars_dict (в порядке, в котором они в vars_dict) как Custom variables
+        """
+        result: List[str] = []
+        template_keys: List[str] = []
+        # Копия dict чтобы не менять исходный порядок вне этой функции
+        vars_copy = dict(vars_dict)
+
         for line in template_lines:
             if isinstance(line, tuple):
                 key, original_line = line
-                if key in vars_to_add:
-                    result.append(f"{key}={vars_to_add.pop(key)}")
+                template_keys.append(key)
+                if key in vars_copy:
+                    result.append(f"{key}={vars_copy.pop(key)}")
                 else:
+                    # оставляем оригинальную строку если в vars_dict нет такого ключа
                     result.append(original_line)
             else:
                 result.append(line)
-        if vars_to_add:
-            result.append('\n# Custom variables')
-            for k, v in vars_to_add.items():
+
+        # Оставшиеся ключи — кастомные, добавляем в порядке vars_dict
+        custom_items = [(k, v) for k, v in vars_dict.items() if k not in template_keys]
+        if custom_items:
+            result.append('')  # пустая строка перед блоком
+            result.append('# Custom variables')
+            for k, v in custom_items:
                 result.append(f"{k}={v}")
+
         return '\n'.join(result)
 
     @staticmethod
     def ensure_docker_env(project_path: Path) -> Dict[str, str]:
+        """
+        Создаёт/обновляет .env в project_path на основе .env.example.
+        Возвращает итоговый словарь переменных.
+        """
         env_example_path = project_path / '.env.example'
         env_path = project_path / '.env'
 
         if not env_example_path.exists():
+            logger.debug(".env.example not found, skipping ensure_docker_env")
             return {}
 
         example_vars, example_lines = DockerModule.parse_env_content(env_example_path.read_text(encoding='utf-8'))
@@ -593,7 +674,11 @@ services:
         else:
             current_vars = {}
 
-        merged_vars = {**example_vars, **current_vars}
+        # merged: сначала example keys (to preserve example order), затем current overrides/extra keys
+        merged_vars = example_vars.copy()
+        # current_vars overrides example_vars and appends extra keys in their order
+        merged_vars.update(current_vars)
+
         content = DockerModule.generate_env_content(merged_vars, example_lines)
         env_path.write_text(content, encoding='utf-8')
         return merged_vars
@@ -608,13 +693,17 @@ services:
 
     @staticmethod
     def write_docker_env(project_path: Path, vars_dict: Dict[str, str]):
+        """
+        Перезаписывает .env используя порядок из .env.example если он есть,
+        иначе создаёт .env по порядку vars_dict.
+        """
         env_example_path = project_path / '.env.example'
         env_path = project_path / '.env'
 
         if env_example_path.exists():
             _, template_lines = DockerModule.parse_env_content(env_example_path.read_text(encoding='utf-8'))
         else:
-            # Если шаблона нет, создаём просто по ключам в vars_dict
+            # Создаём шаблонные строки на основе переданного словаря (сохранится порядок vars_dict)
             template_lines = [(k, f"{k}={v}") for k, v in vars_dict.items()]
 
         content = DockerModule.generate_env_content(vars_dict, template_lines)
