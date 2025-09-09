@@ -147,7 +147,10 @@ translations = {
                 "log_request_failed": "Не удалось получить логи",
                 "start_install_failed": "Не удалось начать установку",
                 "request_failed": "Ошибка запроса",
-                "compiler":"Компилятор"
+                "compiler":"Компилятор",
+                'install_docker_from_dashboard': 'Установите Docker из раздела Dashboard',
+                'go_to_dashboard': 'Перейти в Dashboard',
+                'install_from_dashboard': 'Установить из Dashboard'
             }
         },
 
@@ -219,7 +222,8 @@ translations = {
                 "starting_installation": "Запуск установки",
                 "installation_completed_success": "Установка завершена успешно!",
                 "installation_completed_warning": "Установка завершена с предупреждениями",
-                "installation_failed": "Установка завершена с ошибками"
+                "installation_failed": "Установка завершена с ошибками",
+                "start_project":"Запустить проект"
             },
 
             'containers': {

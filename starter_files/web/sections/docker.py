@@ -8,6 +8,7 @@ import threading
 import uuid
 
 from datetime import datetime
+from typing import Dict, List, Optional, Any
 from flask import render_template, jsonify, Response
 
 from starter_files.core.utils.i18n_utils import t
@@ -16,6 +17,9 @@ logger = LogManager.get_logger()
 
 from starter_files.core.utils.loader_utils import get
 from starter_files.core.utils.globalVars_utils import get_global
+
+from starter_files.core.software.default.settings import SettingsModule
+from starter_files.core.software.default.docker import DockerModule
 
 this_section_in_control_panel = True
 section_icon = "bi-box"
@@ -55,15 +59,22 @@ def index(data, session):
 
 def info(data, session):
     """Функция модуля docker, возвращает HTML с информацией"""
-    # Получаем информацию о Docker
-    docker_info = get('docker', 'get_docker_info') or DEFAULT_DOCKER_INFO.copy()
+    # Получаем информацию о Docker из глобальных переменных
+    docker_installed = get_global('docker_installed', False)
+    docker_compose_installed = get_global('docker_compose_installed', False)
     
-    # Проверяем установлен ли Docker
-    docker_installed = get('docker', 'check_installed') or False
+    # Получаем полную информацию о Docker
+    docker_info = DEFAULT_DOCKER_INFO.copy()
+    if docker_installed:
+        try:
+            full_info = get('docker', 'get_docker_info')
+            if full_info:
+                docker_info.update(full_info)
+        except Exception as e:
+            logger.error(f"Error getting docker info: {str(e)}")
+    
+    # Устанавливаем статусы установки из глобальных переменных
     docker_info['installed'] = docker_installed
-    
-    # Проверяем установлен ли Docker Compose
-    docker_compose_installed = get('docker', 'check_docker_compose_installed') or False
     docker_info['compose_installed'] = docker_compose_installed
     
     # Текущее время для шаблона
@@ -81,11 +92,15 @@ def containers(data, session):
     show_all = data.get('show_all', 'false') == 'true'
     containers = []
     
-    # Проверяем установлен ли Docker
-    docker_installed = get('docker', 'check_installed') or False
+    # Проверяем установлен ли Docker из глобальных переменных
+    docker_installed = get_global('docker_installed', False)
     
     if docker_installed:
-        containers = get('docker', 'get_containers', all=show_all) or []
+        try:
+            containers = get('docker', 'get_containers', all=show_all) or []
+        except Exception as e:
+            logger.error(f"Error getting containers: {str(e)}")
+            containers = []
     
     return render_template(
         'sections/docker/containers.html',
@@ -98,10 +113,14 @@ def containers(data, session):
 def images(data, session):
     """Функция модуля docker, возвращает HTML со списком образов"""
     images = []
-    docker_installed = get('docker', 'check_installed') or False
+    docker_installed = get_global('docker_installed', False)
     
     if docker_installed:
-        images = get('docker', 'get_images') or []
+        try:
+            images = get('docker', 'get_images') or []
+        except Exception as e:
+            logger.error(f"Error getting images: {str(e)}")
+            images = []
     
     return render_template(
         'sections/docker/images.html',
@@ -115,13 +134,17 @@ def logs(data, session):
     container_id = data.get('container_id')
     logs = ""
     containers_list = []
-    docker_installed = get('docker', 'check_installed') or False
+    docker_installed = get_global('docker_installed', False)
     
     if docker_installed:
-        if container_id:
-            logs = get('docker', 'get_logs', container_id) or ""
-        
-        containers_list = get('docker', 'get_containers', all=True) or []
+        try:
+            if container_id:
+                logs = get('docker', 'get_logs', container_id) or ""
+            containers_list = get('docker', 'get_containers', all=True) or []
+        except Exception as e:
+            logger.error(f"Error getting logs: {str(e)}")
+            logs = ""
+            containers_list = []
     
     return render_template(
         'sections/docker/logs.html',
@@ -135,10 +158,14 @@ def logs(data, session):
 def networks(data, session):
     """Функция модуля docker, возвращает HTML со списком сетей"""
     networks = []
-    docker_installed = get('docker', 'check_installed') or False
+    docker_installed = get_global('docker_installed', False)
     
     if docker_installed:
-        networks = get('docker', 'get_networks') or []
+        try:
+            networks = get('docker', 'get_networks') or []
+        except Exception as e:
+            logger.error(f"Error getting networks: {str(e)}")
+            networks = []
     
     return render_template(
         'sections/docker/networks.html',
@@ -150,10 +177,14 @@ def networks(data, session):
 def volumes(data, session):
     """Функция модуля docker, возвращает HTML со списком томов"""
     volumes = []
-    docker_installed = get('docker', 'check_installed') or False
+    docker_installed = get_global('docker_installed', False)
     
     if docker_installed:
-        volumes = get('docker', 'get_volumes') or []
+        try:
+            volumes = get('docker', 'get_volumes') or []
+        except Exception as e:
+            logger.error(f"Error getting volumes: {str(e)}")
+            volumes = []
     
     return render_template(
         'sections/docker/volumes.html',
@@ -171,15 +202,19 @@ def container_action(data, session):
     if not container_id or not action:
         return {'status': 'error', 'message': 'Missing parameters'}
     
-    # Проверяем установлен ли Docker
-    docker_installed = get('docker', 'check_installed') or False
+    # Проверяем установлен ли Docker из глобальных переменных
+    docker_installed = get_global('docker_installed', False)
     if not docker_installed:
         return {'status': 'error', 'message': 'Docker is not installed'}
     
-    result = get('docker', 'container_action', {
-        'action': action,
-        'container_id': container_id
-    }) or {'status': 'error', 'message': 'Unknown error'}
+    try:
+        result = get('docker', 'container_action', {
+            'action': action,
+            'container_id': container_id
+        }) or {'status': 'error', 'message': 'Unknown error'}
+    except Exception as e:
+        logger.error(f"Error performing container action: {str(e)}")
+        result = {'status': 'error', 'message': 'Docker service unavailable'}
     
     return result
 
@@ -191,31 +226,55 @@ def image_action(data, session):
     if not image_id or not action:
         return {'status': 'error', 'message': 'Missing parameters'}
     
-    docker_installed = get('docker', 'check_installed') or False
+    docker_installed = get_global('docker_installed', False)
     if not docker_installed:
         return {'status': 'error', 'message': 'Docker is not installed'}
     
-    result = get('docker', 'image_action', {
-        'action': action,
-        'image_id': image_id
-    }) or {'status': 'error', 'message': 'Unknown error'}
+    try:
+        result = get('docker', 'image_action', {
+            'action': action,
+            'image_id': image_id
+        }) or {'status': 'error', 'message': 'Unknown error'}
+    except Exception as e:
+        logger.error(f"Error performing image action: {str(e)}")
+        result = {'status': 'error', 'message': 'Docker service unavailable'}
     
     return result
 
 def restart_docker(data, session):
     """Перезапуск Docker сервиса"""
-    docker_installed = get('docker', 'check_installed') or False
+    docker_installed = get_global('docker_installed', False)
     if not docker_installed:
         return {'status': 'error', 'message': 'Docker is not installed'}
     
-    result = get('docker', 'restart_docker') or {'status': 'error', 'message': 'Unknown error'}
+    try:
+        result = get('docker', 'restart_docker') or {'status': 'error', 'message': 'Unknown error'}
+    except Exception as e:
+        logger.error(f"Error restarting docker: {str(e)}")
+        result = {'status': 'error', 'message': 'Docker service unavailable'}
+    
     return result
 
 def prune_system(data, session):
     """Очистка неиспользуемых объектов Docker"""
-    docker_installed = get('docker', 'check_installed') or False
+    docker_installed = get_global('docker_installed', False)
     if not docker_installed:
         return {'status': 'error', 'message': 'Docker is not installed'}
     
-    result = get('docker', 'prune_system') or {'status': 'error', 'message': 'Unknown error'}
+    try:
+        result = get('docker', 'prune_system') or {'status': 'error', 'message': 'Unknown error'}
+    except Exception as e:
+        logger.error(f"Error pruning system: {str(e)}")
+        result = {'status': 'error', 'message': 'Docker service unavailable'}
+    
     return result
+
+# ======================== ПРОЕКТ ========================================
+def start_project(data, session):
+    try:
+        settings = SettingsModule.get_settings()
+        result = DockerModule.run_compose(settings)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+

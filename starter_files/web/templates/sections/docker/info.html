@@ -1,5 +1,6 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('docker_info') }}</h1>
         <div class="btn-toolbar mb-2 mb-md-0">
             <button class="btn btn-sm btn-outline-secondary" id="refreshDockerBtn">
                 <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
@@ -14,25 +15,24 @@
         <p>{{ t('docker_installation_required') }}</p>
         <hr>
         <p class="mb-0">
-            <a href="https://docs.docker.com/get-docker/" target="_blank" class="alert-link">
-                {{ t('install_docker_guide') }}
-            </a>
+            {{ t('install_docker_from_dashboard') }}
+            <a href="/?section=dashboard" class="alert-link">{{ t('go_to_dashboard') }}</a>
         </p>
     </div>
     {% endif %}
 
     <!-- Карточки с общей информацией -->
     <div class="row mb-4">
-        <div class="col-md-3">
+        <!-- Docker Version -->
+        <div class="col-md-3 mb-3">
             <div class="card h-100">
                 <div class="card-header bg-primary text-white">
                     <i class="bi bi-box me-2"></i> {{ t('docker_version') }}
                 </div>
                 <div class="card-body">
-                    <p class="card-text">{{ docker_info.version }}</p>
-                    <p class="card-text"><small class="text-muted">{{ t('last_updated') }}: {{ current_time }}</small></p>
+                    <h5 class="card-title">{{ docker_info.version }}</h5>
                     <p class="card-text">
-                        <span class="badge bg-{% if docker_info.installed %}success{% else %}danger{% endif %}">
+                        <span class="badge bg-{% if docker_info.installed %}success{% else %}danger{% endif %}" id="dockerStatusBadge">
                             {% if docker_info.installed %}
                                 {{ t('installed') }}
                             {% else %}
@@ -40,43 +40,49 @@
                             {% endif %}
                         </span>
                     </p>
+                    <p class="card-text"><small class="text-muted">{{ t('last_updated') }}: {{ current_time }}</small></p>
                 </div>
             </div>
         </div>
         
-        <div class="col-md-3">
+        <!-- Containers -->
+        <div class="col-md-3 mb-3">
             <div class="card h-100">
                 <div class="card-header bg-success text-white">
                     <i class="bi bi-collection me-2"></i> {{ t('containers') }}
                 </div>
                 <div class="card-body">
-                    <p class="card-text"><strong>{{ t('total') }}:</strong> {{ docker_info.containers.total }}</p>
-                    <p class="card-text"><strong>{{ t('running') }}:</strong> {{ docker_info.containers.running }}</p>
-                    <p class="card-text"><strong>{{ t('stopped') }}:</strong> {{ docker_info.containers.stopped }}</p>
+                    <h5 class="card-title">{{ docker_info.containers.total }}</h5>
+                    <p class="card-text">
+                        <span class="badge bg-success">{{ docker_info.containers.running }} {{ t('running') }}</span>
+                        <span class="badge bg-secondary">{{ docker_info.containers.stopped }} {{ t('stopped') }}</span>
+                    </p>
                 </div>
             </div>
         </div>
         
-        <div class="col-md-3">
+        <!-- Images -->
+        <div class="col-md-3 mb-3">
             <div class="card h-100">
                 <div class="card-header bg-info text-white">
                     <i class="bi bi-images me-2"></i> {{ t('images') }}
                 </div>
                 <div class="card-body">
-                    <p class="card-text"><strong>{{ t('total_images') }}:</strong> {{ docker_info.images }}</p>
-                    <p class="card-text"><strong>{{ t('disk_usage') }}:</strong> {{ docker_info.system.disk_usage }}</p>
+                    <h5 class="card-title">{{ docker_info.images }}</h5>
+                    <p class="card-text">{{ docker_info.system.disk_usage }}</p>
                 </div>
             </div>
         </div>
         
-        <div class="col-md-3">
+        <!-- Resources -->
+        <div class="col-md-3 mb-3">
             <div class="card h-100">
                 <div class="card-header bg-warning text-dark">
-                    <i class="bi bi-diagram-3 me-2"></i> {{ t('resources') }}
+                    <i class="bi bi-cpu me-2"></i> {{ t('resources') }}
                 </div>
                 <div class="card-body">
-                    <p class="card-text"><strong>{{ t('cpu_usage') }}:</strong> {{ docker_info.system.cpu_usage }}</p>
-                    <p class="card-text"><strong>{{ t('memory_usage') }}:</strong> {{ docker_info.system.memory_usage }}</p>
+                    <p class="card-text mb-1"><strong>{{ t('cpu_usage') }}:</strong> {{ docker_info.system.cpu_usage }}</p>
+                    <p class="card-text mb-0"><strong>{{ t('memory_usage') }}:</strong> {{ docker_info.system.memory_usage }}</p>
                 </div>
             </div>
         </div>
@@ -84,8 +90,8 @@
 
     <!-- Подробная информация -->
     <div class="row">
-        <div class="col-md-6">
-            <div class="card h-100 mb-4">
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
                 <div class="card-header">
                     <i class="bi bi-stack me-2"></i> {{ t('docker_compose') }}
                 </div>
@@ -96,7 +102,7 @@
                                 <tr>
                                     <td><strong>{{ t('installed') }}</strong></td>
                                     <td>
-                                        <span class="badge bg-{% if docker_info.compose_installed %}success{% else %}danger{% endif %}">
+                                        <span class="badge bg-{% if docker_info.compose_installed %}success{% else %}danger{% endif %}" id="composeStatusBadge">
                                             {% if docker_info.compose_installed %}
                                                 {{ t('installed') }}
                                             {% else %}
@@ -120,27 +126,30 @@
             </div>
         </div>
         
-        <div class="col-md-6">
-            <div class="card h-100 mb-4">
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
                 <div class="card-header">
                     <i class="bi bi-gear me-2"></i> {{ t('quick_actions') }}
                 </div>
                 <div class="card-body">
                     <div class="d-grid gap-2">
-                        <!-- Добавляем кнопку установки -->
-                        <button class="btn btn-success" id="installDockerBtn" {% if docker_info.installed %}disabled{% endif %}>
-                            <i class="bi bi-download me-2"></i> {{ t('install_docker') }}
-                        </button>
+                        <!-- Кнопка перезапуска Docker -->
                         <button class="btn btn-outline-primary" id="restartDockerBtn" {% if not docker_info.installed %}disabled{% endif %}>
                             <i class="bi bi-arrow-clockwise me-2"></i> {{ t('restart_docker') }}
                         </button>
+                        
+                        <!-- Кнопка очистки системы -->
                         <button class="btn btn-outline-secondary" id="pruneSystemBtn" {% if not docker_info.installed %}disabled{% endif %}>
                             <i class="bi bi-trash me-2"></i> {{ t('prune_system') }}
                         </button>
                     </div>
+                    
                     {% if not docker_info.installed %}
-                    <div class="alert alert-warning mt-3 mb-0" role="alert">
-                        {{ t('docker_required_for_actions') }}
+                    <div class="alert alert-info mt-3 mb-0" role="alert">
+                        <small>
+                            {{ t('docker_required_for_actions') }}
+                            <a href="/?section=dashboard" class="alert-link">{{ t('install_from_dashboard') }}</a>
+                        </small>
                     </div>
                     {% endif %}
                 </div>
@@ -148,66 +157,88 @@
         </div>
     </div>
 </div>
-<!-- Модальное окно установки Docker -->
-<div class="modal fade" id="dockerInstallModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-fullscreen">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">{{ t('docker_installation') }}</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="{{ t('close') }}"></button>
-            </div>
-            <div class="modal-body">
-                <div class="d-flex justify-content-center mb-3">
-                    <div class="spinner-border text-primary" role="status" id="installSpinner">
-                        <span class="visually-hidden">{{ t('loading') }}...</span>
-                    </div>
-                </div>
-                
-                <div class="alert alert-info" id="installStatus">
-                    {{ t('preparing_installation') }}
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        {{ t('installation_logs') }}
-                        <button class="btn btn-sm btn-outline-secondary float-end" id="refreshLogsBtn">
-                            <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
-                        </button>
-                    </div>
-                    <div class="card-body bg-dark text-white" style="height: 50vh; overflow-y: auto;">
-                        <pre id="installLogs" class="mb-0"></pre>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeInstallBtn">
-                    {{ t('close') }}
-                </button>
-                <button type="button" class="btn btn-success" id="finishInstallBtn" style="display: none;">
-                    <i class="bi bi-check-circle me-1"></i> {{ t('finish') }}
-                </button>
-                <button type="button" class="btn btn-outline-primary" id="downloadLogsBtn" style="display: none;">
-                    <i class="bi bi-download me-1"></i> {{ t('download_logs') }}
-                </button>
-            </div>
-        </div>
-    </div>
+
+<hr />
+{% if docker_info.containers.running == 0 %}
+<div class="d-grid gap-2 mt-3">
+    <button class="btn btn-success" id="startProjectBtn">
+        <i class="bi bi-play-circle me-2"></i> {{ t('start_project') }}
+    </button>
 </div>
+{% endif %}
+
 <script>
 $(document).ready(function() {
+    // Обработчик кнопки запуска проекта
+    $('#startProjectBtn').on('click', function() {
+        $.post('/', {
+            section: 'docker',
+            action: 'start_project'
+        }, function(response) {
+            if(response.status === 'success') {
+                toastr.success(response.message);
+                $('#refreshDockerBtn').click();
+            } else {
+                toastr.error(response.message);
+            }
+        }).fail(function() {
+            toastr.error('{{ t("request_failed") }}');
+        });
+    });
+
+    // Функция для обновления статуса кнопок
+    function updateButtonStates() {
+        const dockerInstalled = {{ 'true' if docker_info.installed else 'false' }};
+        const composeInstalled = {{ 'true' if docker_info.compose_installed else 'false' }};
+        
+        // Обновляем кнопки
+        $('#restartDockerBtn').prop('disabled', !dockerInstalled);
+        $('#pruneSystemBtn').prop('disabled', !dockerInstalled);
+        
+        // Обновляем бейджи
+        $('#dockerStatusBadge')
+            .removeClass('bg-danger bg-success')
+            .addClass(dockerInstalled ? 'bg-success' : 'bg-danger')
+            .text(dockerInstalled ? '{{ t("installed") }}' : '{{ t("not_installed") }}');
+            
+        $('#composeStatusBadge')
+            .removeClass('bg-danger bg-success')
+            .addClass(composeInstalled ? 'bg-success' : 'bg-danger')
+            .text(composeInstalled ? '{{ t("installed") }}' : '{{ t("not_installed") }}');
+    }
+
+    // Инициализация статуса кнопок
+    updateButtonStates();
+
     // Обработчик кнопки обновления
     $('#refreshDockerBtn').on('click', function() {
-        $('#mainMenu a[data-section="docker"]').click();
+        // Перезагружаем содержимое Docker info
+        $.post('/', {
+            section: 'docker',
+            action: 'info'
+        }, function(html) {
+            $('#dockerContent').html(html);
+            updateButtonStates();
+        }).fail(function() {
+            alert('{{ t("request_failed") }}');
+        });
     });
 
     // Обработчик кнопки перезапуска Docker
     $('#restartDockerBtn').on('click', function() {
         if(confirm('{{ t("confirm_restart_docker") }}')) {
-            $.post('/', {section: 'docker', action: 'restart_docker'}, function(response) {
-                alert(response.message);
-                $('#refreshDockerBtn').click();
+            $.post('/', {
+                section: 'docker', 
+                action: 'restart_docker'
+            }, function(response) {
+                if(response.status === 'success') {
+                    toastr.success(response.message);
+                    $('#refreshDockerBtn').click();
+                } else {
+                    toastr.error(response.message);
+                }
             }).fail(function() {
-                alert('{{ t("request_failed") }}');
+                toastr.error('{{ t("request_failed") }}');
             });
         }
     });
@@ -215,190 +246,20 @@ $(document).ready(function() {
     // Обработчик кнопки очистки системы
     $('#pruneSystemBtn').on('click', function() {
         if(confirm('{{ t("confirm_prune_system") }}')) {
-            $.post('/', {section: 'docker', action: 'prune_system'}, function(response) {
-                alert(response.message);
-                $('#refreshDockerBtn').click();
-            }).fail(function() {
-                alert('{{ t("request_failed") }}');
-            });
-        }
-    });
-
-    // Обработчик кнопки установки Docker
-    $('#installDockerBtn').on('click', function() {
-        if(confirm('{{ t("confirm_install_docker") }}')) {
-            const $btn = $(this);
-            $btn.prop('disabled', true);
-            
-            // Показать модальное окно
-            const installModal = new bootstrap.Modal('#dockerInstallModal');
-            installModal.show();
-            
-            // Сбросить состояние модального окна
-            $('#installLogs').text('');
-            $('#installStatus').removeClass('alert-success alert-danger alert-warning')
-                               .addClass('alert-info')
-                               .text('{{ t("starting_installation") }}');
-            $('#installSpinner').show();
-            $('#finishInstallBtn').hide();
-            $('#downloadLogsBtn').hide();
-            
-            // Начать установку
-            fetch('/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Accept': 'application/json'
-                },
-                body: new URLSearchParams({
-                    'section': 'docker',
-                    'action': 'install_docker'
-                })
-            })
-            .then(response => response.json())
-            .then(response => {
-                if (response.status === 'started') {
-                    const installId = response.install_id;
-                    
-                    // Сохраняем ID установки
-                    $('#dockerInstallModal').data('install-id', installId);
-                    
-                    // Функция обновления логов
-                    function updateLogs() {
-                        fetch('/', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                                'Accept': 'application/json'
-                            },
-                            body: new URLSearchParams({
-                                'section': 'docker',
-                                'action': 'get_install_logs',
-                                'install_id': installId
-                            })
-                        })
-                        .then(response => response.json())
-                        .then(logResponse => {
-                            if (logResponse.status === 'success') {
-                                $('#installLogs').text(logResponse.logs);
-                                
-                                // Автоскролл к последней записи
-                                const logContainer = $('#installLogs').parent();
-                                logContainer.scrollTop(logContainer[0].scrollHeight);
-                                
-                                // Проверяем завершение установки по логам
-                                if (logResponse.logs.includes("Docker installed successfully!") || 
-                                    logResponse.logs.includes("Installation completed but Docker not detected") || 
-                                    logResponse.logs.includes("Installation failed:")) {
-                                    
-                                    // Установка завершена
-                                    clearInterval(logInterval);
-                                    $('#installSpinner').hide();
-                                    $('#finishInstallBtn').show();
-                                    $('#downloadLogsBtn').show();
-                                    
-                                    if (logResponse.logs.includes("Docker installed successfully!")) {
-                                        $('#installStatus').removeClass('alert-info')
-                                                          .addClass('alert-success')
-                                                          .text('{{ t("installation_completed_success") }}');
-                                    } else if (logResponse.logs.includes("Installation completed but Docker not detected")) {
-                                        $('#installStatus').removeClass('alert-info')
-                                                          .addClass('alert-warning')
-                                                          .text('{{ t("installation_completed_warning") }}');
-                                    } else {
-                                        $('#installStatus').removeClass('alert-info')
-                                                          .addClass('alert-danger')
-                                                          .text('{{ t("installation_failed") }}');
-                                    }
-                                }
-                            } else {
-                                $('#installStatus').append('<br>' + logResponse.message);
-                            }
-                        })
-                        .catch(error => {
-                            $('#installStatus').append('<br>{{ t("log_request_failed") }}');
-                        });
-                    }
-                    
-                    // Первое обновление
-                    updateLogs();
-                    
-                    // Обновляем логи каждые 2 секунды
-                    const logInterval = setInterval(updateLogs, 2000);
-                    
-                    // Обработчик кнопки обновления логов
-                    $('#refreshLogsBtn').on('click', updateLogs);
-                    
-                    // Обработчик кнопки завершения
-                    $('#finishInstallBtn').on('click', function() {
-                        installModal.hide();
-                        $('#refreshDockerBtn').click();
-                        $btn.prop('disabled', false);
-                    });
-                    
-                    // Обработчик кнопки скачивания логов
-                    $('#downloadLogsBtn').on('click', function() {
-                        const installId = $('#dockerInstallModal').data('install-id');
-                        if (!installId) return;
-                        
-                        // Создаем временную форму для скачивания
-                        const form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = '/';
-                        form.style.display = 'none';
-                        
-                        // Добавляем параметры
-                        const params = {
-                            'section': 'docker',
-                            'action': 'download_install_logs',
-                            'install_id': installId
-                        };
-                        
-                        for (const [key, value] of Object.entries(params)) {
-                            const input = document.createElement('input');
-                            input.type = 'hidden';
-                            input.name = key;
-                            input.value = value;
-                            form.appendChild(input);
-                        }
-                        
-                        // Добавляем форму в документ и отправляем
-                        document.body.appendChild(form);
-                        form.submit();
-                        document.body.removeChild(form);
-                    });
-                    
-                    // Обработчик закрытия модального окна
-                    $('#closeInstallBtn').on('click', function() {
-                        clearInterval(logInterval);
-                        $btn.prop('disabled', false);
-                    });
-                    
-                    // Сохраняем interval ID для последующей очистки
-                    $('#dockerInstallModal').data('log-interval', logInterval);
+            $.post('/', {
+                section: 'docker', 
+                action: 'prune_system'
+            }, function(response) {
+                if(response.status === 'success') {
+                    toastr.success(response.message);
+                    $('#refreshDockerBtn').click();
                 } else {
-                    $('#installStatus').removeClass('alert-info')
-                                      .addClass('alert-danger')
-                                      .text(response.message || '{{ t("start_install_failed") }}');
-                    $btn.prop('disabled', false);
+                    toastr.error(response.message);
                 }
-            })
-            .catch(error => {
-                $('#installStatus').removeClass('alert-info')
-                                  .addClass('alert-danger')
-                                  .text('{{ t("request_failed") }}');
-                $btn.prop('disabled', false);
+            }).fail(function() {
+                toastr.error('{{ t("request_failed") }}');
             });
         }
-    });
-
-    // Очистка интервала при закрытии модального окна
-    $('#dockerInstallModal').on('hidden.bs.modal', function() {
-        const logInterval = $(this).data('log-interval');
-        if (logInterval) {
-            clearInterval(logInterval);
-        }
-        $('#installDockerBtn').prop('disabled', false);
     });
 });
 </script>
