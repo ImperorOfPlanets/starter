@@ -534,100 +534,76 @@ class DockerModule(BaseModule):
         try:
             docker_path = Path(get_global("docker_path"))
             compose_file = docker_path / "docker-compose.yml"
-
             logger.info(f"[run_compose] Starting docker-compose run at {docker_path}")
-            logger.info(f"[run_compose] Compose file expected at: {compose_file}")
 
-            # -------------------------------
-            # 1. Обновляем/генерируем .env
-            # -------------------------------
-            logger.info("[run_compose] Ensuring .env file exists and up-to-date...")
-            try:
-                env_vars = DockerModule.ensure_docker_env(docker_path)
-                logger.info(f"[run_compose] .env vars ({len(env_vars)}): {env_vars}")
-            except Exception as e:
-                logger.error(f"[run_compose] Error ensuring .env: {e}")
-
-            # -------------------------------
-            # 2. Генерируем docker-compose.yml всегда
-            # -------------------------------
-            logger.info("[run_compose] Generating docker-compose.yml...")
+            # Генерация .env и compose
+            env_vars = DockerModule.ensure_docker_env(docker_path)
             if not DockerModule.generate_docker_compose(settings or {}):
                 logger.error("[run_compose] Failed to generate docker-compose.yml")
                 return False
-            logger.info("[run_compose] docker-compose.yml generated successfully")
 
-            # -------------------------------
-            # 3. Проверяем Docker daemon
-            # -------------------------------
-            logger.info("[run_compose] Checking Docker availability...")
+            # Проверка Docker daemon
             if not DockerModule.is_docker_available():
                 RUNNING_IN_CONTAINER = Path("/.dockerenv").exists()
                 if RUNNING_IN_CONTAINER:
                     logger.warning("[run_compose] Inside container without Docker. Compose skipped.")
                     return True
-                else:
-                    logger.error("[run_compose] Docker daemon not available. Compose cannot run.")
-                    return False
-            logger.info("[run_compose] Docker daemon is available")
+                logger.error("[run_compose] Docker daemon not available.")
+                return False
 
-            # -------------------------------
-            # 4. Определяем команду docker compose
-            # -------------------------------
+            # Определяем команду docker compose
             try:
                 subprocess.run(["docker", "compose", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 compose_cmd = ["docker", "compose"]
-                logger.info("[run_compose] Using `docker compose` command")
             except Exception:
                 compose_cmd = ["docker-compose"]
-                logger.info("[run_compose] Falling back to `docker-compose` command")
 
-            # -------------------------------
-            # 5. Подготовка окружения и sudo
-            # -------------------------------
-            env_for_proc = os.environ.copy()
-            logger.info(f"[run_compose] Environment for subprocess contains {len(env_for_proc)} keys")
-
+            # Используем sudo, если нужно
             use_sudo = get_global("use_sudo")
-            RUNNING_IN_CONTAINER = Path("/.dockerenv").exists()
-            if use_sudo and not RUNNING_IN_CONTAINER:
+            if use_sudo and not Path("/.dockerenv").exists():
                 compose_cmd.insert(0, "sudo")
-                logger.info("[run_compose] Prepending sudo to command")
 
             # -------------------------------
-            # 6. Сбрасываем старые контейнеры и сети
+            # 1. Очищаем старые контейнеры и сети
             # -------------------------------
             down_cmd = compose_cmd + ["-f", str(compose_file), "down", "--remove-orphans"]
-            logger.info(f"[run_compose] Running command: {' '.join(down_cmd)}")
-            try:
-                result = subprocess.run(down_cmd, cwd=str(docker_path), check=True, capture_output=True, text=True)
-                logger.debug(f"[run_compose] down stdout: {result.stdout}")
-                logger.debug(f"[run_compose] down stderr: {result.stderr}")
-            except subprocess.CalledProcessError as e:
-                logger.warning(f"[run_compose] docker compose down failed: {e}. Continuing...")
+            logger.info(f"[run_compose] Running: {' '.join(down_cmd)}")
+            subprocess.run(down_cmd, cwd=str(docker_path), check=True)
 
             # -------------------------------
-            # 7. Запуск docker-compose
+            # 2. Получаем список образов из docker-compose
             # -------------------------------
-            up_cmd = compose_cmd + ["-f", str(compose_file), "up", "-d", "--build", "--force-recreate"]
-            logger.info(f"[run_compose] Running command: {' '.join(up_cmd)}")
             try:
-                result = subprocess.run(up_cmd, cwd=str(docker_path), check=True, capture_output=True, text=True)
-                logger.info(f"[run_compose] Docker Compose started successfully")
-                logger.debug(f"[run_compose] up stdout: {result.stdout}")
-                logger.debug(f"[run_compose] up stderr: {result.stderr}")
-            except subprocess.CalledProcessError as e:
-                logger.error(f"[run_compose] Docker Compose error (CalledProcessError): {e}")
-                logger.error(f"[run_compose] stdout: {e.stdout}")
-                logger.error(f"[run_compose] stderr: {e.stderr}")
+                result = subprocess.run(compose_cmd + ["-f", str(compose_file), "images", "-q"],
+                                        cwd=str(docker_path), capture_output=True, text=True, check=True)
+                image_ids = [i.strip() for i in result.stdout.splitlines() if i.strip()]
+                for img_id in image_ids:
+                    logger.info(f"[run_compose] Removing old image: {img_id}")
+                    subprocess.run(["docker", "rmi", "-f", img_id], check=False)
+            except Exception as e:
+                logger.warning(f"[run_compose] Failed to list/remove images: {e}")
+
+            # -------------------------------
+            # 3. Запуск docker-compose с билдом и логами в реальном времени
+            # -------------------------------
+            up_cmd = compose_cmd + ["-f", str(compose_file), "up", "--build", "--force-recreate"]
+            logger.info(f"[run_compose] Running: {' '.join(up_cmd)}")
+            process = subprocess.Popen(up_cmd, cwd=str(docker_path), stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True)
+            for line in iter(process.stdout.readline, ''):
+                if line:
+                    logger.info(line.strip())
+            return_code = process.wait()
+            if return_code != 0:
+                logger.error(f"[run_compose] docker-compose exited with code {return_code}")
                 return False
 
+            logger.info("[run_compose] Docker Compose started successfully")
             return True
 
         except Exception as e:
             logger.error(f"[run_compose] Unexpected error: {e}")
             return False
-
 
 
     # ---------------------------
