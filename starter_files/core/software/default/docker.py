@@ -534,6 +534,13 @@ class DockerModule(BaseModule):
         try:
             docker_path = Path(get_global("docker_path"))
             compose_file = docker_path / "docker-compose.yml"
+
+            # === ДОБАВЛЕНО: создаём лог-файл с датой ===
+            logs_dir = docker_path / "logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            log_file_path = logs_dir / f"docker_compose_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+            log_file = open(log_file_path, "w", encoding="utf-8")
+            logger.info(f"[run_compose] Logging output to {log_file_path}")
             
             # ДОБАВЛЯЕМ ПРОВЕРКУ РАБОЧЕЙ ПАПКИ
             logger.info(f"[run_compose] ===== START DOCKER COMPOSE =====")
@@ -646,20 +653,32 @@ class DockerModule(BaseModule):
             # -------------------------------
             # 3. Запуск docker-compose с билдом и логами в реальном времени
             # -------------------------------
+            # 3. Запуск docker-compose с билдом и логами в реальном времени
             logger.info("[run_compose] Starting docker-compose...")
             up_cmd = compose_cmd + ["-f", str(compose_file), "up", "--build", "--force-recreate"]
             logger.info(f"[run_compose] Command: {' '.join(up_cmd)}")
             logger.info(f"[run_compose] Working dir: {docker_path}")
             
-            process = subprocess.Popen(up_cmd, cwd=str(docker_path), stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True)
+            process = subprocess.Popen(
+                up_cmd,
+                cwd=str(docker_path),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
             
             logger.info("[run_compose] === DOCKER COMPOSE OUTPUT ===")
             for line in iter(process.stdout.readline, ''):
                 if line:
                     logger.info(f"[compose] {line.strip()}")
-            
+                    log_file.write(line)        # пишем в файл
+                    log_file.flush()
+
             return_code = process.wait()
+            log_file.close()  # закрываем лог-файл
+
             if return_code != 0:
                 logger.error(f"[run_compose] docker-compose exited with code {return_code}")
                 return False
