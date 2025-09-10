@@ -534,34 +534,6 @@ class DockerModule(BaseModule):
     # ---------------------------
     @staticmethod
     def run_compose(settings: Dict[str, Any] = None) -> bool:
-        # ---------------------------
-        # Вставляем в run_compose перед генерацией .env и docker-compose.yml
-        # ---------------------------
-
-        # Проверка: внутри контейнера
-        running_in_container = Path("/.dockerenv").exists()
-        if running_in_container:
-            logger.info("[run_compose] Running inside a Docker container.")
-
-            container_name = DockerModule.get_current_container_name()
-            if container_name:
-                logger.info(f"[run_compose] Current container name: {container_name}")
-                mounts = DockerModule.get_container_mounts(container_name)
-                logger.info(f"[run_compose] Detected mounts: {mounts}")
-
-                # Подставляем mounts в env_vars
-                env_vars = DockerModule.ensure_docker_env(docker_path)
-                for container_path, host_path in mounts.items():
-                    # Преобразуем путь контейнера в переменную окружения, пример:
-                    var_name = f"PATH_{container_path.strip('/').upper().replace('/', '_')}"
-                    env_vars[var_name] = host_path
-
-                # Перезаписываем .env с новыми переменными
-                DockerModule.write_docker_env(docker_path, env_vars)
-                logger.info("[run_compose] .env updated with container mounts")
-            else:
-                logger.warning("[run_compose] Could not determine container name.")
-
         file_handler = None
         orig_handlers = []
         orig_level = logger.level
@@ -604,27 +576,6 @@ class DockerModule(BaseModule):
                         logger.info(f"[run_compose]   DIR:  {item.name}/")
                     else:
                         logger.info(f"[run_compose]   FILE: {item.name}")
-            
-            # Проверяем существование critical files
-            critical_files = [
-                "configs/init/start-php.sh",
-                "configs/init/start-vpn.sh", 
-                "configs/init/healthcheck-vpn.sh",
-                "docker-compose.example"
-            ]
-            
-            logger.info("[run_compose] Checking critical files:")
-            for rel_path in critical_files:
-                file_path = docker_path / rel_path
-                exists = file_path.exists()
-                is_file = file_path.is_file() if exists else False
-                logger.info(f"[run_compose]   {rel_path}: {'FILE' if is_file else 'DIR' if exists else 'MISSING'}")
-                if exists and is_file:
-                    try:
-                        perms = oct(file_path.stat().st_mode)[-3:]
-                        logger.info(f"[run_compose]     Permissions: {perms}")
-                    except Exception as e:
-                        logger.warning(f"[run_compose]     Cannot check permissions: {e}")
 
             # ВОССТАНАВЛИВАЕМ ПРАВА ПЕРЕД ЗАПУСКОМ
             permission_result = DockerModule.fix_executable_permissions(docker_path)
@@ -632,6 +583,30 @@ class DockerModule(BaseModule):
                 logger.warning(f"[run_compose] Ошибка при восстановлении прав: {permission_result['message']}")
             else:
                 logger.info(f"[run_compose] Восстановление прав: {permission_result['message']}")
+
+            # Проверка: внутри контейнера
+            running_in_container = Path("/.dockerenv").exists()
+            if running_in_container:
+                logger.info("[run_compose] Running inside a Docker container.")
+
+                container_name = DockerModule.get_current_container_name()
+                if container_name:
+                    logger.info(f"[run_compose] Current container name: {container_name}")
+                    mounts = DockerModule.get_container_mounts(container_name)
+                    logger.info(f"[run_compose] Detected mounts: {mounts}")
+
+                    # Подставляем mounts в env_vars
+                    env_vars = DockerModule.ensure_docker_env(docker_path)
+                    for container_path, host_path in mounts.items():
+                        # Преобразуем путь контейнера в переменную окружения, пример:
+                        var_name = f"PATH_{container_path.strip('/').upper().replace('/', '_')}"
+                        env_vars[var_name] = host_path
+
+                    # Перезаписываем .env с новыми переменными
+                    DockerModule.write_docker_env(docker_path, env_vars)
+                    logger.info("[run_compose] .env updated with container mounts")
+                else:
+                    logger.warning("[run_compose] Could not determine container name.")
 
             # Генерация .env и compose
             logger.info("[run_compose] Generating .env and docker-compose.yml...")
@@ -646,16 +621,6 @@ class DockerModule(BaseModule):
                 logger.info(f"[run_compose] Compose file generated: {compose_size} bytes")
             else:
                 logger.error("[run_compose] Compose file was not generated!")
-                return False
-
-            # Проверка Docker daemon
-            logger.info("[run_compose] Checking Docker daemon...")
-            if not DockerModule.is_docker_available():
-                RUNNING_IN_CONTAINER = Path("/.dockerenv").exists()
-                if RUNNING_IN_CONTAINER:
-                    logger.warning("[run_compose] Inside container without Docker. Compose skipped.")
-                    return True
-                logger.error("[run_compose] Docker daemon not available.")
                 return False
 
             # Определяем команду docker compose
