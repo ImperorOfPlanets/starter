@@ -230,6 +230,9 @@ class DockerModule(BaseModule):
                 compose_example = docker_dir / "docker-compose.template"
             compose_output = docker_dir / "docker-compose.yml"
 
+            # Добавил для замены DOCKER_PATH на пути
+            env_vars["DOCKER_PATH"] = str(docker_dir)
+
             if not compose_example.exists():
                 logger.error(f"[generate_compose] Compose template not found: {compose_example}")
                 return False
