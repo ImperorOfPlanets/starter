@@ -534,6 +534,34 @@ class DockerModule(BaseModule):
     # ---------------------------
     @staticmethod
     def run_compose(settings: Dict[str, Any] = None) -> bool:
+        # ---------------------------
+        # Вставляем в run_compose перед генерацией .env и docker-compose.yml
+        # ---------------------------
+
+        # Проверка: внутри контейнера
+        running_in_container = Path("/.dockerenv").exists()
+        if running_in_container:
+            logger.info("[run_compose] Running inside a Docker container.")
+
+            container_name = DockerModule.get_current_container_name()
+            if container_name:
+                logger.info(f"[run_compose] Current container name: {container_name}")
+                mounts = DockerModule.get_container_mounts(container_name)
+                logger.info(f"[run_compose] Detected mounts: {mounts}")
+
+                # Подставляем mounts в env_vars
+                env_vars = DockerModule.ensure_docker_env(docker_path)
+                for container_path, host_path in mounts.items():
+                    # Преобразуем путь контейнера в переменную окружения, пример:
+                    var_name = f"PATH_{container_path.strip('/').upper().replace('/', '_')}"
+                    env_vars[var_name] = host_path
+
+                # Перезаписываем .env с новыми переменными
+                DockerModule.write_docker_env(docker_path, env_vars)
+                logger.info("[run_compose] .env updated with container mounts")
+            else:
+                logger.warning("[run_compose] Could not determine container name.")
+
         file_handler = None
         orig_handlers = []
         orig_level = logger.level
@@ -814,6 +842,59 @@ class DockerModule(BaseModule):
         
         return result
 
+    @staticmethod
+    def get_container_mounts(container_name: str) -> dict:
+        """
+        Возвращает словарь монтирований контейнера:
+        {
+            '/container/path': '/host/source/path',
+            ...
+        }
+        """
+        mounts_map = {}
+        try:
+            result = subprocess.run(
+                ['docker', 'inspect', '--format', '{{json .Mounts}}', container_name],
+                capture_output=True, text=True, check=True
+            )
+            mounts = json.loads(result.stdout)
+            for m in mounts:
+                container_path = m.get('Destination')
+                host_path = m.get('Source')
+                if container_path and host_path:
+                    mounts_map[container_path] = host_path
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to inspect container {container_name}: {e}")
+        except Exception as e:
+            logger.exception(f"Unexpected error in get_container_mounts: {e}")
+        return mounts_map
+
+    @staticmethod
+    def get_current_container_name() -> str:
+        """
+        Возвращает имя контейнера самого же себя где запущен
+        """
+        cgroup_path = "/proc/self/cgroup"
+        if os.path.exists(cgroup_path):
+            with open(cgroup_path) as f:
+                for line in f:
+                    # ищем docker/<container_id> (обычно)
+                    parts = line.strip().split('/')
+                    if 'docker' in parts:
+                        container_id = parts[-1]
+                        # docker inspect для имени
+                        try:
+                            result = subprocess.run(
+                                ['docker', 'inspect', '--format', '{{.Name}}', container_id],
+                                capture_output=True, text=True, check=True
+                            )
+                            name = result.stdout.strip()
+                            return name.lstrip('/')  # убираем ведущий /
+                        except Exception:
+                            pass
+        return None
+
+    print(get_current_container_name())
     # ---------------------------
     # Проверка запуска проекта
     # ---------------------------
