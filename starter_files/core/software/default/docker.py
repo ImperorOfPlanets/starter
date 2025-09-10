@@ -894,7 +894,6 @@ class DockerModule(BaseModule):
                             pass
         return None
 
-    print(get_current_container_name())
     # ---------------------------
     # Проверка запуска проекта
     # ---------------------------
