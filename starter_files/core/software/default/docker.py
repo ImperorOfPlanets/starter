@@ -541,6 +541,11 @@ class DockerModule(BaseModule):
             docker_path = Path(get_global("docker_path"))
             compose_file = docker_path / "docker-compose.yml"
 
+            logs_path = docker_path / "logs"
+            if not logs_path.exists():
+                logger.info(f"[run_compose] Creating missing logs directory: {logs_path}")
+                logs_path.mkdir(parents=True, exist_ok=True)
+
             sp = get_global('script_path')
             script_path = Path(sp) if sp else Path.cwd()
             starts_log_dir = script_path / 'starter_files' / 'logs' / 'starts'
