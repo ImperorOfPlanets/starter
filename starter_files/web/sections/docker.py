@@ -275,8 +275,9 @@ def prune_system(data, session):
 def start_project(data, session):
     """Запуск проекта с возвратом ID для отслеживания логов"""
     try:
-        # Создаем уникальный ID для этого запуска
-        start_id = str(uuid.uuid4())
+        # Записываем результат в файл
+        log_file_name = f"start_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        log_file = get_global('path_log_starts') / log_file_name
         
         # Запускаем в отдельном потоке
         def run_project():
@@ -284,16 +285,14 @@ def start_project(data, session):
                 settings = SettingsModule.get_settings()
                 result = DockerModule.run_compose(settings)
                 
-                # Записываем результат в файл
-                log_file = get_global('path_log_starts') / f"start_{start_id}.log"
+
                 with open(log_file, 'a', encoding='utf-8') as f:
                     if result:
                         f.write("PROJECT START COMPLETED SUCCESSFULLY\n")
                     else:
                         f.write("PROJECT START FAILED\n")
             except Exception as e:
-                error_log = get_global('path_log_starts') / f"start_{start_id}.log"
-                with open(error_log, 'a', encoding='utf-8') as f:
+                with open(log_file, 'a', encoding='utf-8') as f:
                     f.write(f"ERROR: {str(e)}\n")
         
         thread = threading.Thread(target=run_project)
@@ -301,9 +300,9 @@ def start_project(data, session):
         thread.start()
         
         return jsonify({
-            'status': 'started', 
+            'status': 'started',
             'message': 'Project start initiated',
-            'start_id': start_id
+            'log_file': log_file_name
         })
         
     except Exception as e:
@@ -311,17 +310,17 @@ def start_project(data, session):
 
 def get_project_logs(data, session):
     """Получение логов запуска проекта"""
-    start_id = data.get('start_id')
-    if not start_id:
+    log_file_name = data.get('log_file')
+    if not log_file_name:
         return jsonify({
             'status': 'error',
-            'message': 'Start ID required',
+            'message': 'Log file name required',
             'logs': '',
             'completed': False,
             'success': False
         })
     
-    log_file_path = get_global('path_log_starts') / f"start_{start_id}.log"
+    log_file_path = get_global('path_log_starts') / log_file_name
     
     if not log_file_path.exists():
         return jsonify({
@@ -358,11 +357,11 @@ def get_project_logs(data, session):
 
 def download_project_logs(data, session):
     """Скачивание логов запуска проекта"""
-    start_id = data.get('start_id')
-    if not start_id:
-        return "Start ID required", 400
+    log_file_name = data.get('log_file')
+    if not log_file_name:
+        return "Log file name required", 400
     
-    log_file_path = get_global('path_log_starts') / f"start_{start_id}.log"
+    log_file_path = get_global('path_log_starts') / log_file_name
     
     if not log_file_path.exists():
         return "Log file not found", 404
@@ -372,7 +371,7 @@ def download_project_logs(data, session):
         return send_file(
             log_file_path,
             as_attachment=True,
-            download_name=f"project_start_{start_id}.log",
+            download_name=log_file_name,
             mimetype='text/plain'
         )
     except Exception as e:

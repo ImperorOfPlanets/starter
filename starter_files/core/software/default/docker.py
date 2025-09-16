@@ -533,7 +533,7 @@ class DockerModule(BaseModule):
     # Запуск docker-compose (включая подготовку .env и compose)
     # ---------------------------
     @staticmethod
-    def run_compose(settings: Dict[str, Any] = None) -> bool:
+    def run_compose(settings: Dict[str, Any] = None, log_path: Path = None) -> bool:
         file_handler = None
         orig_handlers = []
         orig_level = logger.level
@@ -545,7 +545,12 @@ class DockerModule(BaseModule):
             script_path = Path(sp) if sp else Path.cwd()
             starts_log_dir = script_path / 'starter_files' / 'logs' / 'starts'
             starts_log_dir.mkdir(parents=True, exist_ok=True)
-            log_file_path = starts_log_dir / f"start_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+            # если передан log_path – используем его, иначе создаём новый по дате
+            if log_path:
+                log_file_path = Path(log_path)
+            else:
+                log_file_path = starts_log_dir / f"start_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
             # сохраняем хэндлеры
             orig_handlers = logger.handlers[:]
