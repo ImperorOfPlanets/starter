@@ -902,15 +902,9 @@ class DockerModule(BaseModule):
 
     @staticmethod
     def generate_env_content(vars_dict: Dict[str, str],
-                             template_lines: List[Union[str, Tuple[str, str]]]) -> str:
-        """
-        Генерирует текст .env:
-         - сначала по порядку template_lines (заменяет значения, если ключ есть в vars_dict)
-         - затем добавляет оставшиеся ключи из vars_dict (в порядке, в котором они в vars_dict) как Custom variables
-        """
+                            template_lines: List[Union[str, Tuple[str, str]]]) -> str:
         result: List[str] = []
         template_keys: List[str] = []
-        # Копия dict чтобы не менять исходный порядок вне этой функции
         vars_copy = dict(vars_dict)
 
         for line in template_lines:
@@ -918,17 +912,18 @@ class DockerModule(BaseModule):
                 key, original_line = line
                 template_keys.append(key)
                 if key in vars_copy:
-                    result.append(f"{key}={vars_copy.pop(key)}")
+                    # НЕ МЕНЯТЬ путь - просто вставляем как есть
+                    value = vars_copy.pop(key)
+                    result.append(f"{key}={value}")
                 else:
-                    # оставляем оригинальную строку если в vars_dict нет такого ключа
                     result.append(original_line)
             else:
                 result.append(line)
 
-        # Оставшиеся ключи — кастомные, добавляем в порядке vars_dict
-        custom_items = [(k, v) for k, v in vars_dict.items() if k not in template_keys]
+        # Добавляем оставшиеся кастомные переменные так же без изменений
+        custom_items = [(k, v) for k, v in vars_copy.items() if k not in template_keys]
         if custom_items:
-            result.append('')  # пустая строка перед блоком
+            result.append('')
             result.append('# Custom variables')
             for k, v in custom_items:
                 result.append(f"{k}={v}")
