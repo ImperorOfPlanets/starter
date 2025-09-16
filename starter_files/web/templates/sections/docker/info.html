@@ -240,17 +240,17 @@ $(document).ready(function() {
             action: 'start_project'
         }, function(response) {
             if (response.status === 'started') {
-                const startId = response.start_id;
+                const logFileName = response.log_file;  // ← получаем имя файла
                 
-                // Сохраняем ID запуска
-                $('#projectLogsModal').data('start-id', startId);
+                // Сохраняем имя файла лога
+                $('#projectLogsModal').data('log-file', logFileName);
                 
                 // Функция обновления логов
                 function updateProjectLogs() {
                     $.post('/', {
                         section: 'docker',
                         action: 'get_project_logs',
-                        start_id: startId
+                        log_file: logFileName  // ← отправляем log_file вместо start_id
                     }, function(logResponse) {
                         if (logResponse.status === 'success') {
                             $('#projectLogsContent').text(logResponse.logs);
@@ -301,7 +301,7 @@ $(document).ready(function() {
                 
                 // Обработчик кнопки скачивания логов
                 $('#downloadProjectLogsBtn').off('click').on('click', function() {
-                    const startId = $('#projectLogsModal').data('start-id');
+                    const logFileName = $('#projectLogsModal').data('log-file');
                     
                     // Создаем временную форму для скачивания
                     const form = document.createElement('form');
@@ -312,7 +312,7 @@ $(document).ready(function() {
                     const params = {
                         'section': 'docker',
                         'action': 'download_project_logs',
-                        'start_id': startId
+                        'log_file': logFileName  // ← исправляем здесь тоже
                     };
                     
                     for (const [key, value] of Object.entries(params)) {
