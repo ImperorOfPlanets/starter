@@ -431,3 +431,258 @@ $(document).ready(function() {
     });
 });
 </script>
+
+
+<!-- ТАБЛИЦА ИСТОРИИ ЗАПУСКОВ -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-clock-history me-2"></i> {{ t('launch_history') }}
+                    <button class="btn btn-sm btn-outline-primary float-end" id="refreshHistoryBtn">
+                        <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                    </button>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm" id="launchHistoryTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th><i class="bi bi-calendar me-1"></i> {{ t('date_time') }}</th>
+                                <th><i class="bi bi-file-text me-1"></i> {{ t('log_file') }}</th>
+                                <th><i class="bi bi-file-bar-graph me-1"></i> {{ t('size') }}</th>
+                                <th><i class="bi bi-check-circle me-1"></i> {{ t('status') }}</th>
+                                <th><i class="bi bi-gear me-1"></i> {{ t('actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr id="historyLoading">
+                                <td colspan="5" class="text-center py-4">
+                                    <div class="spinner-border spinner-border-sm" role="status">
+                                        <span class="visually-hidden">{{ t('loading') }}...</span>
+                                    </div>
+                                    <span class="ms-2">{{ t('loading_history') }}...</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="alert alert-info mt-3 mb-0" id="noHistoryAlert" style="display: none;">
+                    <i class="bi bi-info-circle me-2"></i> {{ t('no_launch_history') }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Модальное окно для просмотра логов -->
+<div class="modal fade" id="viewLogModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="viewLogModalTitle">{{ t('log_content') }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="{{ t('close') }}"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <small class="text-muted" id="logFileName"></small>
+                </div>
+                <div class="card">
+                    <div class="card-body bg-dark text-white" style="max-height: 60vh; overflow-y: auto;">
+                        <pre id="logContent" class="mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('close') }}</button>
+                <button type="button" class="btn btn-primary" id="downloadThisLogBtn">
+                    <i class="bi bi-download me-1"></i> {{ t('download_logs') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+// Функция загрузки истории запусков
+// Функция загрузки истории запусков
+function loadLaunchHistory() {
+    $('#historyLoading').show();
+    $('#noHistoryAlert').hide();
+    
+    $.post('/', {
+        section: 'docker',
+        action: 'get_launch_history'
+    }, function(response) {
+        $('#historyLoading').hide();
+        
+        if (response.status === 'success' && response.history && response.history.length > 0) {
+            const tbody = $('#launchHistoryTable tbody');
+            tbody.empty();
+            
+            // Сортируем по дате в обратном порядке (новые сверху)
+            response.history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            response.history.forEach(log => {
+                const statusClass = log.status === 'success' ? 'success' : 
+                                  log.status === 'failed' ? 'danger' : 'warning';
+                const statusText = log.status === 'success' ? '{{ t("status_success") }}' : 
+                                 log.status === 'failed' ? '{{ t("status_failed") }}' : 
+                                 '{{ t("status_running") }}';
+                
+                const row = `
+                    <tr>
+                        <td>${log.formatted_date}</td>
+                        <td>
+                            <span class="font-monospace small">${log.filename}</span>
+                        </td>
+                        <td>${formatFileSize(log.size)}</td>
+                        <td>
+                            <span class="badge bg-${statusClass}">${statusText}</span>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary view-log-btn" data-filename="${log.filename}" title="{{ t('view_logs') }}">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button class="btn btn-outline-success download-log-btn" data-filename="${log.filename}" title="{{ t('download_logs') }}">
+                                    <i class="bi bi-download"></i>
+                                </button>
+                                <button class="btn btn-outline-danger delete-log-btn" data-filename="${log.filename}" title="{{ t('delete_log') }}">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+        } else {
+            $('#noHistoryAlert').show();
+        }
+    }).fail(function() {
+        $('#historyLoading').hide();
+        $('#noHistoryAlert').show();
+        toastr.error('{{ t("request_failed") }}');
+    });
+}
+
+// Функция форматирования размера файла
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Функция просмотра лога
+function viewLog(filename) {
+    $.post('/', {
+        section: 'docker',
+        action: 'get_project_logs',
+        log_file: filename
+    }, function(response) {
+        if (response.status === 'success') {
+            $('#logFileName').text(filename);
+            $('#logContent').text(response.logs);
+            $('#viewLogModal').modal('show');
+            $('#downloadThisLogBtn').data('filename', filename);
+            
+            // Автоскролл к концу
+            const logContainer = $('#logContent');
+            logContainer.scrollTop(logContainer[0].scrollHeight);
+        } else {
+            toastr.error(response.message || '{{ t("log_request_failed") }}');
+        }
+    }).fail(function() {
+        toastr.error('{{ t("request_failed") }}');
+    });
+}
+
+// Функция скачивания лога
+function downloadLog(filename) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/';
+    form.style.display = 'none';
+    
+    const params = {
+        'section': 'docker',
+        'action': 'download_project_logs',
+        'log_file': filename
+    };
+    
+    for (const [key, value] of Object.entries(params)) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = value;
+        form.appendChild(input);
+    }
+    
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+}
+
+// Функция удаления лога
+function deleteLog(filename) {
+    if (!confirm('{{ t("confirm_delete_log") }}')) return;
+    
+    $.post('/', {
+        section: 'docker',
+        action: 'delete_log_file',
+        log_file: filename
+    }, function(response) {
+        if (response.status === 'success') {
+            toastr.success('{{ t("log_deleted_success") }}');
+            loadLaunchHistory(); // Перезагружаем таблицу
+        } else {
+            toastr.error(response.message || '{{ t("log_deleted_error") }}');
+        }
+    }).fail(function() {
+        toastr.error('{{ t("request_failed") }}');
+    });
+}
+
+// Обработчики событий
+$(document).ready(function() {
+    // Загружаем историю при загрузке страницы
+    loadLaunchHistory();
+    
+    // Обновление истории
+    $('#refreshHistoryBtn').on('click', loadLaunchHistory);
+    
+    // Просмотр лога
+    $(document).on('click', '.view-log-btn', function() {
+        const filename = $(this).data('filename');
+        viewLog(filename);
+    });
+    
+    // Скачивание лога
+    $(document).on('click', '.download-log-btn', function() {
+        const filename = $(this).data('filename');
+        downloadLog(filename);
+    });
+    
+    // Удаление лога
+    $(document).on('click', '.delete-log-btn', function() {
+        const filename = $(this).data('filename');
+        deleteLog(filename);
+    });
+    
+    // Скачивание из модального окна
+    $('#downloadThisLogBtn').on('click', function() {
+        const filename = $(this).data('filename');
+        if (filename) {
+            downloadLog(filename);
+        }
+    });
+    
+    // Обновляем историю после закрытия модального окна запуска
+    $('#projectLogsModal').on('hidden.bs.modal', function() {
+        loadLaunchHistory();
+    });
+});
+</script>

@@ -223,7 +223,57 @@ translations = {
                 "installation_completed_success": "Установка завершена успешно!",
                 "installation_completed_warning": "Установка завершена с предупреждениями",
                 "installation_failed": "Установка завершена с ошибками",
-                "start_project":"Запустить проект"
+                "start_project":"Запустить проект",
+                # Новые переводы для модального окна запуска проекта
+                "project_start_logs": "Логи запуска проекта",
+                "starting_project": "Запуск проекта...",
+                "startup_logs": "Логи запуска",
+                "project_start_completed": "Проект успешно запущен",
+                "project_start_failed": "Ошибка запуска проекта",
+                "download_logs": "Скачать логи",
+                "log_request_failed": "Ошибка получения логов",
+                "close": "Закрыть",
+                "finish": "Завершить",
+                "loading": "Загрузка",
+                "refresh": "Обновить",
+                # Новые переводы для таблицы истории
+                "launch_history": "История запусков",
+                "date_time": "Дата и время",
+                "log_file": "Файл лога",
+                "duration": "Длительность",
+                "status": "Статус",
+                "actions": "Действия",
+                "loading_history": "Загрузка истории...",
+                "no_launch_history": "История запусков отсутствует",
+                "view_logs": "Просмотреть логи",
+                "download_logs": "Скачать логи",
+                "status_success": "Успешно",
+                "status_failed": "Ошибка",
+                "status_running": "Выполняется",
+                "status_unknown": "Неизвестно",
+                "seconds": "сек",
+                "minutes": "мин",
+                "size": "Размер",
+                
+                # Статусы для отображения
+                "completed": "Завершено",
+                "failed": "Не удалось",
+                "in_progress": "В процессе",
+                
+                # Действия
+                "open_logs": "Открыть логи",
+                "copy_name": "Копировать имя",
+                "delete_log": "Удалить лог",
+                "confirm_delete_log": "Вы уверены, что хотите удалить этот файл лога?",
+                "log_deleted_success": "Файл лога успешно удален",
+                "log_deleted_error": "Ошибка при удалении файла лога",
+                "open_logs": "Открыть логи",
+                "copy_name": "Копировать имя",
+                "delete_log": "Удалить лог",
+                "view_logs": "Просмотреть логи",
+                "download_logs": "Скачать логи",
+                "log_content": "Содержимое лога",
+                "close": "Закрыть"
             },
 
             'containers': {

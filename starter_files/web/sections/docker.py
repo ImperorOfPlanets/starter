@@ -383,3 +383,64 @@ def download_project_logs(data, session):
         )
     except Exception as e:
         return str(e), 500
+
+def get_launch_history(data, session):
+    """Получение истории запусков"""
+    try:
+        sp = get_global('script_path')
+        starts_log_dir = sp / 'starter_files' / 'logs' / 'starts'
+        
+        if not starts_log_dir.exists():
+            return jsonify({'status': 'success', 'history': []})
+        
+        history = []
+        for log_file in starts_log_dir.glob('start_*.log'):
+            try:
+                stat = log_file.stat()
+                content = log_file.read_text(encoding='utf-8', errors='ignore')
+                
+                # Определяем статус по содержимому
+                if "PROJECT START COMPLETED SUCCESSFULLY" in content:
+                    status = "success"
+                elif "PROJECT START FAILED" in content or "ERROR:" in content:
+                    status = "failed"
+                else:
+                    status = "running"
+                
+                history.append({
+                    'filename': log_file.name,
+                    'timestamp': stat.st_mtime,
+                    'formatted_date': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                    'size': stat.st_size,
+                    'status': status
+                })
+            except Exception as e:
+                print(f"Error processing log file {log_file.name}: {e}")
+                continue
+        
+        return jsonify({'status': 'success', 'history': history})
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+def delete_log_file(data, session):
+    """Удаление файла лога"""
+    try:
+        log_file_name = data.get('log_file')
+        if not log_file_name:
+            return jsonify({'status': 'error', 'message': 'Log file name required'})
+        
+        sp = get_global('script_path')
+        starts_log_dir = sp / 'starter_files' / 'logs' / 'starts'
+        log_file = starts_log_dir / log_file_name
+        
+        if not log_file.exists():
+            return jsonify({'status': 'error', 'message': 'Log file not found'})
+        
+        # Удаляем файл
+        log_file.unlink()
+        
+        return jsonify({'status': 'success', 'message': 'Log file deleted'})
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
