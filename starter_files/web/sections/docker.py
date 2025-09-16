@@ -7,6 +7,7 @@ import psutil
 import threading
 import uuid
 
+
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from flask import render_template, jsonify, Response
@@ -277,7 +278,9 @@ def start_project(data, session):
     try:
         # Записываем результат в файл
         log_file_name = f"start_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-        log_file = get_global('path_log_starts') / log_file_name
+        sp = get_global('script_path')
+        starts_log_dir = sp / 'starter_files' / 'logs' / 'starts'
+        log_file = starts_log_dir / log_file_name
         
         # Запускаем в отдельном потоке
         def run_project():
@@ -319,10 +322,12 @@ def get_project_logs(data, session):
             'completed': False,
             'success': False
         })
+
+    sp = get_global('script_path')
+    starts_log_dir = sp / 'starter_files' / 'logs' / 'starts'
+    log_file = starts_log_dir / log_file_name
     
-    log_file_path = get_global('path_log_starts') / log_file_name
-    
-    if not log_file_path.exists():
+    if not log_file.exists():
         return jsonify({
             'status': 'error',
             'message': 'Log file not found',
@@ -332,7 +337,7 @@ def get_project_logs(data, session):
         })
     
     try:
-        with open(log_file_path, 'r', encoding='utf-8') as f:
+        with open(log_file, 'r', encoding='utf-8') as f:
             logs = f.read()
         
         # Проверяем завершение
@@ -361,15 +366,17 @@ def download_project_logs(data, session):
     if not log_file_name:
         return "Log file name required", 400
     
-    log_file_path = get_global('path_log_starts') / log_file_name
+    sp = get_global('script_path')
+    starts_log_dir = sp / 'starter_files' / 'logs' / 'starts'
+    log_file = starts_log_dir / log_file_name
     
-    if not log_file_path.exists():
+    if not log_file.exists():
         return "Log file not found", 404
     
     try:
         from flask import send_file
         return send_file(
-            log_file_path,
+            log_file,
             as_attachment=True,
             download_name=log_file_name,
             mimetype='text/plain'
