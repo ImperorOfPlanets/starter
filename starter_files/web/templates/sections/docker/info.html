@@ -158,6 +158,7 @@
     </div>
 </div>
 
+<!-- КНОПКА ЗАПУСКА ПРОЕКТА И МОДАЛЬНОЕ ОКНОВЫ ВОДА ЛОГОВ -->
 <hr />
 {% if not project_running %}
 <div class="d-grid gap-2 mt-3">
@@ -167,27 +168,194 @@
 </div>
 {% endif %}
 
+<!-- Модальное окно для логов запуска проекта -->
+<div class="modal fade" id="projectLogsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="projectLogsModalTitle">{{ t('project_start_logs') }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="{{ t('close') }}"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-center mb-3">
+                    <div class="spinner-border text-primary" role="status" id="projectLogsSpinner">
+                        <span class="visually-hidden">{{ t('loading') }}...</span>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info" id="projectLogsStatus">
+                    {{ t('starting_project') }}
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        {{ t('startup_logs') }}
+                        <button class="btn btn-sm btn-outline-secondary float-end" id="refreshProjectLogsBtn">
+                            <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                        </button>
+                    </div>
+                    <div class="card-body bg-dark text-white" style="height: 50vh; overflow-y: auto;">
+                        <pre id="projectLogsContent" class="mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeProjectLogsBtn">
+                    {{ t('close') }}
+                </button>
+                <button type="button" class="btn btn-success" id="finishProjectBtn" style="display: none;">
+                    <i class="bi bi-check-circle me-1"></i> {{ t('finish') }}
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="downloadProjectLogsBtn" style="display: none;">
+                    <i class="bi bi-download me-1"></i> {{ t('download_logs') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 $(document).ready(function() {
-    // Обработчик кнопки запуска проекта
+    // Обработчик кнопки запуска проекта с модальным окном
     $('#startProjectBtn').on('click', function() {
+        const $btn = $(this);
+        $btn.prop('disabled', true);
+        
+        // Показать модальное окно
+        const projectModal = new bootstrap.Modal('#projectLogsModal');
+        projectModal.show();
+        
+        // Сбросить состояние модального окна
+        $('#projectLogsContent').text('');
+        $('#projectLogsStatus').removeClass('alert-success alert-danger alert-warning')
+                            .addClass('alert-info')
+                            .text('{{ t("starting_project") }}');
+        $('#projectLogsSpinner').show();
+        $('#finishProjectBtn').hide();
+        $('#downloadProjectLogsBtn').hide();
+        
+        // Начать запуск проекта
         $.post('/', {
             section: 'docker',
             action: 'start_project'
         }, function(response) {
-            if(response.status === 'success') {
-                toastr.success(response.message);
-                $('#refreshDockerBtn').click();
+            if (response.status === 'started') {
+                const startId = response.start_id;
+                
+                // Сохраняем ID запуска
+                $('#projectLogsModal').data('start-id', startId);
+                
+                // Функция обновления логов
+                function updateProjectLogs() {
+                    $.post('/', {
+                        section: 'docker',
+                        action: 'get_project_logs',
+                        start_id: startId
+                    }, function(logResponse) {
+                        if (logResponse.status === 'success') {
+                            $('#projectLogsContent').text(logResponse.logs);
+                            
+                            // Автоскролл к последней записи
+                            const logContainer = $('#projectLogsContent').parent();
+                            logContainer.scrollTop(logContainer[0].scrollHeight);
+                            
+                            // Проверяем завершение запуска
+                            if (logResponse.completed) {
+                                clearInterval(logInterval);
+                                $('#projectLogsSpinner').hide();
+                                $('#finishProjectBtn').show();
+                                $('#downloadProjectLogsBtn').show();
+                                
+                                if (logResponse.success) {
+                                    $('#projectLogsStatus').removeClass('alert-info')
+                                                        .addClass('alert-success')
+                                                        .text('{{ t("project_start_completed") }}');
+                                } else {
+                                    $('#projectLogsStatus').removeClass('alert-info')
+                                                        .addClass('alert-danger')
+                                                        .text('{{ t("project_start_failed") }}');
+                                }
+                            }
+                        } else {
+                            $('#projectLogsStatus').append('<br>' + logResponse.message);
+                        }
+                    }).fail(function() {
+                        $('#projectLogsStatus').append('<br>{{ t("log_request_failed") }}');
+                    });
+                }
+                
+                // Первое обновление
+                updateProjectLogs();
+                
+                // Обновляем логи каждые 2 секунды
+                const logInterval = setInterval(updateProjectLogs, 2000);
+                
+                // Обработчик кнопки обновления логов
+                $('#refreshProjectLogsBtn').off('click').on('click', updateProjectLogs);
+                
+                // Обработчик кнопки завершения
+                $('#finishProjectBtn').off('click').on('click', function() {
+                    projectModal.hide();
+                    location.reload(); // Перезагружаем страницу после завершения
+                });
+                
+                // Обработчик кнопки скачивания логов
+                $('#downloadProjectLogsBtn').off('click').on('click', function() {
+                    const startId = $('#projectLogsModal').data('start-id');
+                    
+                    // Создаем временную форму для скачивания
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '/';
+                    form.style.display = 'none';
+                    
+                    const params = {
+                        'section': 'docker',
+                        'action': 'download_project_logs',
+                        'start_id': startId
+                    };
+                    
+                    for (const [key, value] of Object.entries(params)) {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = key;
+                        input.value = value;
+                        form.appendChild(input);
+                    }
+                    
+                    document.body.appendChild(form);
+                    form.submit();
+                    document.body.removeChild(form);
+                });
+                
+                // Сохраняем interval ID
+                $('#projectLogsModal').data('log-interval', logInterval);
             } else {
-                toastr.error(response.message);
+                $('#projectLogsStatus').removeClass('alert-info')
+                                    .addClass('alert-danger')
+                                    .text(response.message || '{{ t("project_start_failed") }}');
+                $btn.prop('disabled', false);
             }
         }).fail(function() {
-            toastr.error('{{ t("request_failed") }}');
+            $('#projectLogsStatus').removeClass('alert-info')
+                                .addClass('alert-danger')
+                                .text('{{ t("request_failed") }}');
+            $btn.prop('disabled', false);
         });
+    });
+
+    // Очистка интервала при закрытии модального окна
+    $('#projectLogsModal').on('hidden.bs.modal', function() {
+        const logInterval = $(this).data('log-interval');
+        if (logInterval) {
+            clearInterval(logInterval);
+        }
+        $('#startProjectBtn').prop('disabled', false);
     });
 
     // Функция для обновления статуса кнопок
     function updateButtonStates() {
+    
         const dockerInstalled = {{ 'true' if docker_info.installed else 'false' }};
         const composeInstalled = {{ 'true' if docker_info.compose_installed else 'false' }};
         

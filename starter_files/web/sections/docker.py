@@ -273,10 +273,107 @@ def prune_system(data, session):
 
 # ======================== ПРОЕКТ ========================================
 def start_project(data, session):
+    """Запуск проекта с возвратом ID для отслеживания логов"""
     try:
-        settings = SettingsModule.get_settings()
-        result = DockerModule.run_compose(settings)
-        return jsonify(result)
+        # Создаем уникальный ID для этого запуска
+        start_id = str(uuid.uuid4())
+        
+        # Запускаем в отдельном потоке
+        def run_project():
+            try:
+                settings = SettingsModule.get_settings()
+                result = DockerModule.run_compose(settings)
+                
+                # Записываем результат в файл
+                log_file = get_global('path_log_starts') / f"start_{start_id}.log"
+                with open(log_file, 'a', encoding='utf-8') as f:
+                    if result:
+                        f.write("PROJECT START COMPLETED SUCCESSFULLY\n")
+                    else:
+                        f.write("PROJECT START FAILED\n")
+            except Exception as e:
+                error_log = get_global('path_log_starts') / f"start_{start_id}.log"
+                with open(error_log, 'a', encoding='utf-8') as f:
+                    f.write(f"ERROR: {str(e)}\n")
+        
+        thread = threading.Thread(target=run_project)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'status': 'started', 
+            'message': 'Project start initiated',
+            'start_id': start_id
+        })
+        
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
+def get_project_logs(data, session):
+    """Получение логов запуска проекта"""
+    start_id = data.get('start_id')
+    if not start_id:
+        return jsonify({
+            'status': 'error',
+            'message': 'Start ID required',
+            'logs': '',
+            'completed': False,
+            'success': False
+        })
+    
+    log_file_path = get_global('path_log_starts') / f"start_{start_id}.log"
+    
+    if not log_file_path.exists():
+        return jsonify({
+            'status': 'error',
+            'message': 'Log file not found',
+            'logs': '',
+            'completed': False,
+            'success': False
+        })
+    
+    try:
+        with open(log_file_path, 'r', encoding='utf-8') as f:
+            logs = f.read()
+        
+        # Проверяем завершение
+        completed = "PROJECT START COMPLETED" in logs or "PROJECT START FAILED" in logs
+        success = "PROJECT START COMPLETED SUCCESSFULLY" in logs
+        
+        return jsonify({
+            'status': 'success',
+            'logs': logs,
+            'completed': completed,
+            'success': success
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'logs': '',
+            'completed': False,
+            'success': False
+        })
+
+def download_project_logs(data, session):
+    """Скачивание логов запуска проекта"""
+    start_id = data.get('start_id')
+    if not start_id:
+        return "Start ID required", 400
+    
+    log_file_path = get_global('path_log_starts') / f"start_{start_id}.log"
+    
+    if not log_file_path.exists():
+        return "Log file not found", 404
+    
+    try:
+        from flask import send_file
+        return send_file(
+            log_file_path,
+            as_attachment=True,
+            download_name=f"project_start_{start_id}.log",
+            mimetype='text/plain'
+        )
+    except Exception as e:
+        return str(e), 500
