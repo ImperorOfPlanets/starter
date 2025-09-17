@@ -866,8 +866,6 @@ class DockerModule(BaseModule):
                 with open(log_path, 'a', encoding='utf-8') as log_file:
                     log_file.write("[generate_compose] After env substitution\n")
 
-            # УНИВЕРСАЛЬНОЕ ИСПРАВЛЕНИЕ ПУТЕЙ ДЛЯ ВСЕХ ПЛАТФОРМ
-            content = DockerModule.fix_build_context_paths(content, docker_dir, log_path)
             
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
@@ -900,55 +898,6 @@ class DockerModule(BaseModule):
     # ---------------------------
     # ENV: парсинг, генерация и работа с .env
     # ---------------------------
-    @staticmethod
-    def fix_build_context_paths(content: str, docker_dir: Path, log_path: Optional[Path] = None) -> str:
-        """
-        Универсальное исправление путей в docker-compose для работы на всех платформах.
-        Заменяет абсолютные пути на относительные, сохраняя структуру проекта.
-        """
-        import re
-        import os
-        
-        if log_path:
-            with open(log_path, 'a', encoding='utf-8') as log_file:
-                log_file.write(f"[fix_build_context_paths] Starting path correction\n")
-        
-        # Паттерн для поиска build.context с абсолютными путями
-        pattern = r'(\s+context:\s*)(/.+)'
-        
-        def replace_path(match):
-            indent = match.group(1)
-            absolute_path = match.group(2)
-            
-            # Определяем базовый путь проекта
-            project_base = docker_dir.parent if docker_dir.name == 'docker' else docker_dir
-            
-            # Пытаемся преобразовать абсолютный путь в относительный
-            try:
-                # Если путь находится внутри проекта, делаем его относительным
-                if absolute_path.startswith(str(project_base)):
-                    relative_path = os.path.relpath(absolute_path, docker_dir)
-                    if log_path:
-                        with open(log_path, 'a', encoding='utf-8') as log_file:
-                            log_file.write(f"[fix_build_context_paths] Absolute to relative: {absolute_path} -> {relative_path}\n")
-                    return f"{indent}{relative_path}"
-                
-                # Для путей вне проекта оставляем как есть (может быть нужно для общих ресурсов)
-                if log_path:
-                    with open(log_path, 'a', encoding='utf-8') as log_file:
-                        log_file.write(f"[fix_build_context_paths] Keeping external path: {absolute_path}\n")
-                return match.group(0)
-                
-            except Exception as e:
-                if log_path:
-                    with open(log_path, 'a', encoding='utf-8') as log_file:
-                        log_file.write(f"[fix_build_context_paths] Error processing path {absolute_path}: {e}\n")
-                return match.group(0)
-        
-        # Заменяем абсолютные пути на относительные
-        content = re.sub(pattern, replace_path, content)
-        
-        return content
 
     @staticmethod
     def parse_env_content(content: str) -> Tuple[Dict[str, str], List[Union[str, Tuple[str, str]]]]:
