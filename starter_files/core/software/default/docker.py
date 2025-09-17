@@ -222,82 +222,75 @@ class DockerModule(BaseModule):
     # Генерация docker-compose (низкоуровневая и высокоуровневая)
     # ---------------------------
     @staticmethod
-    def generate_compose(docker_dir: Union[str, Path], env_vars: Dict[str, str], pull_from_registry: bool = False) -> bool:
-        try:
-            docker_dir = Path(docker_dir)
-            compose_example = docker_dir / "docker-compose.example"
-            if not compose_example.exists():
-                compose_example = docker_dir / "docker-compose.template"
-            compose_output = docker_dir / "docker-compose.yml"
-
-            if not compose_example.exists():
-                logger.error(f"[generate_compose] Compose template not found: {compose_example}")
-                return False
-
-            content = compose_example.read_text(encoding='utf-8')
-            logger.info(f"[generate_compose] Read compose template ({compose_example}): {len(content)} chars")
-
-            if pull_from_registry:
-                content = DockerModule.remove_build_sections(content)
-                logger.info("[generate_compose] Removed build sections (pull_from_registry=True)")
-
-            enabled_services = [s.strip().upper() for s in env_vars.get("ENABLED_SERVICES", "").split(",") if s.strip()]
-            logger.info(f"[generate_compose] Enabled services: {enabled_services}")
-
-            # Логируем весь исходный контент до обработки блоков
-            logger.debug(f"[generate_compose] Template content before processing:\n{content[:1000]}...")
-
-            # Обрабатываем блоки сервисов
-            content = DockerModule.process_service_blocks(content, enabled_services, env_vars, remove_markers=True)
-            logger.info("[generate_compose] Processed service blocks")
-
-            # Логируем контент после подстановки переменных
-            logger.debug(f"[generate_compose] Content after processing:\n{content[:1000]}...")
-
-            # Заменяем переменные окружения вне блоков
-            content = DockerModule.replace_env_variables(content, env_vars)
-            logger.info("[generate_compose] Replaced environment variables")
-
-            # Убедимся, что папка существует
-            compose_output.parent.mkdir(parents=True, exist_ok=True)
-
-            # Сохраняем файл
-            compose_output.write_text(content, encoding='utf-8')
-            logger.info(f"[generate_compose] docker-compose.yml generated at {compose_output}")
-
-            return True
-
-        except Exception as e:
-            logger.exception(f"[generate_compose] Error generating compose: {str(e)}")
-            return False
-
-    @staticmethod
-    def generate_docker_compose(settings: Dict[str, Any]) -> bool:
+    def generate_docker_compose(settings: Dict[str, Any], 
+                               env_vars: Dict[str, str] = None,
+                               log_path: Optional[Path] = None) -> bool:
         """
-        Высокоуровневая обёртка: берёт docker_path из глобальных, обновляет .env (ensure_docker_env),
-        читает env и генерирует compose.
+        Высокоуровневая обёртка для генерации docker-compose.yml.
+        Добавлена поддержка передачи log_path.
         """
         try:
             docker_path = Path(get_global("docker_path"))
             # если директории нет — создадим (не критично)
             docker_path.mkdir(parents=True, exist_ok=True)
 
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"[generate_docker_compose] Starting with docker_path: {docker_path}\n")
+
             # Обновим/создадим .env на основе .env.example
-            env_vars = DockerModule.ensure_docker_env(docker_path)
-            logger.info(f"Generated env_vars: {env_vars}")
+            if env_vars is None:
+                env_vars = DockerModule.ensure_docker_env(docker_path, log_path)
+            
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"[generate_docker_compose] Generated env_vars: {env_vars}\n")
 
             # pull_from_registry можно передавать через settings
             pull = False
             if isinstance(settings, dict):
                 pull = settings.get("pull_from_registry", False)
 
-            if not DockerModule.generate_compose(docker_path, env_vars, pull_from_registry=pull):
+            if not DockerModule.generate_compose(docker_path, env_vars, pull_from_registry=pull, log_path=log_path):
+                if log_path:
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write("[generate_docker_compose] Failed to generate compose file\n")
                 logger.error("Failed to generate compose file")
                 return False
 
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write("[generate_docker_compose] docker-compose.yml generated successfully\n")
+            
             logger.info("docker-compose.yml generated successfully")
             return True
         except Exception as e:
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"[generate_docker_compose] Error: {str(e)}\n")
+            logger.error(f"Error generating docker-compose: {e}")
+            return False
+
+
+    @staticmethod
+    def generate_docker_compose(settings: Dict[str, Any], env_vars: Dict[str, str] = None, log_path: Optional[Path] = None) -> bool:
+        try:
+            docker_path = Path(get_global("docker_path"))
+            docker_path.mkdir(parents=True, exist_ok=True)
+
+            if env_vars is None:
+                env_vars = DockerModule.ensure_docker_env(docker_path, log_path)
+
+            pull = settings.get("pull_from_registry", False) if isinstance(settings, dict) else False
+
+            if not DockerModule.generate_compose(docker_path, env_vars, pull_from_registry=pull, log_path=log_path):
+                return False
+
+            return True
+        except Exception as e:
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"[generate_docker_compose] Error: {str(e)}\n")
             logger.error(f"Error generating docker-compose: {e}")
             return False
 
@@ -531,6 +524,9 @@ class DockerModule(BaseModule):
     # ---------------------------
     @staticmethod
     def run_compose(settings: Dict[str, Any] = None, log_path: Path = None) -> bool:
+        """
+        Запускает docker-compose с логированием всех этапов.
+        """
         file_handler = None
         orig_handlers = []
         orig_level = logger.level
@@ -598,7 +594,7 @@ class DockerModule(BaseModule):
                     logger.info(f"[run_compose] Detected mounts: {mounts}")
 
                     # Подставляем mounts в env_vars
-                    env_vars = DockerModule.ensure_docker_env(docker_path)
+                    env_vars = DockerModule.ensure_docker_env(docker_path, log_file_path)
                     for container_path, host_path in mounts.items():
                         # Преобразуем путь контейнера в переменную окружения, пример:
                         var_name = f"PATH_{container_path.strip('/').upper().replace('/', '_')}"
@@ -612,8 +608,8 @@ class DockerModule(BaseModule):
 
             # Генерация .env и compose
             logger.info("[run_compose] Generating .env and docker-compose.yml...")
-            env_vars = DockerModule.ensure_docker_env(docker_path)
-            if not DockerModule.generate_docker_compose(settings or {}):
+            env_vars = DockerModule.ensure_docker_env(docker_path, log_file_path)
+            if not DockerModule.generate_docker_compose(settings or {}, env_vars, log_file_path):
                 logger.error("[run_compose] Failed to generate docker-compose.yml")
                 return False
 
@@ -711,6 +707,7 @@ class DockerModule(BaseModule):
                 logger.addHandler(h)
             logger.setLevel(orig_level)
             logger.propagate = True
+
 
     @staticmethod
     def fix_executable_permissions(project_path: Path) -> Dict[str, Any]:
@@ -899,74 +896,111 @@ class DockerModule(BaseModule):
 
     @staticmethod
     def generate_env_content(vars_dict: Dict[str, str],
-                            template_lines: List[Union[str, Tuple[str, str]]]) -> str:
+                            template_lines: List[Union[str, Tuple[str, str]]],
+                            log_path: Optional[Path] = None) -> str:
+        """
+        Генерирует содержимое .env файла на основе шаблона и переменных.
+        Добавлено логирование для отслеживания изменений переменных.
+        """
         result: List[str] = []
         template_keys: List[str] = []
         vars_copy = dict(vars_dict)
+
+        # Логирование если указан путь
+        if log_path:
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f"[generate_env_content] Input variables:\n")
+                for k, v in vars_dict.items():
+                    log_file.write(f"  {k}={v}\n")
 
         for line in template_lines:
             if isinstance(line, tuple):
                 key, original_line = line
                 template_keys.append(key)
                 if key in vars_copy:
-                    # НЕ МЕНЯТЬ путь - просто вставляем как есть
                     value = vars_copy.pop(key)
                     result.append(f"{key}={value}")
+                    
+                    # Логирование подстановки
+                    if log_path:
+                        with open(log_path, 'a', encoding='utf-8') as log_file:
+                            log_file.write(f"[generate_env_content] Substituted: {key}={value}\n")
                 else:
                     result.append(original_line)
             else:
                 result.append(line)
 
-        # Добавляем оставшиеся кастомные переменные так же без изменений
+        # Добавляем оставшиеся кастомные переменные
         custom_items = [(k, v) for k, v in vars_copy.items() if k not in template_keys]
         if custom_items:
             result.append('')
             result.append('# Custom variables')
             for k, v in custom_items:
                 result.append(f"{k}={v}")
+                if log_path:
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"[generate_env_content] Added custom: {k}={v}\n")
 
         return '\n'.join(result)
 
     @staticmethod
-    def ensure_docker_env(project_path: Path) -> Dict[str, str]:
+    def ensure_docker_env(project_path: Path, log_path: Optional[Path] = None) -> Dict[str, str]:
         """
         Создаёт/обновляет .env в project_path на основе .env.example.
         Возвращает итоговый словарь переменных.
+        Добавлено логирование для отслеживания изменений переменных.
         """
         env_example_path = project_path / '.env.example'
         env_path = project_path / '.env'
 
+        if log_path:
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f"[ensure_docker_env] Starting with project_path: {project_path}\n")
+
         if not env_example_path.exists():
-            logger.debug(".env.example not found, skipping ensure_docker_env")
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write("[ensure_docker_env] .env.example not found\n")
             return {}
 
         example_vars, example_lines = DockerModule.parse_env_content(env_example_path.read_text(encoding='utf-8'))
+        
+        if log_path:
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f"[ensure_docker_env] Example variables: {list(example_vars.keys())}\n")
 
         if env_path.exists():
             current_vars, _ = DockerModule.parse_env_content(env_path.read_text(encoding='utf-8'))
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"[ensure_docker_env] Current variables: {list(current_vars.keys())}\n")
+                    for k, v in current_vars.items():
+                        log_file.write(f"  {k}={v}\n")
         else:
             current_vars = {}
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write("[ensure_docker_env] No existing .env found\n")
 
-        # Сохраняем текущие значения переменных, которые уже есть в .env
-        # Не перезаписываем их значениями из .env.example
-        merged_vars = {}
-        
-        # Сначала добавляем все переменные из example
-        for key in example_vars:
-            if key in current_vars:
-                # Если переменная уже есть в текущем .env, используем её значение
-                merged_vars[key] = current_vars[key]
-            else:
-                # Иначе используем значение из example
-                merged_vars[key] = example_vars[key]
-        
-        # Затем добавляем все кастомные переменные из current_vars, которых нет в example
-        for key in current_vars:
-            if key not in example_vars:
-                merged_vars[key] = current_vars[key]
+        # Объединяем переменные
+        merged_vars = current_vars.copy()
+        for key, value in example_vars.items():
+            if key not in merged_vars:
+                merged_vars[key] = value
 
-        content = DockerModule.generate_env_content(merged_vars, example_lines)
+        if log_path:
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f"[ensure_docker_env] Merged variables: {list(merged_vars.keys())}\n")
+                for k, v in merged_vars.items():
+                    log_file.write(f"  {k}={v}\n")
+
+        content = DockerModule.generate_env_content(merged_vars, example_lines, log_path)
         env_path.write_text(content, encoding='utf-8')
+        
+        if log_path:
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f"[ensure_docker_env] Final .env content:\n{content}\n")
+
         return merged_vars
 
     @staticmethod
