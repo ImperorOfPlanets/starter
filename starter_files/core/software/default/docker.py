@@ -806,10 +806,10 @@ class DockerModule(BaseModule):
             return False
 
     @staticmethod
-    def generate_compose(docker_dir: Union[str, Path], env_vars: Dict[str, str], pull_from_registry: bool = False,log_path: Optional[Path] = None) -> bool:
+    def generate_compose(docker_dir: Union[str, Path], env_vars: Dict[str, str], pull_from_registry: bool = False, log_path: Optional[Path] = None) -> bool:
         """
         Генерирует docker-compose.yml на основе шаблона и переменных.
-        Добавлено логирование для отслеживания изменений.
+        Универсальная версия для всех платформ.
         """
         try:
             docker_dir = Path(docker_dir)
@@ -822,7 +822,10 @@ class DockerModule(BaseModule):
                 with open(log_path, 'a', encoding='utf-8') as log_file:
                     log_file.write(f"[generate_compose] Starting with env_vars: {list(env_vars.keys())}\n")
                     for k, v in env_vars.items():
-                        log_file.write(f"  {k}={v}\n")
+                        if 'PASSWORD' in k or 'SECRET' in k:
+                            log_file.write(f"  {k}=[HIDDEN]\n")
+                        else:
+                            log_file.write(f"  {k}={v}\n")
 
             if not compose_example.exists():
                 if log_path:
@@ -836,7 +839,6 @@ class DockerModule(BaseModule):
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
                     log_file.write(f"[generate_compose] Read compose template ({compose_example}): {len(content)} chars\n")
-                    log_file.write(f"[generate_compose] Template content before processing:\n{content[:1000]}...\n")
 
             if pull_from_registry:
                 content = DockerModule.remove_build_sections(content)
@@ -856,7 +858,6 @@ class DockerModule(BaseModule):
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
                     log_file.write("[generate_compose] After service blocks processing\n")
-                    log_file.write(content[:1000] + "...\n")
 
             # Заменяем переменные окружения вне блоков
             content = DockerModule.replace_env_variables(content, env_vars)
@@ -864,7 +865,13 @@ class DockerModule(BaseModule):
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
                     log_file.write("[generate_compose] After env substitution\n")
-                    log_file.write(content[:1000] + "...\n")
+
+            # УНИВЕРСАЛЬНОЕ ИСПРАВЛЕНИЕ ПУТЕЙ ДЛЯ ВСЕХ ПЛАТФОРМ
+            content = DockerModule.fix_build_context_paths(content, docker_dir, log_path)
+            
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write("[generate_compose] After path correction\n")
 
             # Убедимся, что папка существует
             compose_output.parent.mkdir(parents=True, exist_ok=True)
@@ -875,6 +882,11 @@ class DockerModule(BaseModule):
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
                     log_file.write(f"[generate_compose] docker-compose.yml generated at {compose_output}\n")
+                    # Логируем первые несколько строк для проверки
+                    lines = content.split('\n')[:10]
+                    log_file.write(f"[generate_compose] First 10 lines:\n")
+                    for i, line in enumerate(lines, 1):
+                        log_file.write(f"  {i}: {line}\n")
 
             return True
 
@@ -884,9 +896,60 @@ class DockerModule(BaseModule):
                     log_file.write(f"[generate_compose] Error: {str(e)}\n")
             logger.exception(f"[generate_compose] Error generating compose: {str(e)}")
             return False
+    
     # ---------------------------
     # ENV: парсинг, генерация и работа с .env
     # ---------------------------
+    @staticmethod
+    def fix_build_context_paths(content: str, docker_dir: Path, log_path: Optional[Path] = None) -> str:
+        """
+        Универсальное исправление путей в docker-compose для работы на всех платформах.
+        Заменяет абсолютные пути на относительные, сохраняя структуру проекта.
+        """
+        import re
+        import os
+        
+        if log_path:
+            with open(log_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(f"[fix_build_context_paths] Starting path correction\n")
+        
+        # Паттерн для поиска build.context с абсолютными путями
+        pattern = r'(\s+context:\s*)(/.+)'
+        
+        def replace_path(match):
+            indent = match.group(1)
+            absolute_path = match.group(2)
+            
+            # Определяем базовый путь проекта
+            project_base = docker_dir.parent if docker_dir.name == 'docker' else docker_dir
+            
+            # Пытаемся преобразовать абсолютный путь в относительный
+            try:
+                # Если путь находится внутри проекта, делаем его относительным
+                if absolute_path.startswith(str(project_base)):
+                    relative_path = os.path.relpath(absolute_path, docker_dir)
+                    if log_path:
+                        with open(log_path, 'a', encoding='utf-8') as log_file:
+                            log_file.write(f"[fix_build_context_paths] Absolute to relative: {absolute_path} -> {relative_path}\n")
+                    return f"{indent}{relative_path}"
+                
+                # Для путей вне проекта оставляем как есть (может быть нужно для общих ресурсов)
+                if log_path:
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"[fix_build_context_paths] Keeping external path: {absolute_path}\n")
+                return match.group(0)
+                
+            except Exception as e:
+                if log_path:
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"[fix_build_context_paths] Error processing path {absolute_path}: {e}\n")
+                return match.group(0)
+        
+        # Заменяем абсолютные пути на относительные
+        content = re.sub(pattern, replace_path, content)
+        
+        return content
+
     @staticmethod
     def parse_env_content(content: str) -> Tuple[Dict[str, str], List[Union[str, Tuple[str, str]]]]:
         """
