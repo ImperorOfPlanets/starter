@@ -230,9 +230,6 @@ class DockerModule(BaseModule):
                 compose_example = docker_dir / "docker-compose.template"
             compose_output = docker_dir / "docker-compose.yml"
 
-            # Добавил для замены DOCKER_PATH на пути
-            env_vars["DOCKER_PATH"] = docker_dir.as_posix()
-
             if not compose_example.exists():
                 logger.error(f"[generate_compose] Compose template not found: {compose_example}")
                 return False
@@ -950,10 +947,23 @@ class DockerModule(BaseModule):
         else:
             current_vars = {}
 
-        # merged: сначала example keys (to preserve example order), затем current overrides/extra keys
-        merged_vars = example_vars.copy()
-        # current_vars overrides example_vars and appends extra keys in their order
-        merged_vars.update(current_vars)
+        # Сохраняем текущие значения переменных, которые уже есть в .env
+        # Не перезаписываем их значениями из .env.example
+        merged_vars = {}
+        
+        # Сначала добавляем все переменные из example
+        for key in example_vars:
+            if key in current_vars:
+                # Если переменная уже есть в текущем .env, используем её значение
+                merged_vars[key] = current_vars[key]
+            else:
+                # Иначе используем значение из example
+                merged_vars[key] = example_vars[key]
+        
+        # Затем добавляем все кастомные переменные из current_vars, которых нет в example
+        for key in current_vars:
+            if key not in example_vars:
+                merged_vars[key] = current_vars[key]
 
         content = DockerModule.generate_env_content(merged_vars, example_lines)
         env_path.write_text(content, encoding='utf-8')
