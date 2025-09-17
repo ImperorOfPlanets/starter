@@ -219,82 +219,6 @@ class DockerModule(BaseModule):
         return content
 
     # ---------------------------
-    # Генерация docker-compose (низкоуровневая и высокоуровневая)
-    # ---------------------------
-    @staticmethod
-    def generate_docker_compose(settings: Dict[str, Any], 
-                               env_vars: Dict[str, str] = None,
-                               log_path: Optional[Path] = None) -> bool:
-        """
-        Высокоуровневая обёртка для генерации docker-compose.yml.
-        Добавлена поддержка передачи log_path.
-        """
-        try:
-            docker_path = Path(get_global("docker_path"))
-            # если директории нет — создадим (не критично)
-            docker_path.mkdir(parents=True, exist_ok=True)
-
-            if log_path:
-                with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write(f"[generate_docker_compose] Starting with docker_path: {docker_path}\n")
-
-            # Обновим/создадим .env на основе .env.example
-            if env_vars is None:
-                env_vars = DockerModule.ensure_docker_env(docker_path, log_path)
-            
-            if log_path:
-                with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write(f"[generate_docker_compose] Generated env_vars: {env_vars}\n")
-
-            # pull_from_registry можно передавать через settings
-            pull = False
-            if isinstance(settings, dict):
-                pull = settings.get("pull_from_registry", False)
-
-            if not DockerModule.generate_compose(docker_path, env_vars, pull_from_registry=pull, log_path=log_path):
-                if log_path:
-                    with open(log_path, 'a', encoding='utf-8') as log_file:
-                        log_file.write("[generate_docker_compose] Failed to generate compose file\n")
-                logger.error("Failed to generate compose file")
-                return False
-
-            if log_path:
-                with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write("[generate_docker_compose] docker-compose.yml generated successfully\n")
-            
-            logger.info("docker-compose.yml generated successfully")
-            return True
-        except Exception as e:
-            if log_path:
-                with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write(f"[generate_docker_compose] Error: {str(e)}\n")
-            logger.error(f"Error generating docker-compose: {e}")
-            return False
-
-
-    @staticmethod
-    def generate_docker_compose(settings: Dict[str, Any], env_vars: Dict[str, str] = None, log_path: Optional[Path] = None) -> bool:
-        try:
-            docker_path = Path(get_global("docker_path"))
-            docker_path.mkdir(parents=True, exist_ok=True)
-
-            if env_vars is None:
-                env_vars = DockerModule.ensure_docker_env(docker_path, log_path)
-
-            pull = settings.get("pull_from_registry", False) if isinstance(settings, dict) else False
-
-            if not DockerModule.generate_compose(docker_path, env_vars, pull_from_registry=pull, log_path=log_path):
-                return False
-
-            return True
-        except Exception as e:
-            if log_path:
-                with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write(f"[generate_docker_compose] Error: {str(e)}\n")
-            logger.error(f"Error generating docker-compose: {e}")
-            return False
-
-    # ---------------------------
     # Статус контейнеров и управление
     # ---------------------------
     @staticmethod
@@ -592,17 +516,6 @@ class DockerModule(BaseModule):
                     logger.info(f"[run_compose] Current container name: {container_name}")
                     mounts = DockerModule.get_container_mounts(container_name)
                     logger.info(f"[run_compose] Detected mounts: {mounts}")
-
-                    # Подставляем mounts в env_vars
-                    env_vars = DockerModule.ensure_docker_env(docker_path, log_file_path)
-                    for container_path, host_path in mounts.items():
-                        # Преобразуем путь контейнера в переменную окружения, пример:
-                        var_name = f"PATH_{container_path.strip('/').upper().replace('/', '_')}"
-                        env_vars[var_name] = host_path
-
-                    # Перезаписываем .env с новыми переменными
-                    DockerModule.write_docker_env(docker_path, env_vars)
-                    logger.info("[run_compose] .env updated with container mounts")
                 else:
                     logger.warning("[run_compose] Could not determine container name.")
 
@@ -868,6 +781,83 @@ class DockerModule(BaseModule):
         project_container_name = f"php-{project_name}"
         return any(c['name'] == project_container_name and 'running' in c['status'].lower() for c in containers)
 
+    # ---------------------------
+    # Генерация docker-compose (низкоуровневая и высокоуровневая)
+    # ---------------------------
+    @staticmethod
+    def generate_docker_compose(settings: Dict[str, Any], env_vars: Dict[str, str] = None, log_path: Optional[Path] = None) -> bool:
+        try:
+            docker_path = Path(get_global("docker_path"))
+            docker_path.mkdir(parents=True, exist_ok=True)
+
+            if env_vars is None:
+                env_vars = DockerModule.ensure_docker_env(docker_path, log_path)
+
+            pull = settings.get("pull_from_registry", False) if isinstance(settings, dict) else False
+
+            if not DockerModule.generate_compose(docker_path, env_vars, pull_from_registry=pull, log_path=log_path):
+                return False
+
+            return True
+        except Exception as e:
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"[generate_docker_compose] Error: {str(e)}\n")
+            logger.error(f"Error generating docker-compose: {e}")
+            return False
+
+    @staticmethod
+    def generate_compose(docker_dir: Union[str, Path], env_vars: Dict[str, str], pull_from_registry: bool = False) -> bool:
+        try:
+            docker_dir = Path(docker_dir)
+            compose_example = docker_dir / "docker-compose.example"
+            if not compose_example.exists():
+                compose_example = docker_dir / "docker-compose.template"
+            compose_output = docker_dir / "docker-compose.yml"
+
+            # Добавил для замены DOCKER_PATH на пути
+            env_vars["DOCKER_PATH"] = str(docker_dir)
+
+            if not compose_example.exists():
+                logger.error(f"[generate_compose] Compose template not found: {compose_example}")
+                return False
+
+            content = compose_example.read_text(encoding='utf-8')
+            logger.info(f"[generate_compose] Read compose template ({compose_example}): {len(content)} chars")
+
+            if pull_from_registry:
+                content = DockerModule.remove_build_sections(content)
+                logger.info("[generate_compose] Removed build sections (pull_from_registry=True)")
+
+            enabled_services = [s.strip().upper() for s in env_vars.get("ENABLED_SERVICES", "").split(",") if s.strip()]
+            logger.info(f"[generate_compose] Enabled services: {enabled_services}")
+
+            # Логируем весь исходный контент до обработки блоков
+            logger.debug(f"[generate_compose] Template content before processing:\n{content[:1000]}...")
+
+            # Обрабатываем блоки сервисов
+            content = DockerModule.process_service_blocks(content, enabled_services, env_vars, remove_markers=True)
+            logger.info("[generate_compose] Processed service blocks")
+
+            # Логируем контент после подстановки переменных
+            logger.debug(f"[generate_compose] Content after processing:\n{content[:1000]}...")
+
+            # Заменяем переменные окружения вне блоков
+            content = DockerModule.replace_env_variables(content, env_vars)
+            logger.info("[generate_compose] Replaced environment variables")
+
+            # Убедимся, что папка существует
+            compose_output.parent.mkdir(parents=True, exist_ok=True)
+
+            # Сохраняем файл
+            compose_output.write_text(content, encoding='utf-8')
+            logger.info(f"[generate_compose] docker-compose.yml generated at {compose_output}")
+
+            return True
+
+        except Exception as e:
+            logger.exception(f"[generate_compose] Error generating compose: {str(e)}")
+            return False
     # ---------------------------
     # ENV: парсинг, генерация и работа с .env
     # ---------------------------
