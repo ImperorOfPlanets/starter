@@ -621,7 +621,6 @@ class DockerModule(BaseModule):
             logger.setLevel(orig_level)
             logger.propagate = True
 
-
     @staticmethod
     def fix_executable_permissions(project_path: Path) -> Dict[str, Any]:
         """
@@ -807,7 +806,11 @@ class DockerModule(BaseModule):
             return False
 
     @staticmethod
-    def generate_compose(docker_dir: Union[str, Path], env_vars: Dict[str, str], pull_from_registry: bool = False) -> bool:
+    def generate_compose(docker_dir: Union[str, Path], env_vars: Dict[str, str], pull_from_registry: bool = False,log_path: Optional[Path] = None) -> bool:
+        """
+        Генерирует docker-compose.yml на основе шаблона и переменных.
+        Добавлено логирование для отслеживания изменений.
+        """
         try:
             docker_dir = Path(docker_dir)
             compose_example = docker_dir / "docker-compose.example"
@@ -815,47 +818,70 @@ class DockerModule(BaseModule):
                 compose_example = docker_dir / "docker-compose.template"
             compose_output = docker_dir / "docker-compose.yml"
 
-            # Добавил для замены DOCKER_PATH на пути
-            env_vars["DOCKER_PATH"] = str(docker_dir)
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"[generate_compose] Starting with env_vars: {list(env_vars.keys())}\n")
+                    for k, v in env_vars.items():
+                        log_file.write(f"  {k}={v}\n")
 
             if not compose_example.exists():
+                if log_path:
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write(f"[generate_compose] Compose template not found: {compose_example}\n")
                 logger.error(f"[generate_compose] Compose template not found: {compose_example}")
                 return False
 
             content = compose_example.read_text(encoding='utf-8')
-            logger.info(f"[generate_compose] Read compose template ({compose_example}): {len(content)} chars")
+            
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"[generate_compose] Read compose template ({compose_example}): {len(content)} chars\n")
+                    log_file.write(f"[generate_compose] Template content before processing:\n{content[:1000]}...\n")
 
             if pull_from_registry:
                 content = DockerModule.remove_build_sections(content)
-                logger.info("[generate_compose] Removed build sections (pull_from_registry=True)")
+                if log_path:
+                    with open(log_path, 'a', encoding='utf-8') as log_file:
+                        log_file.write("[generate_compose] Removed build sections (pull_from_registry=True)\n")
 
             enabled_services = [s.strip().upper() for s in env_vars.get("ENABLED_SERVICES", "").split(",") if s.strip()]
-            logger.info(f"[generate_compose] Enabled services: {enabled_services}")
-
-            # Логируем весь исходный контент до обработки блоков
-            logger.debug(f"[generate_compose] Template content before processing:\n{content[:1000]}...")
+            
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"[generate_compose] Enabled services: {enabled_services}\n")
 
             # Обрабатываем блоки сервисов
             content = DockerModule.process_service_blocks(content, enabled_services, env_vars, remove_markers=True)
-            logger.info("[generate_compose] Processed service blocks")
-
-            # Логируем контент после подстановки переменных
-            logger.debug(f"[generate_compose] Content after processing:\n{content[:1000]}...")
+            
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write("[generate_compose] After service blocks processing\n")
+                    log_file.write(content[:1000] + "...\n")
 
             # Заменяем переменные окружения вне блоков
             content = DockerModule.replace_env_variables(content, env_vars)
-            logger.info("[generate_compose] Replaced environment variables")
+            
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write("[generate_compose] After env substitution\n")
+                    log_file.write(content[:1000] + "...\n")
 
             # Убедимся, что папка существует
             compose_output.parent.mkdir(parents=True, exist_ok=True)
 
             # Сохраняем файл
             compose_output.write_text(content, encoding='utf-8')
-            logger.info(f"[generate_compose] docker-compose.yml generated at {compose_output}")
+            
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"[generate_compose] docker-compose.yml generated at {compose_output}\n")
 
             return True
 
         except Exception as e:
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"[generate_compose] Error: {str(e)}\n")
             logger.exception(f"[generate_compose] Error generating compose: {str(e)}")
             return False
     # ---------------------------
