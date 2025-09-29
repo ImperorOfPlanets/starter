@@ -158,27 +158,42 @@ class SystemModule(BaseModule):
     @staticmethod
     def detect_os_name_version():
         """
-        Определяет ОС и версию ОС из /etc/os-release.
+        Определяет ОС и версию ОС.
         Возвращает кортеж (os, os_version):
-            os: первое слово в нижнем регистре
-            os_version: версия до первого пробела
+            os: windows, linux, darwin, или unknown
+            os_version: версия ОС
         """
-        name = "unknown"
-        version = "unknown"
+        system = platform.system().lower()
         
-        try:
-            with open("/etc/os-release") as f:
-                data = dict(line.strip().split("=", 1) for line in f if "=" in line)
-            pretty_name = data.get("PRETTY_NAME") or data.get("NAME") or "unknown"
-            pretty_name = pretty_name.strip().strip('"')
-            
-            parts = pretty_name.split(" ", 1)
-            name = parts[0].lower()
-            version = parts[1].split(" ")[0] if len(parts) > 1 else "unknown"
-        except Exception:
-            pass
+        # Для Windows
+        if system == "windows":
+            version = platform.version()
+            release = platform.release()
+            return "windows", f"{release}_{version}"
         
-        return name, version
+        # Для Linux
+        elif system == "linux":
+            try:
+                with open("/etc/os-release") as f:
+                    data = dict(line.strip().split("=", 1) for line in f if "=" in line)
+                pretty_name = data.get("PRETTY_NAME") or data.get("NAME") or "unknown"
+                pretty_name = pretty_name.strip().strip('"')
+                
+                parts = pretty_name.split(" ", 1)
+                name = parts[0].lower()
+                version = parts[1].split(" ")[0] if len(parts) > 1 else "unknown"
+                return name, version
+            except Exception:
+                return "linux", "unknown"
+        
+        # Для macOS
+        elif system == "darwin":
+            version = platform.mac_ver()[0]
+            return "macos", version
+        
+        # Для неизвестных систем
+        else:
+            return "unknown", "unknown"
 
     @staticmethod
     def get_os_family() -> str:
