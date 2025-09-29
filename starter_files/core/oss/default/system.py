@@ -555,11 +555,18 @@ class SystemModule(BaseModule):
         except Exception as e:
             return "N/A"
 
+    @staticmethod
     def running_in_docker() -> bool:
         """Проверяет запущен в докере или нет"""
-        return Path('/.dockerenv').exists() or any(
-            'docker' in line for line in open('/proc/1/cgroup', 'r')
-        )
+        if os.name == 'nt':
+            return False
+        try:
+            if Path('/.dockerenv').exists():
+                return True
+            with open('/proc/1/cgroup', 'r') as f:
+                return any('docker' in line for line in f)
+        except (FileNotFoundError, PermissionError):
+            return False
 
     @staticmethod
     def detect_venv_path() -> str:
