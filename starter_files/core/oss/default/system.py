@@ -586,6 +586,12 @@ class SystemModule(BaseModule):
         
         # 3. Проверяем стандартные пути
         script_path = get_global('script_path')
+        
+        # ДОБАВЬТЕ ЭТУ ПРОВЕРКУ:
+        if script_path is None:
+            # Если script_path не установлен, используем текущую директорию
+            script_path = os.path.dirname(os.path.abspath(__file__))
+        
         possible_paths = [
             os.path.join(script_path, 'venv'),
             os.path.join(script_path, '.venv'),
