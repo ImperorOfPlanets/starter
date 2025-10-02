@@ -447,7 +447,7 @@ class DockerModule(BaseModule):
     # Запуск docker-compose (включая подготовку .env и compose)
     # ---------------------------
     @staticmethod
-    def run_compose(settings: Dict[str, Any] = None, log_path: Path = None) -> bool:
+    def run_compose(log_path: Path = None) -> bool:
         """
         Запускает docker-compose с логированием всех этапов.
         """
@@ -519,10 +519,13 @@ class DockerModule(BaseModule):
                 else:
                     logger.warning("[run_compose] Could not determine container name.")
 
-            # Генерация .env и compose
-            logger.info("[run_compose] Generating .env and docker-compose.yml...")
+            # Получаем env_vars из текущего .env файла
+            logger.info("[run_compose] Loading environment variables from .env...")
             env_vars = DockerModule.ensure_docker_env(docker_path, log_file_path)
-            if not DockerModule.generate_docker_compose(settings or {}, env_vars, log_file_path):
+            
+            # Генерация compose файла
+            logger.info("[run_compose] Generating docker-compose.yml from .env...")
+            if not DockerModule.generate_docker_compose(env_vars, log_file_path):
                 logger.error("[run_compose] Failed to generate docker-compose.yml")
                 return False
 
@@ -589,15 +592,21 @@ class DockerModule(BaseModule):
                 cwd=str(docker_path),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
+                bufsize=1
             )
             
             logger.info("[run_compose] === DOCKER COMPOSE OUTPUT ===")
-            for line in iter(process.stdout.readline, ''):
+            for line in iter(process.stdout.readline, b''):
                 if line:
-                    logger.info(f"[compose] {line.strip()}")
+                    try:
+                        # Декодируем с UTF-8 и заменяем проблемные символы
+                        decoded_line = line.decode('utf-8', errors='replace').rstrip()
+                        logger.info(f"[compose] {decoded_line}")
+                    except UnicodeDecodeError as decode_error:
+                        # Если даже с errors='replace' не получается, логируем ошибку
+                        logger.warning(f"[compose] Unicode decode error: {decode_error}")
+                        # Пытаемся вывести сырые байты для отладки
+                        logger.info(f"[compose] Raw bytes: {line.hex()}")
 
             return_code = process.wait()
 
@@ -784,7 +793,7 @@ class DockerModule(BaseModule):
     # Генерация docker-compose (низкоуровневая и высокоуровневая)
     # ---------------------------
     @staticmethod
-    def generate_docker_compose(settings: Dict[str, Any], env_vars: Dict[str, str] = None, log_path: Optional[Path] = None) -> bool:
+    def generate_docker_compose(env_vars: Dict[str, str] = None, log_path: Optional[Path] = None) -> bool:
         try:
             docker_path = Path(get_global("docker_path"))
             docker_path.mkdir(parents=True, exist_ok=True)
@@ -792,9 +801,10 @@ class DockerModule(BaseModule):
             if env_vars is None:
                 env_vars = DockerModule.ensure_docker_env(docker_path, log_path)
 
-            pull = settings.get("pull_from_registry", False) if isinstance(settings, dict) else False
+            # Получаем PULL_FROM_REGISTRY из env_vars
+            pull_from_registry = env_vars.get("PULL_FROM_REGISTRY", "false").lower() == "true"
 
-            if not DockerModule.generate_compose(docker_path, env_vars, pull_from_registry=pull, log_path=log_path):
+            if not DockerModule.generate_compose(docker_path, env_vars, pull_from_registry=pull_from_registry, log_path=log_path):
                 return False
 
             return True

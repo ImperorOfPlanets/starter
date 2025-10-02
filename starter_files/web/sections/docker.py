@@ -19,7 +19,6 @@ logger = LogManager.get_logger()
 from starter_files.core.utils.loader_utils import get
 from starter_files.core.utils.globalVars_utils import get_global
 
-from starter_files.core.software.default.settings import SettingsModule
 from starter_files.core.software.default.docker import DockerModule
 
 this_section_in_control_panel = True
@@ -285,8 +284,7 @@ def start_project(data, session):
         # Запускаем в отдельном потоке
         def run_project():
             try:
-                settings = SettingsModule.get_settings()
-                result = DockerModule.run_compose(settings)
+                result = DockerModule.run_compose(log_file)
                 
 
                 with open(log_file, 'a', encoding='utf-8') as f:

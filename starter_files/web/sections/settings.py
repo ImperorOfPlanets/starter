@@ -1,75 +1,50 @@
+# web контроллер
 import json
-from pathlib import Path
 from flask import render_template, jsonify, request
 from starter_files.core.utils.i18n_utils import t
 from starter_files.core.utils.log_utils import LogManager
 from starter_files.core.software.default.settings import SettingsModule
-from starter_files.core.utils.globalVars_utils import get_global
 
 logger = LogManager.get_logger()
 
 this_section_in_control_panel = True
 section_icon = "bi-gear"
-section_name = "Settings"
-section_order = 2   # после dashboard
-
+section_name = "Docker Settings"
+section_order = 2
 
 def index(data, session):
-    """Главная страница настроек"""
-    settings = SettingsModule.get_settings()
-
-    # путь к docker/.env из глобальной переменной
-    docker_path = Path(get_global("docker_path", settings.get("docker_files", "/app/docker")))
-    env_path = docker_path / ".env"
-    env_vars = SettingsModule.read_env_file(env_path)
+    """Главная страница - редактор .env с информацией о системных переменных"""
+    # Убедимся что глобальные переменные установлены
+    SettingsModule.set_globals()
+    
+    env_vars = SettingsModule.read_env_file()
+    docker_validation = SettingsModule.validate_docker_path()
+    system_env_info = SettingsModule.get_system_env_info()
 
     return render_template(
         "sections/settings/index.html",
-        settings=settings,
         env_vars=env_vars,
+        docker_validation=docker_validation,
+        system_env_info=system_env_info,
         t=t,
     )
 
-
-def validate_project_path(data, session):
-    path = data.get("path")
-    if not path:
-        return jsonify({"status": "error", "message": "Path required"})
-    result = SettingsModule.validate_project_path(path)
-    return jsonify({"status": "success", "validation": result})
-
-
 def validate_docker_path(data, session):
-    path = data.get("path")
-    if not path:
-        return jsonify({"status": "error", "message": "Path required"})
-    result = SettingsModule.validate_docker_path(path)
+    """Валидация Docker пути"""
+    result = SettingsModule.validate_docker_path()
     return jsonify({"status": "success", "validation": result})
 
-
-def save_settings(data, session):
+def save_env(data, session):
+    """Сохранение .env файла"""
     try:
-        raw = data.get("settings")
-        settings = json.loads(raw) if isinstance(raw, str) else raw
-        ok = SettingsModule.save_settings(settings)
-        if ok:
-            # обновим globals после сохранения
-            SettingsModule.set_globals()
-            return jsonify({"status": "success"})
+        raw_vars = data.get("env_vars")
+        env_vars = json.loads(raw_vars) if isinstance(raw_vars, str) else raw_vars
+        
+        success = SettingsModule.write_env_file(env_vars)
+        if success:
+            return jsonify({"status": "success", "message": "Env file saved"})
         else:
-            return jsonify({"status": "error", "message": "Save failed"})
+            return jsonify({"status": "error", "message": "Failed to save env file"})
     except Exception as e:
-        logger.error(f"Error saving settings: {e}")
+        logger.error(f"Error saving env: {e}")
         return jsonify({"status": "error", "message": str(e)})
-
-
-def generate_docker_compose(data, session):
-    settings = SettingsModule.get_settings()
-    ok = SettingsModule.generate_docker_compose(settings)
-    return jsonify({"status": "success" if ok else "error"})
-
-
-def run_compose(data, session):
-    settings = SettingsModule.get_settings()
-    ok = SettingsModule.run_compose(settings)
-    return jsonify({"status": "success" if ok else "error"})

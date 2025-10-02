@@ -1,97 +1,153 @@
+<!-- sections/settings/index.html -->
 <div class="container-fluid">
     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-        <h1 class="h2">{{ t('settings_title') }}</h1>
+        <h1 class="h2">
+            <i class="bi bi-docker"></i> {{ t('docker_env_editor') }}
+        </h1>
         <div class="btn-toolbar mb-2 mb-md-0">
-            <button class="btn btn-sm btn-outline-secondary" data-action="refreshSettings">
+            <button class="btn btn-sm btn-outline-secondary" data-action="refresh">
                 <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+            </button>
+            <button class="btn btn-sm btn-outline-primary ms-2" data-action="validateDocker">
+                <i class="bi bi-check-circle"></i> {{ t('validate_docker') }}
             </button>
         </div>
     </div>
 
-    <div class="row">
+    <!-- Системные переменные -->
+    <div class="row mb-4">
         <div class="col-md-12">
-            <div class="card mb-4">
+            <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-gear me-2"></i> {{ t('project_settings') }}
+                    <i class="bi bi-terminal"></i> System Environment Variables
                 </div>
                 <div class="card-body">
-                    <form id="settingsForm">
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="projectPath" class="form-label">{{ t('project_path') }}</label>
-                                <input type="text" class="form-control" id="projectPath"
-                                       name="project_path" value="{{ settings.project_path }}">
-                                <div class="form-text">{{ t('project_path_help') }}</div>
-                                <div id="projectPathValidation" class="mt-1"></div>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="dockerFiles" class="form-label">{{ t('docker_files') }}</label>
-                                <input type="text" class="form-control" id="dockerFiles"
-                                       name="docker_files" value="{{ settings.docker_files }}">
-                                <div class="form-text">{{ t('docker_files_help') }}</div>
-                                <div id="dockerPathValidation" class="mt-1"></div>
-                            </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>PATH_APP_DOCKER:</strong>
+                            <code class="ms-2">{{ system_env_info.PATH_APP_DOCKER }}</code>
+                            <br>
+                            <small class="text-muted">Path to Docker files</small>
                         </div>
-
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="projectType" class="form-label">{{ t('project_type') }}</label>
-                                <select class="form-select" id="projectType" name="project_type">
-                                    <option value="client" {{ 'selected' if settings.project_type == 'client' }}>Client</option>
-                                    <option value="laravel" {{ 'selected' if settings.project_type == 'laravel' }}>Laravel</option>
-                                    <option value="symfony" {{ 'selected' if settings.project_type == 'symfony' }}>Symfony</option>
-                                    <option value="custom" {{ 'selected' if settings.project_type == 'custom' }}>Custom</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="environment" class="form-label">{{ t('environment') }}</label>
-                                <select class="form-select" id="environment" name="environment">
-                                    <option value="production" {{ 'selected' if settings.environment == 'production' }}>Production</option>
-                                    <option value="staging" {{ 'selected' if settings.environment == 'staging' }}>Staging</option>
-                                    <option value="development" {{ 'selected' if settings.environment == 'development' }}>Development</option>
-                                </select>
-                            </div>
+                        <div class="col-md-6">
+                            <strong>PATH_APP_DOCKER_LOGS:</strong>
+                            <code class="ms-2">{{ system_env_info.PATH_APP_DOCKER_LOGS }}</code>
+                            <br>
+                            <small class="text-muted">Path to Docker logs</small>
                         </div>
-
-                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <button type="button" class="btn btn-secondary me-md-2" data-action="validatePaths">
-                                <i class="bi bi-check-circle"></i> {{ t('validate_paths') }}
-                            </button>
-                            <button type="button" class="btn btn-primary" data-action="saveSettings">
-                                <i class="bi bi-save"></i> {{ t('save_settings') }}
-                            </button>
-                            <button type="button" class="btn btn-success" data-action="generateDockerCompose">
-                                <i class="bi bi-file-earmark-code"></i> {{ t('generate_docker_compose') }}
-                            </button>
-                        </div>
-                    </form>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-md-6">
+    <!-- Статус Docker -->
+    <div class="row mb-4">
+        <div class="col-md-12">
             <div class="card">
-                <div class="card-header">
-                    <i class="bi bi-info-circle me-2"></i> {{ t('project_validation') }}
-                </div>
                 <div class="card-body">
-                    <div id="projectValidationResult">
-                        <p class="text-muted">{{ t('run_validation_to_see_results') }}</p>
+                    <h5 class="card-title">
+                        <i class="bi bi-info-circle"></i> Docker Status
+                        <span class="badge bg-{{ 'success' if docker_validation.valid else 'danger' }} ms-2">
+                            {{ 'Ready' if docker_validation.valid else 'Not Ready' }}
+                        </span>
+                    </h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <small class="text-muted">Path:</small>
+                            <p class="mb-1"><code>{{ docker_validation.path }}</code></p>
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-muted">Status:</small>
+                            <p class="mb-1">{{ docker_validation.message }}</p>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <span class="badge bg-{{ 'success' if docker_validation.has_compose else 'secondary' }}">
+                            docker-compose.yml: {{ 'Found' if docker_validation.has_compose else 'Missing' }}
+                        </span>
+                        <span class="badge bg-{{ 'success' if docker_validation.has_env else 'warning' }} ms-1">
+                            .env: {{ 'Found' if docker_validation.has_env else 'Not found' }}
+                        </span>
+                        <span class="badge bg-{{ 'success' if docker_validation.has_env_example else 'warning' }} ms-1">
+                            .env.example: {{ 'Found' if docker_validation.has_env_example else 'Not found' }}
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
+    </div>
+
+    <!-- Редактор .env -->
+    <div class="row">
+        <div class="col-md-12">
             <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-info-circle me-2"></i> {{ t('docker_validation') }}
+                    <i class="bi bi-envelope me-2"></i> {{ t('docker_env_file') }}
+                    <span class="badge bg-primary ms-2">.env</span>
+                    {% if docker_validation.has_env_example %}
+                    <span class="badge bg-success ms-1">Using .env.example as template</span>
+                    {% endif %}
                 </div>
                 <div class="card-body">
-                    <div id="dockerValidationResult">
-                        <p class="text-muted">{{ t('run_validation_to_see_results') }}</p>
-                    </div>
+                    <form id="envForm">
+                        <div class="table-responsive">
+                            <table class="table table-striped" id="envTable">
+                                <thead>
+                                    <tr>
+                                        <th>{{ t('variable_name') }}</th>
+                                        <th>{{ t('variable_value') }}</th>
+                                        <th width="100">{{ t('actions') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for key, value in env_vars.items() %}
+                                    <tr>
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm" 
+                                                   name="key" value="{{ key }}" placeholder="VARIABLE_NAME">
+                                        </td>
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm" 
+                                                   name="value" value="{{ value }}" placeholder="value">
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-danger btn-sm remove-row">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                    <!-- Пустая строка для новых переменных -->
+                                    <tr>
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm" 
+                                                   name="key" placeholder="NEW_VARIABLE">
+                                        </td>
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm" 
+                                                   name="value" placeholder="value">
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-danger btn-sm remove-row">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <button type="button" class="btn btn-success btn-sm" id="addRow">
+                                <i class="bi bi-plus-circle"></i> {{ t('add_variable') }}
+                            </button>
+                            
+                            <button type="button" class="btn btn-primary" data-action="saveEnv">
+                                <i class="bi bi-save"></i> {{ t('save_env') }}
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -100,108 +156,73 @@
 
 <script>
 $(document).ready(function() {
-    // Обновление
-    $('[data-action="refreshSettings"]').on('click', function() {
-        $('#mainMenu a[data-section="settings"]').click();
+    // Обновление страницы
+    $('[data-action="refresh"]').on('click', function() {
+        location.reload();
     });
 
-    // Валидация путей
-    $('[data-action="validatePaths"]').on('click', function() {
-        const projectPath = $('#projectPath').val();
-        const dockerFiles = $('#dockerFiles').val();
-
+    // Валидация Docker
+    $('[data-action="validateDocker"]').on('click', function() {
         $.post('/', {
             section: 'settings',
-            action: 'validate_project_path',
-            path: projectPath
+            action: 'validate_docker_path'
         }, function(response) {
             if (response.status === 'success') {
-                const validation = response.validation;
-                const $result = $('#projectValidationResult');
+                location.reload(); // Просто перезагружаем для обновления статуса
+            }
+        });
+    });
 
-                let html = '<ul class="list-group list-group-flush">';
-                html += `<li class="list-group-item"><strong>Exists:</strong> ${validation.exists ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Is Directory:</strong> ${validation.is_dir ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Valid:</strong> ${validation.valid ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Message:</strong> ${validation.message}</li>`;
-                html += '</ul>';
+    // Добавление новой строки
+    $('#addRow').on('click', function() {
+        const newRow = `
+            <tr>
+                <td>
+                    <input type="text" class="form-control form-control-sm" name="key" placeholder="VARIABLE_NAME">
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm" name="value" placeholder="value">
+                </td>
+                <td>
+                    <button type="button" class="btn btn-danger btn-sm remove-row">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+        $('#envTable tbody').append(newRow);
+    });
 
-                $result.html(html);
+    // Удаление строки
+    $(document).on('click', '.remove-row', function() {
+        $(this).closest('tr').remove();
+    });
 
-                $('#projectPathValidation').html(validation.valid
-                    ? '<span class="text-success"><i class="bi bi-check-circle"></i> Valid path</span>'
-                    : '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ' + validation.message + '</span>');
+    // Сохранение .env
+    $('[data-action="saveEnv"]').on('click', function() {
+        const envVars = {};
+        $('#envTable tbody tr').each(function() {
+            const key = $(this).find('input[name="key"]').val().trim();
+            const value = $(this).find('input[name="value"]').val().trim();
+            if (key) {
+                envVars[key] = value;
             }
         });
 
         $.post('/', {
             section: 'settings',
-            action: 'validate_docker_path',
-            path: dockerFiles
+            action: 'save_env',
+            env_vars: JSON.stringify(envVars)
         }, function(response) {
             if (response.status === 'success') {
-                const validation = response.validation;
-                const $result = $('#dockerValidationResult');
-
-                let html = '<ul class="list-group list-group-flush">';
-                html += `<li class="list-group-item"><strong>Exists:</strong> ${validation.exists ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Is Directory:</strong> ${validation.is_dir ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Has Compose:</strong> ${validation.has_compose ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Valid:</strong> ${validation.valid ? 'Yes' : 'No'}</li>`;
-                html += `<li class="list-group-item"><strong>Message:</strong> ${validation.message}</li>`;
-                html += '</ul>';
-
-                $result.html(html);
-
-                $('#dockerPathValidation').html(validation.valid
-                    ? '<span class="text-success"><i class="bi bi-check-circle"></i> Valid path</span>'
-                    : '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ' + validation.message + '</span>');
-            }
-        });
-    });
-
-    // Сохранение
-    $('[data-action="saveSettings"]').on('click', function() {
-        const formData = {
-            project_path: $('#projectPath').val(),
-            docker_files: $('#dockerFiles').val(),
-            project_type: $('#projectType').val(),
-            environment: $('#environment').val()
-        };
-
-        $.post('/', {
-            section: 'settings',
-            action: 'save_settings',
-            settings: JSON.stringify(formData)
-        }, function(response) {
-            if (response.status === 'success') {
-                alert('{{ t("settings_saved_successfully") }}');
+                alert('{{ t("env_saved_successfully") }}');
+                location.reload();
             } else {
-                alert('{{ t("settings_save_failed") }}: ' + response.message);
+                alert('{{ t("env_save_failed") }}: ' + response.message);
             }
         }).fail(function() {
             alert('{{ t("request_failed") }}');
         });
     });
-
-    // Генерация docker-compose
-    $('[data-action="generateDockerCompose"]').on('click', function() {
-        if (confirm('{{ t("confirm_generate_docker_compose") }}')) {
-            $.post('/', {
-                section: 'settings',
-                action: 'generate_docker_compose'
-            }, function(response) {
-                if (response.status === 'success') {
-                    alert('{{ t("docker_compose_generated_successfully") }}');
-                } else {
-                    alert('{{ t("docker_compose_generation_failed") }}: ' + response.message);
-                }
-            }).fail(function() {
-                alert('{{ t("request_failed") }}');
-            });
-        }
-    });
 });
 </script>
-
-{% include 'sections/settings/env_editor.html' %}
