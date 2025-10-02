@@ -44,7 +44,6 @@ PROJECTS = {
         
         'TARGETS': [
             'configs/init/*',
-            'configs/browser/*',
             'configs/mariadb/mariadb.cnf',
             'configs/mariadb/conf.d/logging.cnf',
             'configs/nginx/confs/templates/default.conf.template',
@@ -55,8 +54,8 @@ PROJECTS = {
             'configs/transformer/app.py',
             'configs/transformer/requirements.txt',
             'configs/transformer/start.sh',
-            'configs/vosk/*',
             'dockerfiles/*',
+            'configs/vosk/*',
             '.env.example',
             '.gitignore',
             'Инструкция',
