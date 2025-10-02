@@ -43,6 +43,7 @@ PROJECTS = {
         'DOWNLOAD_URL':'https://gitflic.ru/project/imperor/docker/file/downloadAll?branch=master&format=zip',
         
         'TARGETS': [
+            'configs/browser/*',
             'configs/init/*',
             'configs/mariadb/mariadb.cnf',
             'configs/mariadb/conf.d/logging.cnf',
