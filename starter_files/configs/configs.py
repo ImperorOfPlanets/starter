@@ -57,6 +57,7 @@ PROJECTS = {
             'configs/transformer/start.sh',
             'dockerfiles/*',
             'configs/voice/*',
+            'configs/voicetts/*',
             '.env.example',
             '.gitignore',
             'Инструкция',
