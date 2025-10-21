@@ -45,10 +45,11 @@ def start_interactive_mode():
 
     app = configure_app()
     ssl_context = get_ssl_context()
+    port = int(os.environ.get('PORT', 8000))
     open_browser()
     app.run(
         host='0.0.0.0',
-        port=8000,
+        port=port,
         ssl_context=ssl_context,
         debug=True
     )
