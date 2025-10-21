@@ -39,7 +39,7 @@ def start_interactive_mode():
     print(f"[DEBUG] Переменные окружения загружены из {env_file}")
 
     # Для отладки: проверка переменных окружения
-    env_vars = ["APP_SECRET_KEY", "ADMIN_LOGIN", "ADMIN_PASSWORD_HASH"]
+    env_vars = ["APP_SECRET_KEY", "ADMIN_LOGIN", "ADMIN_PASSWORD_HASH", "PORT"]
     for var in env_vars:
         print(f"{var} = {os.environ.get(var, 'NOT_SET')}")
 
