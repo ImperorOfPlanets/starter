@@ -8,8 +8,14 @@ from flask import g
 from starter_files.core.utils.globalVars_utils import get_global
 
 from starter_files.core.utils.log_utils import LogManager
-LogManager.register_log_dir('translations', 'translations')
-logger = LogManager.get_logger('translations')
+
+# Регистрируем директорию для переводов (если возможно)
+try:
+    LogManager.register_log_dir('translations', 'translations')
+    logger = LogManager.get_logger('translations')
+except RuntimeError:
+    # Если LogManager не инициализирован, создаем временный логгер
+    logger = None
 
 # Глобальная переменная для кеширования языков
 _AVAILABLE_LANGUAGES = None
@@ -145,7 +151,7 @@ def t(key: str, _section=None, _file=None, **kwargs) -> str:
         if frame:
             del frame
 
-def return_basic(section_slug: str, field: str, default: str = None) -> str:
+def return_basic(section_slug: str, field: str, default: str = "") -> str:
     """
     Получает базовую информацию о модуле из translations['sections'][section_slug]['basic']
     

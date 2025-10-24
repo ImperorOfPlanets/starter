@@ -10,7 +10,11 @@ from starter_files.core.utils.loader_utils import get
 from starter_files.core.utils.globalVars_utils import get_global
 from starter_files.core.utils.log_utils import LogManager
 
-logger = LogManager.get_logger()
+# Логгер будет инициализирован позже, при необходимости
+try:
+    logger = LogManager.get_logger()
+except RuntimeError:
+    logger = None
 
 # Обязательные переменные для первоначальной настройки asd sa
 REQUIRED_ENV_VARS = [

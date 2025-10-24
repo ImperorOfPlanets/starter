@@ -6,6 +6,13 @@ from pathlib import Path
 from socket import gethostname
 
 from starter_files.core.utils.globalVars_utils import get_global
+from starter_files.core.utils.log_utils import LogManager
+
+# Логгер будет инициализирован позже, при необходимости
+try:
+    logger = LogManager.get_logger()
+except RuntimeError:
+    logger = None
 
 def setup_ssl_folder():
     """Создает папку для SSL если ее нет"""
@@ -21,7 +28,8 @@ def setup_ssl_folder():
         ssl_dir.chmod(0o755)
         return ssl_dir
     except Exception as e:
-        logger.info(f"Ошибка создания SSL папки: {e}")
+        if logger:
+            logger.info(f"Ошибка создания SSL папки: {e}")
         raise
 
 def check_existing_certificates():
@@ -87,5 +95,6 @@ def get_ssl_context():
         cert_file, key_file = generate_self_signed_cert()
         return (str(cert_file), str(key_file))
     except Exception as e:
-        logger.info(f"Ошибка работы с SSL сертификатами: {e}")
+        if logger:
+            logger.info(f"Ошибка работы с SSL сертификатами: {e}")
         raise

@@ -18,7 +18,11 @@ from starter_files.core.oss.default.updates import UpdatesModule
 SERVICE_NAME = "starter-service"
 
 from starter_files.core.utils.log_utils import LogManager
-logger = LogManager.get_logger('service')
+# Логгер будет инициализирован позже, при необходимости
+try:
+    logger = LogManager.get_logger('service')
+except RuntimeError:
+    logger = None
 
 class ServiceModule(BaseModule):
     """Модуль для работы с системными сервисами"""

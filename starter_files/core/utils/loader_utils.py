@@ -8,8 +8,12 @@ from starter_files.core.utils.globalVars_utils import set_global, get_global
 from typing import List, Dict, Any, Tuple, Optional
 from starter_files.core.utils.log_utils import LogManager
 
-LogManager.register_log_dir('modules', 'modules')
-logger = LogManager.get_logger('modules')
+# Регистрируем директорию для модулей (если возможно)
+try:
+    LogManager.register_log_dir('modules', 'modules')
+    logger = LogManager.get_logger('modules')
+except RuntimeError:
+    logger = None
 
 _modules_cache = {}  # Формат: {module_name: [impl1, impl2, impl3]}
 

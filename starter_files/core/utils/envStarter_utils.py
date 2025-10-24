@@ -94,6 +94,7 @@ def ensure_env_variables():
     
     current_vars = read_env_file(env_path)
     with open(env_example_path, 'r', encoding='utf-8') as f:
+
         example_content = f.read()
     example_vars, example_lines = parse_env_content(example_content)
     

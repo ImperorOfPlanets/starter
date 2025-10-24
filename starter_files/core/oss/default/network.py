@@ -3,7 +3,10 @@ from starter_files.core.base_module import BaseModule
 import socket
 import platform
 import os
-import fcntl
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 import struct
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
@@ -12,14 +15,18 @@ from dataclasses import dataclass
 from starter_files.core.utils.globalVars_utils import get_global
 from starter_files.core.utils.log_utils import LogManager
 
-logger = LogManager.get_logger('network')
+# Логгер будет инициализирован позже, при необходимости
+try:
+    logger = LogManager.get_logger('network')
+except RuntimeError:
+    logger = None
 
 @dataclass
 class NetworkConnection:
     ip: str
     netmask: str
     gateway: Optional[str] = None
-    dns_servers: List[str] = None
+    dns_servers: Optional[List[str]] = None
     status: str = "Unknown"
 
 @dataclass
