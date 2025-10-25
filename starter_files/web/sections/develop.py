@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from starter_files.core.utils.globalVars_utils import get_all_globals
 from starter_files.core.utils.loader_utils import get, collect_modules_info
+from starter_files.core.utils.log_utils import LogManager
 
 this_section_in_control_panel = False
 section_name = "Develop"
@@ -48,6 +49,7 @@ def globalVariables(data, session):
 def modules(data, session):
     """Возвращает информацию о модулях со всеми реализациями."""
     try:
+        logger = LogManager.get_logger()
         logger.info("Starting modules collection")
         
         # Собираем информацию о модулях
@@ -104,6 +106,7 @@ def modules(data, session):
         }
         
     except Exception as e:
+        logger = LogManager.get_logger()
         logger.info("Critical error in modules endpoint")
         return {
             "status": "error",

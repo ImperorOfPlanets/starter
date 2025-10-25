@@ -86,7 +86,8 @@ class NetworkModule(BaseModule):
             return valid_ips if valid_ips else ['127.0.0.1']
             
         except Exception as e:
-            logger.error(f"Error getting local IPs: {str(e)}")
+            if logger:
+                logger.error(f"Error getting local IPs: {str(e)}")
             return ['127.0.0.1']
 
     @staticmethod
@@ -143,7 +144,8 @@ class NetworkModule(BaseModule):
             return NetworkModule._get_linux_minimal()
             
         except Exception as e:
-            logger.error(f"Error getting Linux network info: {str(e)}")
+            if logger:
+                logger.error(f"Error getting Linux network info: {str(e)}")
             return [], []
 
     @staticmethod
@@ -196,7 +198,8 @@ class NetworkModule(BaseModule):
                             virtual_devices.append(device)
         
         except Exception as e:
-            logger.error(f"Error reading from /sys: {str(e)}")
+            if logger:
+                logger.error(f"Error reading from /sys: {str(e)}")
         
         return physical_devices, virtual_devices
 
@@ -232,7 +235,8 @@ class NetworkModule(BaseModule):
                         virtual_devices.append(device)
         
         except Exception as e:
-            logger.error(f"Error in minimal Linux method: {str(e)}")
+            if logger:
+                logger.error(f"Error in minimal Linux method: {str(e)}")
         
         return physical_devices, virtual_devices
 
@@ -270,7 +274,8 @@ class NetworkModule(BaseModule):
                 ips.append({'ip': local_ip, 'netmask': 24})
         
         except Exception as e:
-            logger.error(f"Error getting IP addresses for {ifname}: {str(e)}")
+            if logger:
+                logger.error(f"Error getting IP addresses for {ifname}: {str(e)}")
         
         return ips
 

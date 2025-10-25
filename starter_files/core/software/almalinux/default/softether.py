@@ -15,6 +15,7 @@ logger = logging.getLogger('softether_oss')
 class SoftetherModule(BaseModule):
     """Реализация для установки SoftEther VPN Client"""
 
+    @staticmethod
     def return_commands_install_softether() -> List[str]:
         """Возвращает команды для установки SoftEther VPN на AlmaLinux"""
         is_root = get_global('is_root')

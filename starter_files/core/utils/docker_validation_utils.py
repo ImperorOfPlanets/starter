@@ -2,13 +2,14 @@ import os
 import re
 import subprocess
 import json
+import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from starter_files.core.utils.globalVars_utils import get_global
 from starter_files.core.utils.log_utils import LogManager
 
 try:
-    import yaml
+    import yaml  # type: ignore
     YAML_AVAILABLE = True
 except ImportError:
     YAML_AVAILABLE = False
@@ -37,7 +38,7 @@ class DockerConfigValidator:
                 content = f.read()
 
             # Проверяем базовый формат YAML
-            if not YAML_AVAILABLE:
+            if not YAML_AVAILABLE or yaml is None:
                 errors.append("Библиотека PyYAML не установлена, пропускаю валидацию YAML")
                 return True, errors
 
@@ -265,7 +266,6 @@ class DockerConfigValidator:
 
         # Проверяем наличие Docker
         try:
-            import subprocess
             result = subprocess.run(['docker', '--version'], capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
                 errors.append("Docker не установлен или не работает")
@@ -323,6 +323,6 @@ class DockerConfigValidator:
         return {
             'valid': is_valid,
             'errors': errors,
-            'timestamp': str(Path.cwd()),
+            'timestamp': datetime.datetime.now().isoformat(),
             'docker_dir': str(Path(get_global('script_path')) / 'docker')
         }

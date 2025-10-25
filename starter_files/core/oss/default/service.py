@@ -60,7 +60,8 @@ class ServiceModule(BaseModule):
                     log_file.write(log_entry + '\n')
                     log_file.flush()
                     result['logs'].append(log_entry)
-                    logger.info(log_entry)
+                    if logger:
+                        logger.info(log_entry)
                 
                 log("Starting systemd installation...")
 
@@ -91,10 +92,11 @@ class ServiceModule(BaseModule):
                         bufsize=1,
                         universal_newlines=True
                     )
-                    
-                    for line in iter(process.stdout.readline, ''):
-                        if line:
-                            log(line.strip())
+
+                    if process.stdout:
+                        for line in iter(process.stdout.readline, ''):
+                            if line:
+                                log(line.strip())
                     
                     return_code = process.wait()
                     if return_code != 0:
@@ -116,7 +118,8 @@ class ServiceModule(BaseModule):
             error_msg = f"Installation failed: {str(e)}"
             result['status'] = 'error'
             result['message'] = error_msg
-            logger.exception("systemd installation error")
+            if logger:
+                logger.exception("systemd installation error")
         
         return result
 
@@ -138,7 +141,8 @@ class ServiceModule(BaseModule):
                     log_file.write(log_entry + '\n')
                     log_file.flush()
                     result['logs'].append(log_entry)
-                    logger.info(log_entry)
+                    if logger:
+                        logger.info(log_entry)
                 
                 log("Starting starter-service installation...")
 
@@ -211,10 +215,11 @@ class ServiceModule(BaseModule):
                         bufsize=1,
                         universal_newlines=True
                     )
-                    
-                    for line in iter(process.stdout.readline, ''):
-                        if line:
-                            log(line.strip())
+
+                    if process.stdout:
+                        for line in iter(process.stdout.readline, ''):
+                            if line:
+                                log(line.strip())
                     
                     return_code = process.wait()
                     if return_code != 0:
@@ -286,7 +291,8 @@ class ServiceModule(BaseModule):
             error_msg = f"Installation failed: {str(e)}"
             result['status'] = 'error'
             result['message'] = error_msg
-            logger.exception("starter-service installation error")
+            if logger:
+                logger.exception("starter-service installation error")
         
         return result
 
@@ -394,7 +400,8 @@ class ServiceModule(BaseModule):
                     status['enabled'] = result.returncode == 0
 
         except Exception as e:
-            logger.error(f"Error checking service status: {str(e)}")
+            if logger:
+                logger.error(f"Error checking service status: {str(e)}")
 
         return status
 
@@ -414,7 +421,8 @@ class ServiceModule(BaseModule):
                     log_file.write(log_entry + '\n')
                     log_file.flush()
                     result['logs'].append(log_entry)
-                    logger.info(log_entry)
+                    if logger:
+                        logger.info(log_entry)
                 
                 log("Starting starter-service uninstallation...")
 
@@ -436,10 +444,11 @@ class ServiceModule(BaseModule):
                         bufsize=1,
                         universal_newlines=True
                     )
-                    
-                    for line in iter(process.stdout.readline, ''):
-                        if line:
-                            log(line.strip())
+
+                    if process.stdout:
+                        for line in iter(process.stdout.readline, ''):
+                            if line:
+                                log(line.strip())
                     
                     process.wait()
                     # Не проверяем код возврата, так как сервис может быть уже остановлен
@@ -459,7 +468,8 @@ class ServiceModule(BaseModule):
             error_msg = f"Uninstallation failed: {str(e)}"
             result['status'] = 'error'
             result['message'] = error_msg
-            logger.exception("starter-service uninstallation error")
+            if logger:
+                logger.exception("starter-service uninstallation error")
         
         return result
 
@@ -483,6 +493,8 @@ class ServiceModule(BaseModule):
                     return {'status': 'success', 'message': f'Service {action} successfully'}
                 else:
                     return {'status': 'error', 'message': f'Unknown action: {action}'}
+            else:
+                return {'status': 'error', 'message': f'Unsupported OS: {system}'}
 
         except subprocess.CalledProcessError as e:
             return {'status': 'error', 'message': f'Failed to {action} service: {str(e)}'}

@@ -4,6 +4,7 @@ import hashlib
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from starter_files.core.utils.log_utils import LogManager
 
 class FSUtils:
     """Утилиты для работы с файловой системой"""
@@ -12,13 +13,11 @@ class FSUtils:
     def check_folders(folders_to_check: List[str]) -> None:
         """
         Проверяет наличие папок и создает их при необходимости.
-        
+
         Args:
             folders_to_check: Список папок для проверки (относительно рабочей директории)
         """
-        folders_to_check = [
-            'docker', 'laravel'
-        ]
+        logger = LogManager.get_logger('fs_utils')
         for folder in folders_to_check:
             path = Path(folder)
             if not path.exists():
@@ -28,7 +27,7 @@ class FSUtils:
                 logger.info(f'Папка "{folder}" уже существует')
 
     @staticmethod
-    def validate_env_file(env_path: str, allowed_empty: List[str] = None) -> List[str]:
+    def validate_env_file(env_path: str, allowed_empty: Optional[List[str]] = None) -> List[str]:
         """
         Проверяет .env файл на незаполненные переменные.
         
@@ -111,7 +110,7 @@ class FSUtils:
             return hashlib.sha256(f.read()).hexdigest()
 
     @staticmethod
-    def create_backup(source_dir: str, backup_dir: str, exclude: List[str] = None) -> None:
+    def create_backup(source_dir: str, backup_dir: str, exclude: Optional[List[str]] = None) -> None:
         """
         Создает резервную копию директории.
         
@@ -137,7 +136,7 @@ class FSUtils:
                 shutil.copy2(item, target)
 
     @staticmethod
-    def sync_dirs(source_dir: str, target_dir: str, patterns: List[str], ignore: List[str] = None) -> Dict:
+    def sync_dirs(source_dir: str, target_dir: str, patterns: List[str], ignore: Optional[List[str]] = None) -> Dict:
         """
         Синхронизирует файлы между директориями по шаблонам.
         
@@ -171,36 +170,13 @@ class FSUtils:
                     
                     if not dst_path.exists():
                         changes['new'].append(str(rel_path))
-                    elif FSUtils.get_file_hash(src_path) != FSUtils.get_file_hash(dst_path):
+                    elif FSUtils.get_file_hash(str(src_path)) != FSUtils.get_file_hash(str(dst_path)):
                         changes['updated'].append(str(rel_path))
                         
                     shutil.copy2(src_path, dst_path)
         
         return changes
 
-    @staticmethod
-    def create_shortcut(target: str, shortcut: str, args: str = "", workdir: str = "") -> None:
-        """
-        Создает ярлык в Windows.
-        
-        Args:
-            target: Целевой файл
-            shortcut: Путь к ярлыку
-            args: Аргументы командной строки
-            workdir: Рабочая директория
-        """
-        try:
-            import winshell
-            from win32com.client import Dispatch
-            
-            shell = Dispatch('WScript.Shell')
-            shortcut = shell.CreateShortCut(shortcut)
-            shortcut.TargetPath = target
-            shortcut.Arguments = args
-            shortcut.WorkingDirectory = workdir
-            shortcut.save()
-        except ImportError:
-            raise Exception("Для создания ярлыков требуется pywin32 и winshell")
 
     @staticmethod
     def get_ip_addresses() -> List[str]:

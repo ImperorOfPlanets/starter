@@ -95,7 +95,12 @@ class DependencyDiscovery:
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
+        except Exception as e:
+            if logger:
+                logger.warning(f"Ошибка при открытии файла {file_path}: {str(e)}")
+            return imports
 
+        try:
             # Парсим AST для точного извлечения импортов
             tree = ast.parse(content, filename=str(file_path))
 

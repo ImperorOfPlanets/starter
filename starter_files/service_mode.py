@@ -3,12 +3,12 @@ import sys
 import platform
 import subprocess
 import shutil
+from datetime import datetime
 
 from pathlib import Path
 from typing import Tuple, Optional
 import getpass
 
-from starter_files.core.utils.log_utils import logger
 
 class ServiceManager:
     def __init__(self, script_path: str, service_name: str = "starter-service"):
@@ -88,6 +88,8 @@ class ServiceManager:
                 if not self._install_nssm():
                     return False
                 nssm_path = self._get_nssm_path()
+                if not nssm_path:
+                    return False
 
             service_name = self.service_name
             working_dir = str(self.script_path.parent)
@@ -98,21 +100,23 @@ class ServiceManager:
                 f.write(b'\xef\xbb\xbf')  # UTF-8 BOM
                 f.write(f"Service log started at {datetime.now()}\n".encode('utf-8'))
 
+            nssm_str = str(nssm_path)
+
             # Установка службы с перенаправлением вывода
             subprocess.run(
-                [nssm_path, 'install', service_name, sys.executable, str(self.script_path), '--service-run'],
+                [nssm_str, 'install', service_name, sys.executable, str(self.script_path), '--service-run'],
                 check=True
             )
 
             # Настройка параметров
-            subprocess.run([nssm_path, 'set', service_name, 'AppDirectory', working_dir], check=True)
-            subprocess.run([nssm_path, 'set', service_name, 'AppStdout', log_file], check=True)
-            subprocess.run([nssm_path, 'set', service_name, 'AppStderr', log_file], check=True)
-            subprocess.run([nssm_path, 'set', service_name, 'Start', 'SERVICE_AUTO_START'], check=True)
+            subprocess.run([nssm_str, 'set', service_name, 'AppDirectory', working_dir], check=True)
+            subprocess.run([nssm_str, 'set', service_name, 'AppStdout', log_file], check=True)
+            subprocess.run([nssm_str, 'set', service_name, 'AppStderr', log_file], check=True)
+            subprocess.run([nssm_str, 'set', service_name, 'Start', 'SERVICE_AUTO_START'], check=True)
 
             # Альтернативный способ установки кодировки - через переменную окружения
             subprocess.run(
-                [nssm_path, 'set', service_name, 'AppEnvironmentExtra', 'PYTHONIOENCODING=utf-8'],
+                [nssm_str, 'set', service_name, 'AppEnvironmentExtra', 'PYTHONIOENCODING=utf-8'],
                 check=True
             )
 
@@ -391,8 +395,9 @@ exit 0
                 pass  # Служба уже остановлена или не существует
 
             # 3. Удаляем службу через NSSM
+            nssm_str = str(nssm_path)
             subprocess.run(
-                [nssm_path, 'remove', self.service_name, 'confirm'],
+                [nssm_str, 'remove', self.service_name, 'confirm'],
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL

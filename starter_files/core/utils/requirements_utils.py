@@ -114,20 +114,13 @@ def get_requirements_path():
     version_parts = release.split('.')
     major_version = version_parts[0] if version_parts else release
 
-    # Для Linux определяем дистрибутив более точно
-    if system == "linux":
-        distro_name, distro_version = get_linux_distro_info()
-    else:
-        distro_name = system
-        distro_version = major_version
-
 def get_linux_distro_info() -> Tuple[str, str]:
     """Определяет информацию о Linux дистрибутиве"""
     major_version = platform.release().split('.')[0]
 
     # Метод 1: используем distro если доступен
     try:
-        import distro
+        import distro  # type: ignore
         name = distro.name().lower().split()[0]
         version = distro.version().split('.')[0]
         print(f"Определен дистрибутив через distro: {name} {version}")
@@ -161,6 +154,13 @@ def get_linux_distro_info() -> Tuple[str, str]:
     # Метод 3: fallback на platform
     print(f"Используем fallback определение: linux {major_version}")
     return "linux", major_version
+
+    # Для Linux определяем дистрибутив более точно
+    if system == "linux":
+        distro_name, distro_version = get_linux_distro_info()
+    else:
+        distro_name = system
+        distro_version = major_version
 
     # 4. Проверяем возможные пути в порядке приоритета
     possible_paths = [
@@ -291,8 +291,13 @@ def restart_application():
         # Добавляем специальный флаг для предотвращения бесконечного цикла перезапуска
         env['STARTER_RESTARTING'] = '1'
 
-        # Используем execve для полной замены процесса
-        os.execve(python_cmd, args, env)
+        # Используем execve для полной замены процесса (только для Unix-подобных систем)
+        if os.name == 'posix':
+            os.execve(python_cmd, args, env)
+        else:
+            # Для Windows используем subprocess для перезапуска
+            subprocess.run(args, env=env)
+            sys.exit(0)
 
     except Exception as e:
         print(f"Критическая ошибка при перезапуске приложения: {str(e)}")
