@@ -20,7 +20,7 @@ IT CAN ONLY BE REMOVED BY PHYSICAL ACCESS TO IT!
 </div>
 <hr />
 <div style="color: orange; font-size: large; text-align: center;">
- ЭТО НЕСТАБИЛЬНАЯ ВЕТКА! ПРОГРАММА МОЖЕТ СНЕСТИ ВАШУ СИСТЕМУ! XDXDXD <br/>
- THIS IS AN UNSTABLE BRANCH! THE PROGRAM MAY DESTROY YOUR SYSTEM! XDXDXD <br/>
- 这是一个不稳定的分支！程序可能会破坏您的系统！XDXDXD
+ ЭТО НЕСТАБИЛЬНАЯ ВЕТКА! ПРОГРАММА МОЖЕТ СНЕСТИ ВАШУ СИСТЕМУ! ЛОЛ))) Я ПРЕДУПРЕДИЛ <br/>
+ THIS IS AN UNSTABLE BRANCH! THE PROGRAM MAY DESTROY YOUR SYSTEM!  <br/>
+ 这是一个不稳定的分支！程序可能会破坏您的系统！
 </div>
