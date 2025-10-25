@@ -277,7 +277,26 @@ def restart_application():
             # В venv используем Python из виртуального окружения
             script_dir = Path(get_global('script_path'))
             venv_dir = script_dir / "venv"
-            python_cmd = str(get_venv_python(venv_dir))
+            venv_python_path = get_venv_python(venv_dir)
+            python_cmd = str(venv_python_path)
+            # Проверяем, что путь существует
+            if not venv_python_path.exists():
+                print(f"Предупреждение: Python в venv не найден по пути {python_cmd}")
+                print("Пытаемся создать venv заново...")
+                from starter_files.core.utils.venv_utils import create_venv
+                try:
+                    new_venv_dir = create_venv()
+                    new_python_path = get_venv_python(new_venv_dir)
+                    if new_python_path.exists():
+                        python_cmd = str(new_python_path)
+                        print(f"Создан новый venv, используем: {python_cmd}")
+                    else:
+                        print("Не удалось создать venv, используем системный Python")
+                        python_cmd = get_python_cmd()
+                except Exception as e:
+                    print(f"Ошибка создания venv: {e}")
+                    print("Используем системный Python для перезапуска")
+                    python_cmd = get_python_cmd()
         else:
             # Используем системный Python
             python_cmd = get_python_cmd()
