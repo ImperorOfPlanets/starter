@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess
 from datetime import datetime, timedelta, timezone
 
 from cryptography import x509
@@ -110,10 +111,81 @@ def generate_self_signed_cert(force_regenerate=False):
 
     return cert_file, key_file
 
-def get_ssl_context():
-    """Возвращает SSL контекст, используя существующие сертификаты или генерируя новые"""
+def get_lets_encrypt_cert(domain):
+    """Получает сертификат Let's Encrypt для указанного домена"""
+    ssl_dir = setup_ssl_folder()
+    cert_file = ssl_dir / f"{domain}.crt"
+    key_file = ssl_dir / f"{domain}.key"
+
+    if cert_file.exists() and key_file.exists():
+        try:
+            # Проверяем валидность существующих сертификатов
+            with open(cert_file, "rb") as f:
+                x509.load_pem_x509_certificate(f.read())
+            with open(key_file, "rb") as f:
+                serialization.load_pem_private_key(f.read(), password=None)
+            return cert_file, key_file
+        except:
+            pass
+
+    # Используем certbot для получения сертификата
     try:
-        cert_file, key_file = generate_self_signed_cert()
+        # Устанавливаем certbot если не установлен
+        subprocess.run(['which', 'certbot'], check=True, capture_output=True)
+    except subprocess.CalledProcessError:
+        if logger:
+            logger.info("Установка certbot...")
+        try:
+            subprocess.run(['apt-get', 'update'], check=True)
+            subprocess.run(['apt-get', 'install', '-y', 'certbot'], check=True)
+        except subprocess.CalledProcessError as e:
+            if logger:
+                logger.error(f"Не удалось установить certbot: {e}")
+            raise
+
+    # Получаем сертификат
+    try:
+        cmd = [
+            'certbot', 'certonly', '--standalone',
+            '--non-interactive', '--agree-tos',
+            '--email', 'admin@localhost',
+            '-d', domain,
+            '--cert-name', domain,
+            '--config-dir', str(ssl_dir / 'letsencrypt'),
+            '--work-dir', str(ssl_dir / 'work'),
+            '--logs-dir', str(ssl_dir / 'logs')
+        ]
+        subprocess.run(cmd, check=True)
+
+        # Копируем сертификаты в нужное место
+        letsencrypt_dir = ssl_dir / 'letsencrypt' / 'live' / domain
+        if letsencrypt_dir.exists():
+            import shutil
+            shutil.copy2(letsencrypt_dir / 'fullchain.pem', cert_file)
+            shutil.copy2(letsencrypt_dir / 'privkey.pem', key_file)
+
+        return cert_file, key_file
+    except subprocess.CalledProcessError as e:
+        if logger:
+            logger.error(f"Не удалось получить сертификат Let's Encrypt: {e}")
+        raise
+
+def get_ssl_context():
+    """Возвращает SSL контекст, используя Let's Encrypt или самоподписанный сертификат"""
+    try:
+        # Проверяем настройки SSL
+        use_lets_encrypt = os.getenv('USE_LETS_ENCRYPT', 'false').lower() == 'true'
+        domain = os.getenv('DOMAIN', 'localhost')
+
+        if use_lets_encrypt and domain != 'localhost':
+            if logger:
+                logger.info(f"Использование Let's Encrypt для домена {domain}")
+            cert_file, key_file = get_lets_encrypt_cert(domain)
+        else:
+            if logger:
+                logger.info("Использование самоподписанного сертификата")
+            cert_file, key_file = generate_self_signed_cert()
+
         return (str(cert_file), str(key_file))
     except Exception as e:
         if logger:
