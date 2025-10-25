@@ -102,8 +102,9 @@ if __name__ == '__main__':
     logger.info("Проверка установки зависимостей...")
     try:
         import flask
+        import flask_session
         import dotenv
-        logger.info("Зависимости flask и dotenv найдены")
+        logger.info("Зависимости flask, flask_session и dotenv найдены")
     except ImportError as e:
         logger.warning(f"Зависимости не найдены: {e}")
         from starter_files.core.utils.requirements_utils import install_and_restart
