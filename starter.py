@@ -35,8 +35,15 @@ def start_service_mode():
         logger = get_global('logger')
         logger.info("Запуск в сервисном режиме...")
         logger.info("start_service_mode() выполнен успешно")
+        # В сервисном режиме не выводим ничего в консоль
     except Exception as e:
-        print(f"Ошибка в start_service_mode(): {e}")
+        # В сервисном режиме логируем ошибку, но не выводим в консоль
+        try:
+            logger = get_global('logger')
+            logger.error(f"Ошибка в start_service_mode(): {e}")
+        except:
+            # Если логгер недоступен, выводим в stderr
+            print(f"Ошибка в start_service_mode(): {e}", file=sys.stderr)
         sys.exit(1)
     sys.exit(0)
 
@@ -88,23 +95,27 @@ if __name__ == '__main__':
         print(f"Ошибка в LogManager.initialize(): {e}")
         sys.exit(1)
 
-    logger.info("Проверка виртуального окружения...")
+    if args.debug:
+        logger.info("Проверка виртуального окружения...")
     try:
         venv_result = venv_utils.ensure_venv()
         if venv_result:
             logger.info("Перезапуск в виртуальном окружении")
             sys.exit(0)
-        logger.info("venv_utils.ensure_venv() выполнен успешно")
+        if args.debug:
+            logger.info("venv_utils.ensure_venv() выполнен успешно")
     except Exception as e:
         logger.error(f"Ошибка в venv_utils.ensure_venv(): {e}")
         sys.exit(1)
 
-    logger.info("Проверка установки зависимостей...")
+    if args.debug:
+        logger.info("Проверка установки зависимостей...")
     try:
         import flask
         import flask_session
         import dotenv
-        logger.info("Зависимости flask, flask_session и dotenv найдены")
+        if args.debug:  # Выводим только в дебаг режиме
+            logger.info("Зависимости flask, flask_session и dotenv найдены")
     except ImportError as e:
         logger.warning(f"Зависимости не найдены: {e}")
         from starter_files.core.utils.requirements_utils import install_and_restart
@@ -113,59 +124,105 @@ if __name__ == '__main__':
     from starter_files.core.utils.exceptionHandler_utils import ExceptionHandler
     handler = ExceptionHandler()
     sys.excepthook = handler.handle_unhandled_exception
-    logger.debug("Exception handler initialized")
+    if args.debug:
+        logger.debug("Exception handler initialized")
 
     from starter_files.core.utils.firstSetup_utils import first_run_setup
     is_first_run, credentials = first_run_setup()
     if is_first_run and credentials:
         logger.info("First run setup completed")
-        print("\n=== Первичная настройка завершена ===")
-        print(f"Логин: {credentials['login']}")
-        print(f"Пароль: {credentials['password']}")
-        print("Сохраните эти данные!")
-        print("="*50 + "\n")
+        if not args.service:  # Выводим только в интерактивном режиме
+            print("\n=== Первичная настройка завершена ===")
+            print(f"Логин: {credentials['login']}")
+            print(f"Пароль: {credentials['password']}")
+            print("Сохраните эти данные!")
+            print("="*50 + "\n")
 
-        print("=== ПРОВЕРКА ОБНОВЛЕНИЙ ===")
-        from starter_files.core.oss.default.updates import UpdatesModule
-        config = UpdatesModule.get_updates_config()
-        seconds = UpdatesModule.seconds_since_last_update('starter', config)
-        print(f"Секунд с последнего обновления: {seconds}")
-        print("===========================")
+            if args.debug:  # Проверку обновлений только в дебаг режиме
+                print("=== ПРОВЕРКА ОБНОВЛЕНИЙ ===")
+                from starter_files.core.oss.default.updates import UpdatesModule
+                config = UpdatesModule.get_updates_config()
+                seconds = UpdatesModule.seconds_since_last_update('starter', config)
+                print(f"Секунд с последнего обновления: {seconds}")
+                print("===========================")
 
     from starter_files.core.oss.default.firewall import FirewallModule
-    print("=== ПРОВЕРКА ПОРТОВ ===")
+    if args.debug:  # Выводим информацию о портах только в дебаг режиме
+        print("=== ПРОВЕРКА ПОРТОВ ===")
     firewall_info = FirewallModule.collect_firewall_info()
 
+    if args.debug:  # Выводим информацию о фаерволе только в дебаг режиме
+        if firewall_info['is_available']:
+            print(f"Активный фаервол: {firewall_info['active_firewall']}")
+        else:
+            print("Внимание: Не обнаружен активный фаервол!")
+
+        if firewall_info['all_ports_open']:
+            print("\n✅ Все порты разрешены")
+            if firewall_info['open_ports']:
+                print(f"Причина: {firewall_info['open_ports'][0]['service']}")
+        elif firewall_info['open_ports']:
+            print("\nРазрешенные порты в фаерволе:")
+            for port_info in firewall_info['open_ports']:
+                service_info = f" ({port_info.get('service', '')})" if port_info.get('service') else ""
+                print(f"  - Порт {port_info['port']}/{port_info['protocol']}{service_info}")
+        else:
+            print("\nНет явно разрешенных портов в фаерволе")
+
+        if firewall_info['listening_ports']:
+            print("\nСлушающие порты:")
+            for port_info in firewall_info['listening_ports']:
+                print(f"  - Порт {port_info['port']}/{port_info['protocol']} ({port_info.get('state', 'LISTEN')})")
+        else:
+            print("\nНет слушающих портов")
+
+    # Автоматически открываем порт для веб-интерфейса
+    port = int(os.environ.get('PORT', 8000))
+    port_open = any(p.get('port') == str(port) for p in firewall_info['open_ports']) or firewall_info['all_ports_open']
+
     if firewall_info['is_available']:
-        print(f"Активный фаервол: {firewall_info['active_firewall']}")
+        if not port_open:
+            if args.debug:  # Выводим только в дебаг режиме
+                print(f"\n🔓 Открываем порт {port}/tcp для веб-интерфейса...")
+            if FirewallModule.open_port(port, 'tcp'):
+                if args.debug:  # Выводим только в дебаг режиме
+                    print(f"✅ Порт {port}/tcp успешно открыт")
+                # Для firewalld нужно перезагрузить правила
+                if firewall_info['active_firewall'] == 'firewalld':
+                    try:
+                        subprocess.run(['firewall-cmd', '--reload'], check=True)
+                        if args.debug:  # Выводим только в дебаг режиме
+                            print("✅ Правила фаервола перезагружены")
+                    except subprocess.CalledProcessError:
+                        if args.debug:  # Выводим только в дебаг режиме
+                            print("⚠️  Не удалось перезагрузить правила фаервола")
+            else:
+                if args.debug:  # Выводим только в дебаг режиме
+                    print(f"❌ Не удалось открыть порт {port}/tcp автоматически")
+                    print(f"Выполните команду вручную:")
+                    if firewall_info['active_firewall'] == 'ufw':
+                        print(f"  sudo ufw allow {port}/tcp")
+                    elif firewall_info['active_firewall'] == 'firewalld':
+                        print(f"  sudo firewall-cmd --add-port {port}/tcp --permanent")
+                        print("  sudo firewall-cmd --reload")
+                    elif firewall_info['active_firewall'] == 'iptables':
+                        print(f"  sudo iptables -A INPUT -p tcp --dport {port} -j ACCEPT")
+                    else:
+                        print(f"  # Для {firewall_info['active_firewall']} обратитесь к документации")
+        else:
+            if args.debug:  # Выводим только в дебаг режиме
+                print(f"\n✅ Порт {port}/tcp уже открыт в фаерволе")
     else:
-        print("Внимание: Не обнаружен активный фаервол!")
+        if args.debug:  # Выводим только в дебаг режиме
+            print(f"\n⚠️  Фаервол не обнаружен. Убедитесь, что порт {port} доступен для подключений.")
 
-    if firewall_info['all_ports_open']:
-        print("\n✅ Все порты разрешены")
-        if firewall_info['open_ports']:
-            print(f"Причина: {firewall_info['open_ports'][0]['service']}")
-    elif firewall_info['open_ports']:
-        print("\nРазрешенные порты в фаерволе:")
-        for port_info in firewall_info['open_ports']:
-            service_info = f" ({port_info.get('service', '')})" if port_info.get('service') else ""
-            print(f"  - Порт {port_info['port']}/{port_info['protocol']}{service_info}")
-    else:
-        print("\nНет явно разрешенных портов в фаерволе")
-
-    if firewall_info['listening_ports']:
-        print("\nСлушающие порты:")
-        for port_info in firewall_info['listening_ports']:
-            print(f"  - Порт {port_info['port']}/{port_info['protocol']} ({port_info.get('state', 'LISTEN')})")
-    else:
-        print("\nНет слушающих портов")
-
-    print("===========================")
+    if args.debug:  # Выводим разделитель только в дебаг режиме
+        print("===========================")
 
     logger.debug(f"Command line arguments: service={args.service}, debug={args.debug}")
     if args.service:
         logger.info("Starting service mode")
         start_service_mode()
-
-    logger.info("Starting interactive mode")
-    start_interactive_mode()
+    else:
+        logger.info("Starting interactive mode")
+        start_interactive_mode()

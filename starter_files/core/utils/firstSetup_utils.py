@@ -90,21 +90,34 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
     
     if interactive:
         languages = get_available_languages()
-        if logger: logger.info("\n=== Первоначальная настройка ===")
-        if logger: logger.info("Доступные языки:")
+        print("\n=== Первоначальная настройка ===")
+        print("Доступные языки:")
 
         for i, (code, data) in enumerate(languages.items(), 1):
-            if logger: logger.info(f"{i}. {data['this_language']} ({code})")
+            print(f"{i}. {data['this_language']} ({code})")
 
         if languages:
-            # Выбираем первый доступный язык по умолчанию
-            lang_code = list(languages.keys())[0]
+            while True:
+                try:
+                    choice = input("\nВыберите язык (номер или код): ").strip()
+                    if choice.isdigit():
+                        idx = int(choice) - 1
+                        if 0 <= idx < len(languages):
+                            lang_code = list(languages.keys())[idx]
+                            break
+                    elif choice in languages:
+                        lang_code = choice
+                        break
+                    print("Неверный выбор. Попробуйте снова.")
+                except (ValueError, EOFError):
+                    print("Неверный ввод. Попробуйте снова.")
+
             credentials['language'] = languages[lang_code]['this_language']
-            if logger: logger.info(f"Выбран язык по умолчанию: {credentials['language']} ({lang_code})")
+            print(f"Выбран язык: {credentials['language']} ({lang_code})")
         else:
             lang_code = 'en'  # Язык по умолчанию если языки не найдены
             credentials['language'] = 'English'
-            if logger: logger.warning("Языки не найдены, используется английский по умолчанию")
+            print("Языки не найдены, используется английский по умолчанию")
     else:
         lang_code = 'en'  # Язык по умолчанию для сервисного режима
         credentials['language'] = 'English'
