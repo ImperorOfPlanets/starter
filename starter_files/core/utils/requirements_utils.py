@@ -93,27 +93,6 @@ def validate_requirements_file(file_path):
     except Exception as e:
         return False, f"Ошибка чтения файла: {str(e)}"
 
-def get_requirements_path():
-    """Находит подходящий файл требований для текущей ОС с улучшенной логикой"""
-    system = platform.system().lower()
-    release = platform.release()
-
-    print(f"\n=== Отладочная информация ===")
-    print(f"Определенная ОС: {system}")
-    print(f"Версия ОС: {release}")
-
-    # 1. Определяем корень проекта (где лежит starter.py)
-    starter_path = get_global('script_path')
-    print(f"\nПуть к starter.py: {starter_path}")
-
-    # 2. Ищем requirements относительно starter.py
-    reqs_dir = starter_path / "starter_files" / "requirements"
-    print(f"Ищем requirements в: {reqs_dir}")
-
-    # 3. Улучшенная логика определения версии ОС
-    version_parts = release.split('.')
-    major_version = version_parts[0] if version_parts else release
-
 def get_linux_distro_info() -> Tuple[str, str]:
     """Определяет информацию о Linux дистрибутиве"""
     major_version = platform.release().split('.')[0]
@@ -155,6 +134,27 @@ def get_linux_distro_info() -> Tuple[str, str]:
     print(f"Используем fallback определение: linux {major_version}")
     return "linux", major_version
 
+def get_requirements_path():
+    """Находит подходящий файл требований для текущей ОС с улучшенной логикой"""
+    system = platform.system().lower()
+    release = platform.release()
+
+    print(f"\n=== Отладочная информация ===")
+    print(f"Определенная ОС: {system}")
+    print(f"Версия ОС: {release}")
+
+    # 1. Определяем корень проекта (где лежит starter.py)
+    starter_path = get_global('script_path')
+    print(f"\nПуть к starter.py: {starter_path}")
+
+    # 2. Ищем requirements относительно starter.py
+    reqs_dir = starter_path / "starter_files" / "requirements"
+    print(f"Ищем requirements в: {reqs_dir}")
+
+    # 3. Улучшенная логика определения версии ОС
+    version_parts = release.split('.')
+    major_version = version_parts[0] if version_parts else release
+
     # Для Linux определяем дистрибутив более точно
     if system == "linux":
         distro_name, distro_version = get_linux_distro_info()
@@ -164,9 +164,9 @@ def get_linux_distro_info() -> Tuple[str, str]:
 
     # 4. Проверяем возможные пути в порядке приоритета
     possible_paths = [
-        reqs_dir / distro_name / f"{distro_version}.txt",  # ubuntu/22.txt, rocky/9.txt
+        reqs_dir / distro_name / f"{distro_version}.txt",  # ubuntu/22.txt, rocky/9.txt, almalinux/8.txt
         reqs_dir / distro_name / f"{release}.txt",         # ubuntu/22.04.txt, rocky/9.2.txt
-        reqs_dir / distro_name / "default.txt",            # ubuntu/default.txt, rocky/default.txt
+        reqs_dir / distro_name / "default.txt",            # ubuntu/default.txt, rocky/default.txt, almalinux/default.txt
         reqs_dir / system / f"{major_version}.txt",        # linux/22.txt
         reqs_dir / system / "default.txt",                 # linux/default.txt
         reqs_dir / "default.txt"                           # default.txt (fallback)
