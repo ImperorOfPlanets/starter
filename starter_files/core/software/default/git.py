@@ -136,7 +136,7 @@ class GitModule(BaseModule):
             )
             if result.stdout.strip():
                 return True
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, FileNotFoundError):
             pass
         
         # Проверка существования SSH ключа
