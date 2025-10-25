@@ -138,7 +138,7 @@ if __name__ == '__main__':
     if firewall_info['is_available']:
         print(f"Активный фаервол: {firewall_info['active_firewall']}")
     else:
-        print("⚠️  Не обнаружен активный фаервол!")
+        print("Внимание: Не обнаружен активный фаервол!")
 
     if firewall_info['all_ports_open']:
         print("\n✅ Все порты разрешены")
