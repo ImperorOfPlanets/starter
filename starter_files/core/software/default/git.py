@@ -280,12 +280,18 @@ class GitModule(BaseModule):
     @staticmethod
     def set_globals():
         """Устанавливает глобальные переменные для Git"""
-        git_installed = GitModule.check_git_installed()
-        git_authentication = GitModule.check_git_authentication()
+        try:
+            git_installed = GitModule.check_git_installed()
+            git_authentication = GitModule.check_git_authentication()
 
-        set_global('git_installed', git_installed)
-        set_global('git_authentication', git_authentication)
-        
-        # Логируем для отладки
-        logger.info(f"Git installed: {git_installed}")
-        logger.info(f"Git authentication: {git_authentication}")
+            set_global('git_installed', git_installed)
+            set_global('git_authentication', git_authentication)
+
+            # Логируем для отладки
+            logger.info(f"Git installed: {git_installed}")
+            logger.info(f"Git authentication: {git_authentication}")
+        except Exception as e:
+            logger.error(f"Error in GitModule.set_globals(): {e}")
+            # Устанавливаем значения по умолчанию в случае ошибки
+            set_global('git_installed', False)
+            set_global('git_authentication', False)

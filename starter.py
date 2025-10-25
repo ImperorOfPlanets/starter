@@ -182,42 +182,15 @@ if __name__ == '__main__':
 
     if firewall_info['is_available']:
         if not port_open:
-            if args.debug:  # Выводим только в дебаг режиме
-                print(f"\n🔓 Открываем порт {port}/tcp для веб-интерфейса...")
+            logger.info(f"Открываем порт {port}/tcp для веб-интерфейса...")
             if FirewallModule.open_port(port, 'tcp'):
-                if args.debug:  # Выводим только в дебаг режиме
-                    print(f"✅ Порт {port}/tcp успешно открыт")
-                # Для firewalld нужно перезагрузить правила
-                if firewall_info['active_firewall'] == 'firewalld':
-                    try:
-                        subprocess.run(['firewall-cmd', '--reload'], check=True)
-                        if args.debug:  # Выводим только в дебаг режиме
-                            print("✅ Правила фаервола перезагружены")
-                    except subprocess.CalledProcessError:
-                        if args.debug:  # Выводим только в дебаг режиме
-                            print("⚠️  Не удалось перезагрузить правила фаервола")
+                logger.info(f"Порт {port}/tcp успешно открыт")
             else:
-                if args.debug:  # Выводим только в дебаг режиме
-                    print(f"❌ Не удалось открыть порт {port}/tcp автоматически")
-                    print(f"Выполните команду вручную:")
-                    if firewall_info['active_firewall'] == 'ufw':
-                        print(f"  sudo ufw allow {port}/tcp")
-                    elif firewall_info['active_firewall'] == 'firewalld':
-                        print(f"  sudo firewall-cmd --add-port {port}/tcp --permanent")
-                        print("  sudo firewall-cmd --reload")
-                    elif firewall_info['active_firewall'] == 'iptables':
-                        print(f"  sudo iptables -A INPUT -p tcp --dport {port} -j ACCEPT")
-                    else:
-                        print(f"  # Для {firewall_info['active_firewall']} обратитесь к документации")
+                logger.warning(f"Не удалось открыть порт {port}/tcp автоматически")
         else:
-            if args.debug:  # Выводим только в дебаг режиме
-                print(f"\n✅ Порт {port}/tcp уже открыт в фаерволе")
+            logger.info(f"Порт {port}/tcp уже открыт в фаерволе")
     else:
-        if args.debug:  # Выводим только в дебаг режиме
-            print(f"\n⚠️  Фаервол не обнаружен. Убедитесь, что порт {port} доступен для подключений.")
-
-    if args.debug:  # Выводим разделитель только в дебаг режиме
-        print("===========================")
+        logger.warning(f"Фаервол не обнаружен. Убедитесь, что порт {port} доступен для подключений.")
 
     logger.debug(f"Command line arguments: service={args.service}, debug={args.debug}")
     if args.service:
