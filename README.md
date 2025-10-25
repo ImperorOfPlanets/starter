@@ -1,5 +1,5 @@
 <div style="text-align: center;">
-  <H1>Стартер | 启动器 | Starter</H1>
+  <H1>Стартер Ночной | 夜间启动器 | Night Starter</H1>
   <hr />
 
   С инструкцией вы можете ознакомиться тут <a href="https://myidon.site/instruction/starter">Инструкция</a><br />
