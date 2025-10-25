@@ -7,6 +7,7 @@
   You can check the instructions <a href="https://myidon.site/instruction/starter">here</a>.<br />
 </div>
 <hr />
+<hr />
 <div style="color: red; font-size: large; text-align: center;">
 ЕСЛИ ВЫ НЕ ЯВЛЯЕТЕСЬ АДМИНИСТРАТОРОМ ИЛИ СОТРУДНИКОМ ПРОЕКТА — НЕ УСТАНАВЛИВАЙТЕ ЭТУ ПРОГРАММУ!<br/>
 УСТАНОВКА ЭТОЙ ПРОГРАММЫ ПРИВЕДЕТ К ПОТЕРЕ КОНТРОЛЯ НАД ВАШИМ УСТРОЙСТВОМ.<br/>
