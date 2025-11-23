@@ -1,6 +1,7 @@
 from flask import render_template
 from starter_files.core.utils.i18n_utils import t
 from starter_files.core.utils.log_utils import LogManager
+from starter_files.core.software.default.knocking import KnockingModule
 logger = LogManager.get_logger()
 
 this_section_in_control_panel = True
@@ -10,7 +11,7 @@ section_order = 3
 
 def get_knocking_status():
     """Get current knocking status for display"""
-    installed = is_knocking_installed()
+    installed = KnockingModule.is_knocking_installed()
     if not installed:
         return {
             'installed': False,
@@ -19,14 +20,14 @@ def get_knocking_status():
             'timeout': 0
         }
     
-    config = get_knocking_config() or {
+    config = KnockingModule.get_knocking_config() or {
         'ports': [],
         'timeout': 0
     }
     
     return {
         'installed': True,
-        'enabled': is_knocking_active(),
+        'enabled': KnockingModule.is_knocking_active(),
         'ports': config.get('ports', []),
         'timeout': config.get('timeout', 0)
     }
@@ -63,9 +64,9 @@ def toggle_service(data, session):
     try:
         action = data.get('action')
         if action == 'start':
-            success = start_knocking_service()
+            success = KnockingModule.start_knocking_service()
         elif action == 'stop':
-            success = stop_knocking_service()
+            success = KnockingModule.stop_knocking_service()
         else:
             return {'status': 'error', 'message': t('invalid_action')}
         
@@ -88,7 +89,7 @@ def update_settings(data, session):
         if timeout < 1 or timeout > 10:
             return {'status': 'error', 'message': t('sections.knocking.settings.invalid_timeout')}
         
-        success = update_knocking_config(ports, timeout)
+        success = KnockingModule.update_knocking_config(ports, timeout)
         
         if success:
             return {
@@ -109,25 +110,25 @@ def update_settings(data, session):
 def installKnocking(data, session):
     """Handle knocking installation request"""
     try:
-        if is_knocking_installed():
+        if KnockingModule.is_knocking_installed():
             return {
                 'status': 'warning',
                 'message': t('knocking_already_installed')
             }
-        
-        success, message = install_knocking()
-        
-        if success:
+
+        result = KnockingModule.install_knocking("/var/log/knocking_install.log")
+
+        if result['status'] in ['success', 'warning']:
             # После установки активируем сервис
-            start_knocking_service()
+            KnockingModule.start_knocking_service()
             return {
                 'status': 'success',
-                'message': t('knocking_install_success') + ": " + message
+                'message': t('knocking_install_success') + ": " + result['message']
             }
         else:
             return {
                 'status': 'error',
-                'message': t('knocking_install_failed') + ": " + message
+                'message': t('knocking_install_failed') + ": " + result['message']
             }
     
     except Exception as e:

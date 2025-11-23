@@ -14,7 +14,7 @@
 PROJECTS = {
     'starter': {
         # URL для скачивания архива проекта (обязательный параметр)
-        'DOWNLOAD_URL':'https://gitflic.ru/project/imperor/starter/file/downloadAll?branch=master&format=zip',
+        'DOWNLOAD_URL':'https://gitflic.ru/project/imperor/starter/file/downloadAll?branch=Night&format=zip',
         
         # Шаблоны файлов для отслеживания изменений (обязательный параметр)
         # Формат: список строк с glob-шаблонами
@@ -40,7 +40,7 @@ PROJECTS = {
     },
     
     'docker': {
-        'DOWNLOAD_URL':'https://gitflic.ru/project/imperor/docker/file/downloadAll?branch=master&format=zip',
+        'DOWNLOAD_URL':'https://gitflic.ru/project/imperor/docker/file/downloadAll?branch=Night&format=zip',
         
         'TARGETS': [
             'configs/browser/*',

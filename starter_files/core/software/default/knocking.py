@@ -1,7 +1,8 @@
 import subprocess
 import os
 import platform
-import subprocess
+import logging
+import time
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -9,6 +10,8 @@ from starter_files.core.utils.globalVars_utils import get_global, set_global
 from starter_files.core.utils.loader_utils import get
 
 from starter_files.core.base_module import BaseModule
+
+logger = logging.getLogger('knocking')
 
 class KnockingModule(BaseModule):
 
@@ -25,13 +28,13 @@ class KnockingModule(BaseModule):
 
     @staticmethod
     def install_knocking(log_file_path: str) -> Dict[str, str]:
-        """Устанавливает Git и записывает логи в указанный файл"""
+        """Устанавливает Port Knocking и записывает логи в указанный файл"""
         result = {'status': 'success', 'message': '', 'logs': []}
-        
+
         try:
             log_dir = Path(log_file_path).parent
             log_dir.mkdir(parents=True, exist_ok=True)
-            
+
             with open(log_file_path, 'w') as log_file:
                 def log(message):
                     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -40,10 +43,16 @@ class KnockingModule(BaseModule):
                     log_file.flush()
                     result['logs'].append(log_entry)
                     logger.info(log_entry)
-                
-                log("Starting Git installation...")
 
-                commands = get("git", "return_commands_install_git")
+                log("Starting Port Knocking installation...")
+
+                commands = get("knocking", "return_commands_install_knocking")
+
+                if commands is None:
+                    log("Failed to retrieve installation commands")
+                    result['status'] = 'error'
+                    result['message'] = "Failed to retrieve installation commands"
+                    return result
 
                 for cmd in commands:
                     log(f"Executing: {cmd}")
@@ -56,33 +65,41 @@ class KnockingModule(BaseModule):
                         bufsize=1,
                         universal_newlines=True
                     )
-                    
-                    for line in iter(process.stdout.readline, ''):
-                        if line:
-                            log(line.strip())
-                    
+
+                    if process.stdout is not None:
+                        for line in iter(process.stdout.readline, ''):
+                            if line:
+                                log(line.strip())
+
                     return_code = process.wait()
                     if return_code != 0:
                         log(f"Command failed with exit code {return_code}")
                         result['status'] = 'error'
                         result['message'] = f"Command failed: {cmd}"
                         return result
-                
+
                 time.sleep(2)
-                if GitModule.check_git_installed():
-                    log("Git installed successfully!")
-                    result['message'] = "Git installed successfully!"
+                if KnockingModule.is_knocking_installed():
+                    log("Port Knocking installed successfully!")
+                    result['message'] = "Port Knocking installed successfully!"
                 else:
-                    log("Installation completed but Git not detected.")
+                    log("Installation completed but Port Knocking not detected.")
                     result['status'] = 'warning'
-                    result['message'] = "Installation completed but Git not detected."
-        
+                    result['message'] = "Installation completed but Port Knocking not detected."
+
         except Exception as e:
             error_msg = f"Installation failed: {str(e)}"
+            try:
+                with open(log_file_path, 'a') as f:
+                    f.write(error_msg + '\n')
+                    f.write("INSTALL FINISH!\n")
+            except:
+                logger.exception("Failed to write error to log file")
+
             result['status'] = 'error'
             result['message'] = error_msg
-            logger.exception("Git installation error")
-        
+            logger.exception("Port Knocking installation error")
+
         return result
 
     @staticmethod

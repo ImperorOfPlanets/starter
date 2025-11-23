@@ -3,12 +3,12 @@ import sys
 import platform
 import subprocess
 import shutil
+from datetime import datetime
 
 from pathlib import Path
 from typing import Tuple, Optional
 import getpass
 
-from starter_files.core.utils.log_utils import logger
 
 class ServiceManager:
     def __init__(self, script_path: str, service_name: str = "starter-service"):
@@ -22,9 +22,7 @@ class ServiceManager:
         
     def is_installed(self) -> bool:
         """Проверяет, установлена ли служба"""
-        if self.system == "Windows":
-            return self._check_windows_service()
-        elif self.system in ["Linux", "Darwin"]:
+        if self.system in ["Linux", "Darwin"]:
             return self._check_unix_service()
         return False
     
@@ -32,10 +30,8 @@ class ServiceManager:
         """Устанавливает службу"""
         print(f"\n{'='*40}")
         print(f"Установка службы {self.service_name} для {self.system}")
-        
-        if self.system == "Windows":
-            return self._install_windows_service()
-        elif self.system in ["Linux", "Darwin"]:
+
+        if self.system in ["Linux", "Darwin"]:
             return self._install_unix_service()
         return False
     
@@ -43,155 +39,14 @@ class ServiceManager:
         """Удаляет службу"""
         print(f"\n{'='*40}")
         print(f"Удаление службы {self.service_name} ({self.system})")
-        
+
         if not self.is_installed():
             print("⚠️ Служба не установлена")
             return False
-            
-        if self.system == "Windows":
-            return self._uninstall_windows_service()
-        elif self.system in ["Linux", "Darwin"]:
+
+        if self.system in ["Linux", "Darwin"]:
             return self._uninstall_unix_service()
         return False
-    
-    def _check_windows_service(self) -> bool:
-        """Проверяет наличие службы в Windows (более надежная версия)"""
-        try:
-            # Способ 1: через sc query
-            result = subprocess.run(
-                ['sc', 'query', self.service_name],
-                capture_output=True,
-                text=True,
-                check=False
-            )
-            if "RUNNING" in result.stdout or "STOPPED" in result.stdout:
-                return True
-            
-            # Способ 2: через PowerShell
-            ps_cmd = f"Get-Service -Name {self.service_name} -ErrorAction SilentlyContinue"
-            result = subprocess.run(
-                ['powershell', '-Command', ps_cmd],
-                capture_output=True,
-                text=True,
-                check=False
-            )
-            return result.returncode == 0
-            
-        except Exception:
-            return False
-
-    def _install_windows_service(self) -> bool:
-        """Устанавливает службу в Windows с помощью NSSM"""
-        try:
-            nssm_path = self._get_nssm_path()
-            if not nssm_path:
-                if not self._install_nssm():
-                    return False
-                nssm_path = self._get_nssm_path()
-
-            service_name = self.service_name
-            working_dir = str(self.script_path.parent)
-            log_file = str(Path(working_dir) / 'service.log')
-
-            # Создаем UTF-8 файл с BOM маркером
-            with open(log_file, 'wb') as f:
-                f.write(b'\xef\xbb\xbf')  # UTF-8 BOM
-                f.write(f"Service log started at {datetime.now()}\n".encode('utf-8'))
-
-            # Установка службы с перенаправлением вывода
-            subprocess.run(
-                [nssm_path, 'install', service_name, sys.executable, str(self.script_path), '--service-run'],
-                check=True
-            )
-
-            # Настройка параметров
-            subprocess.run([nssm_path, 'set', service_name, 'AppDirectory', working_dir], check=True)
-            subprocess.run([nssm_path, 'set', service_name, 'AppStdout', log_file], check=True)
-            subprocess.run([nssm_path, 'set', service_name, 'AppStderr', log_file], check=True)
-            subprocess.run([nssm_path, 'set', service_name, 'Start', 'SERVICE_AUTO_START'], check=True)
-
-            # Альтернативный способ установки кодировки - через переменную окружения
-            subprocess.run(
-                [nssm_path, 'set', service_name, 'AppEnvironmentExtra', 'PYTHONIOENCODING=utf-8'],
-                check=True
-            )
-
-            print(f"✅ Служба {service_name} успешно установлена")
-            print(f"Логи будут записываться в: {log_file} (UTF-8)")
-            return True
-
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Ошибка установки службы: {str(e)}")
-            return False
-    
-    def _get_nssm_path(self) -> Optional[Path]:
-        """Ищет NSSM в системе"""
-        paths = [
-            Path("C:\\nssm\\nssm.exe"),
-            Path("C:\\Program Files\\nssm\\nssm.exe"),
-            Path("C:\\Program Files (x86)\\nssm\\nssm.exe"),
-            Path(os.environ.get('ProgramFiles', '')) / 'nssm' / 'nssm.exe',
-            Path(os.environ.get('ProgramFiles(x86)', '')) / 'nssm' / 'nssm.exe'
-        ]
-        
-        for path in paths:
-            if path.exists():
-                return path
-        return None
-    
-    def _install_nssm(self) -> bool:
-        """Устанавливает NSSM (Non-Sucking Service Manager)"""
-        try:
-            temp_dir = Path(os.environ['TEMP'])
-            nssm_url = "https://nssm.cc/release/nssm-2.24.zip"
-            zip_path = temp_dir / "nssm.zip"
-            
-            # Скачиваем NSSM
-            print("Скачивание NSSM...")
-            subprocess.run(
-                ['curl', '-L', nssm_url, '-o', str(zip_path)],
-                check=True
-            )
-            
-            # Распаковываем в поддиректорию
-            extract_dir = temp_dir / "nssm_extracted"
-            extract_dir.mkdir(exist_ok=True)
-            
-            print("Распаковка архива...")
-            import zipfile
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(extract_dir)
-            
-            # Ищем nssm.exe в распакованных файлах
-            nssm_exe = None
-            for root, _, files in os.walk(extract_dir):
-                if "nssm.exe" in files:
-                    nssm_exe = Path(root) / "nssm.exe"
-                    break
-            
-            if not nssm_exe or not nssm_exe.exists():
-                raise FileNotFoundError("nssm.exe не найден в распакованном архиве")
-            
-            # Копируем в Program Files\nssm
-            nssm_dir = Path(os.environ['ProgramFiles']) / 'nssm'
-            nssm_dir.mkdir(exist_ok=True)
-            
-            dest_path = nssm_dir / "nssm.exe"
-            shutil.copy(nssm_exe, dest_path)
-            
-            # Добавляем в PATH
-            os.environ['PATH'] += os.pathsep + str(nssm_dir)
-            
-            # Удаляем временные файлы
-            print("Очистка временных файлов...")
-            zip_path.unlink(missing_ok=True)
-            shutil.rmtree(extract_dir, ignore_errors=True)
-            
-            print("✅ NSSM успешно установлен!")
-            return True
-        except Exception as e:
-            print(f"❌ Ошибка установки NSSM: {str(e)}")
-            return False
     
     def _check_unix_service(self) -> bool:
         """Проверяет наличие службы в Unix-системах"""
@@ -369,52 +224,6 @@ exit 0
             print(f"❌ Ошибка удаления службы: {str(e)}")
             return False
 
-    def _uninstall_windows_service(self) -> bool:
-        """Удаляет службу Windows с помощью NSSM"""
-        try:
-            # 1. Получаем путь к NSSM
-            nssm_path = self._get_nssm_path()
-            if not nssm_path:
-                print("❌ NSSM не найден, удаление невозможно")
-                return False
-
-            # 2. Останавливаем службу
-            try:
-                subprocess.run(
-                    ['sc', 'stop', self.service_name],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-                print("✅ Служба остановлена")
-            except subprocess.CalledProcessError:
-                pass  # Служба уже остановлена или не существует
-
-            # 3. Удаляем службу через NSSM
-            subprocess.run(
-                [nssm_path, 'remove', self.service_name, 'confirm'],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            
-            # 4. Дополнительно удаляем через sc (на случай если NSSM не сработал)
-            try:
-                subprocess.run(
-                    ['sc', 'delete', self.service_name],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-            except subprocess.CalledProcessError:
-                pass
-
-            print(f"✅ Служба {self.service_name} успешно удалена")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Ошибка удаления службы: {str(e)}")
-            return False
 
 def manage_service(script_path: str):
     """Основная функция управления службой"""
@@ -449,10 +258,7 @@ def manage_service(script_path: str):
                     print("\n✅ Служба успешно установлена!")
                     # Запускаем службу после установки
                     try:
-                        if platform.system() == "Windows":
-                            subprocess.run(['sc', 'start', service_name], check=True)
-                        else:
-                            subprocess.run(['service', service_name, 'start'], check=True)
+                        subprocess.run(['service', service_name, 'start'], check=True)
                         print("✅ Служба запущена")
                     except Exception as e:
                         print(f"⚠️ Не удалось запустить службу: {str(e)}")

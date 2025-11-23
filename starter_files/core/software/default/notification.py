@@ -55,6 +55,9 @@ class NotificationModule:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         parsed_url = urlparse(core_url)
         host = parsed_url.hostname
+        if host is None:
+            logger.warning(f"Invalid core_url: {core_url}, hostname is None")
+            return {}
         port = parsed_url.port or (443 if parsed_url.scheme == 'https' else 80)
 
         if not NotificationModule._is_server_available(host, port):

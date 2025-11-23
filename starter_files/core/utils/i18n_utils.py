@@ -8,8 +8,33 @@ from flask import g
 from starter_files.core.utils.globalVars_utils import get_global
 
 from starter_files.core.utils.log_utils import LogManager
-LogManager.register_log_dir('translations', 'translations')
-logger = LogManager.get_logger('translations')
+
+# Регистрируем директорию для переводов (если возможно)
+try:
+    LogManager.register_log_dir('translations', 'translations')
+    logger = LogManager.get_logger('translations')
+except RuntimeError:
+    # Если LogManager не инициализирован, создаем временный логгер
+    logger = None
+
+# Функция для получения логгера с fallback
+def get_logger():
+    global logger
+    if logger is None:
+        try:
+            logger = LogManager.get_logger('translations')
+        except RuntimeError:
+            # Создаем простой логгер если LogManager недоступен
+            import logging
+            logger = logging.getLogger('translations')
+            logger.setLevel(logging.INFO)
+            if not logger.handlers:
+                handler = logging.StreamHandler()
+                handler.setLevel(logging.INFO)
+                formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+                handler.setFormatter(formatter)
+                logger.addHandler(handler)
+    return logger
 
 # Глобальная переменная для кеширования языков
 _AVAILABLE_LANGUAGES = None
@@ -31,16 +56,22 @@ def set_language(lang_code: str):
 def get_available_languages(force_reload=False) -> dict:
     """Возвращает словарь доступных языков в формате для языкового селектора"""
     global _AVAILABLE_LANGUAGES
-    
+
     if _AVAILABLE_LANGUAGES is not None and not force_reload:
         return _AVAILABLE_LANGUAGES
-    
+
+    # Используем путь относительно рабочей директории скрипта
+    from starter_files.core.utils.globalVars_utils import get_global
     base_dir = get_global('script_path')
+    if base_dir is None:
+        # Fallback на текущую директорию
+        base_dir = Path.cwd()
     locales_dir = base_dir / 'starter_files' / 'web' / 'locales'
+    logger = get_logger()
     logger.debug(f"Ищем переводы в директории: {locales_dir}")
-    
+
     languages = {}
-    
+
     if not locales_dir.exists():
         logger.info(f"ОШИБКА: Папка с локалями не найдена по пути: {locales_dir}")
         return languages
@@ -62,6 +93,7 @@ def get_available_languages(force_reload=False) -> dict:
                 'translations': section.translations  # Полные данные переводов
             }
         except ImportError as e:
+            logger = get_logger()
             logger.info(f"Ошибка импорта {lang_code}: {str(e)}")
             continue
     
@@ -73,8 +105,8 @@ def t(key: str, _section=None, _file=None, **kwargs) -> str:
     lang_data = get_available_languages().get(current_lang, {}).get('translations', {})
 
     # Получаем логгер (например, глобально или создайте локально)
-    global logger
-    
+    logger = get_logger()
+
     # Если явно не переданы, пытаемся получить из глобального контекста Flask
     if _section is None:
         _section = getattr(g, 'current_section', None)
@@ -82,7 +114,9 @@ def t(key: str, _section=None, _file=None, **kwargs) -> str:
         _file = getattr(g, 'current_function', None)
 
     # Пытаемся определить путь шаблона для отладочной информации
-    frame = inspect.currentframe().f_back
+    frame = inspect.currentframe()
+    if frame:
+        frame = frame.f_back
     template_path = None
     if frame:
         if '__file__' in frame.f_globals:
@@ -145,7 +179,7 @@ def t(key: str, _section=None, _file=None, **kwargs) -> str:
         if frame:
             del frame
 
-def return_basic(section_slug: str, field: str, default: str = None) -> str:
+def return_basic(section_slug: str, field: str, default: str = "") -> str:
     """
     Получает базовую информацию о модуле из translations['sections'][section_slug]['basic']
     

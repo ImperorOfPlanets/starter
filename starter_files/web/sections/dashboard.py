@@ -162,7 +162,10 @@ def install_package(data, session):
             result = get(config['module'], config['install'], log_file_path=str(log_file_path))
 
             # Просто записываем финальный статус
-            
+
+            if result is None:
+                raise Exception(f"Installation function returned None for {config['module']}.{config['install']}")
+
             if result['status'] == 'error':
                 raise Exception(result['message'])
                     

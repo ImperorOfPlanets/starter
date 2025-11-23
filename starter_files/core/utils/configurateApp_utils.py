@@ -35,13 +35,9 @@ def configure_app() -> Flask:
     # Считываем секретный ключ
     env_vars = read_env_file(get_global('script_path') / '.env')
     app.secret_key = env_vars.get('APP_SECRET_KEY', secrets.token_hex(32))
-    logger.info("Устанавливаемый ключ")
-    logger.info(app.secret_key)
 
     # Настройка папки сессий
     session_dir = base_dir / "starter_files" / "web" / "sessions"
-    logger.info("Пака сессий")
-    logger.info(session_dir)
     
     # Создаем папку (если не существует)
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -64,20 +60,20 @@ def configure_app() -> Flask:
     app.jinja_env.cache = {}
 
     # Выводим перед загрузкой
-    app.session_initialized = False
+    setattr(app, 'session_initialized', False)
     
     @app.before_request
     def initialize_session():
-        if not app.session_initialized:
+        if not getattr(app, 'session_initialized', False):
             # Инициализация сессии при первом запросе
             session.setdefault('initialized', True)
             session.modified = True
-            app.session_initialized = True
+            setattr(app, 'session_initialized', True)
             logger.info("Session system initialized")
-            
+
             # Для отладки
             try:
-                sid = session.sid if hasattr(session, 'sid') else 'not_set'
+                sid = getattr(session, 'sid', 'not_set')
                 logger.debug(f"Initial session ID: {sid}")
             except Exception as e:
                 logger.error(f"Error getting session ID: {str(e)}")

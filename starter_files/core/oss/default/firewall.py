@@ -9,12 +9,14 @@ class FirewallModule(BaseModule):
     @staticmethod
     def check() -> bool:
         """Проверяет доступность фаервол-утилит в системе"""
-        return any([
-            FirewallModule._check_tool('ufw'),
-            FirewallModule._check_tool('firewall-cmd'),
-            FirewallModule._check_tool('iptables'),
-            FirewallModule._check_tool('nft')
-        ])
+        tools = ['ufw', 'firewall-cmd', 'iptables', 'nft', 'systemctl']
+        available_tools = [tool for tool in tools if FirewallModule._check_tool(tool)]
+
+        from starter_files.core.utils.log_utils import LogManager
+        logger = LogManager.get_logger('firewall')
+        logger.debug(f"Доступные инструменты фаервола: {available_tools}")
+
+        return len(available_tools) > 0
 
     @staticmethod
     def _check_tool(tool_name: str) -> bool:
@@ -32,19 +34,62 @@ class FirewallModule(BaseModule):
 
     @staticmethod
     def detect_active_firewall() -> str:
-        """Определяет активный фаервол в системе"""
-        tools_priority = [
-            ('ufw', 'ufw status | grep -q "Status: active"'),
-            ('firewalld', 'firewall-cmd --state 2>/dev/null | grep -q "running"'),
-            ('iptables', 'iptables -L -n 2>/dev/null | grep -q -v "Chain INPUT (policy ACCEPT)"'),
-            ('nftables', 'nft list ruleset 2>/dev/null | grep -q "counter"')
+        """Определяет активный фаервол в системе с улучшенной логикой"""
+        from starter_files.core.utils.log_utils import LogManager
+        logger = LogManager.get_logger('firewall')
+
+        # Проверяем сервисы systemd
+        systemd_checks = [
+            ('firewalld', 'systemctl is-active firewalld 2>/dev/null'),
+            ('ufw', 'systemctl is-active ufw 2>/dev/null'),
         ]
-        
+
+        for tool, check_cmd in systemd_checks:
+            if FirewallModule._check_tool('systemctl'):
+                try:
+                    result = subprocess.run(
+                        check_cmd, shell=True, check=False, capture_output=True, text=True
+                    )
+                    if result.returncode == 0 and 'active' in result.stdout.strip():
+                        logger.debug(f"Обнаружен активный фаервол через systemd: {tool}")
+                        return tool
+                except Exception as e:
+                    logger.debug(f"Ошибка проверки systemd для {tool}: {e}")
+
+        # Проверяем наличие и активность инструментов
+        tools_priority = [
+            ('ufw', 'ufw status 2>/dev/null | grep -q "Status: active"'),
+            ('firewalld', 'firewall-cmd --state 2>/dev/null | grep -q "running"'),
+            ('iptables', 'iptables -L INPUT -n 2>/dev/null | grep -q "ACCEPT\\|DROP"'),
+            ('nftables', 'nft list ruleset 2>/dev/null | grep -q "table\\|chain"')
+        ]
+
         for tool, check_cmd in tools_priority:
-            if FirewallModule._check_tool(tool) and subprocess.run(
-                check_cmd, shell=True, check=False
-            ).returncode == 0:
-                return tool
+            if FirewallModule._check_tool(tool):
+                try:
+                    result = subprocess.run(
+                        check_cmd, shell=True, check=False, timeout=5
+                    )
+                    if result.returncode == 0:
+                        logger.debug(f"Обнаружен активный фаервол: {tool}")
+                        return tool
+                except (subprocess.TimeoutExpired, Exception) as e:
+                    logger.debug(f"Ошибка проверки {tool}: {e}")
+                    continue
+
+        # Проверяем наличие правил iptables как запасной вариант
+        if FirewallModule._check_tool('iptables'):
+            try:
+                result = subprocess.run(
+                    ['iptables', '-L', '-n'], capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0 and len(result.stdout.strip()) > 0:
+                    logger.debug("Обнаружен iptables с правилами")
+                    return 'iptables'
+            except Exception as e:
+                logger.debug(f"Ошибка проверки iptables: {e}")
+
+        logger.debug("Активный фаервол не обнаружен")
         return "unknown"
 
     @staticmethod
@@ -302,41 +347,52 @@ class FirewallModule(BaseModule):
         """Выполняет команду с привилегиями (sudo при необходимости)"""
         use_sudo = get_global('use_sudo')
         full_cmd = ['sudo'] + cmd if use_sudo else cmd
-        
+
         try:
-            subprocess.run(
+            # Логируем команду для отладки
+            from starter_files.core.utils.log_utils import LogManager
+            logger = LogManager.get_logger('firewall')
+            logger.info(f"Выполнение команды фаервола: {' '.join(full_cmd)}")
+
+            result = subprocess.run(
                 full_cmd,
                 check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                capture_output=True,
+                text=True
             )
+
+            logger.info(f"Команда выполнена успешно: {result.stdout.strip()}")
             return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            from starter_files.core.utils.log_utils import LogManager
+            logger = LogManager.get_logger('firewall')
+            logger.error(f"Ошибка выполнения команды фаервола: {e}")
             return False
 
     @staticmethod
     def open_port(port: int, protocol: str = 'tcp') -> bool:
         """Открывает порт в фаерволе"""
         firewall_type = FirewallModule.detect_active_firewall()
-        
+
         handlers = {
             'ufw': ['ufw', 'allow', f'{port}/{protocol}'],
             'firewalld': [
-                'firewall-cmd', '--add-port', f'{port}/{protocol}', '--permanent'
+                'firewall-cmd', '--add-port', f'{port}/{protocol}', '--permanent',
+                '&&', 'firewall-cmd', '--reload'
             ],
             'iptables': [
-                'iptables', '-A', 'INPUT', '-p', protocol, 
+                'iptables', '-A', 'INPUT', '-p', protocol,
                 '--dport', str(port), '-j', 'ACCEPT'
             ],
             'nftables': [
-                'nft', 'add', 'rule', 'inet', 'filter', 'input', 
+                'nft', 'add', 'rule', 'inet', 'filter', 'input',
                 f'{protocol} dport {port} accept'
             ]
         }
-        
+
         if firewall_type in handlers:
             return FirewallModule._run_privileged_command(handlers[firewall_type])
-        
+
         return False
 
     @staticmethod
