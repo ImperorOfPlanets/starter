@@ -10,11 +10,7 @@ from typing import Dict, Any, Optional
 
 from starter_files.core.utils.globalVars_utils import get_global
 from starter_files.core.utils.log_utils import LogManager
-# Логгер будет инициализирован позже, при необходимости
-try:
-    logger = LogManager.get_logger()
-except RuntimeError:
-    logger = None
+logger = LogManager.get_logger()
 class ExceptionHandler:
     """Класс для обработки и логирования необработанных исключений"""
     
@@ -36,8 +32,7 @@ class ExceptionHandler:
         :param exc_value: Объект исключения
         :param exc_traceback: Traceback исключения
         """
-        if logger is not None:
-            logger.critical("Unhandled exception occurred", exc_info=(exc_type, exc_value, exc_traceback))
+        logger.critical("Unhandled exception occurred", exc_info=(exc_type, exc_value, exc_traceback))
         if exc_traceback is None:
             exc_traceback = exc_value.__traceback__
             
@@ -57,8 +52,7 @@ class ExceptionHandler:
         }
         
         error_path = self._save_error_report(error_data)
-        if logger is not None:
-            logger.info(f"\nCritical error logged to: {error_path}")
+        logger.info(f"\nCritical error logged to: {error_path}")
         
         # Вызываем стандартный обработчик
         sys.__excepthook__(exc_type, exc_value, exc_traceback)

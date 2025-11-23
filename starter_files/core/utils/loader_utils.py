@@ -8,12 +8,8 @@ from starter_files.core.utils.globalVars_utils import set_global, get_global
 from typing import List, Dict, Any, Tuple, Optional
 from starter_files.core.utils.log_utils import LogManager
 
-# Регистрируем директорию для модулей (если возможно)
-try:
-    LogManager.register_log_dir('modules', 'modules')
-    logger = LogManager.get_logger('modules')
-except RuntimeError:
-    logger = logging.getLogger('modules')
+LogManager.register_log_dir('modules', 'modules')
+logger = LogManager.get_logger('modules')
 
 _modules_cache = {}  # Формат: {module_name: [impl1, impl2, impl3]}
 
@@ -137,7 +133,7 @@ def load_modules(refresh: bool = False):
     
     return _modules_cache
 
-def get(module_name: str, func_name: Optional[str] = None, *args, **kwargs):
+def get(module_name: str, func_name: str = None, *args, **kwargs):
     """
     Прокладка для вызова функции из модуля с fallback по уровням приоритета.
     """
@@ -200,11 +196,7 @@ def load_module_from_path(path: Path, module_name: str) -> object:
         if module_spec is None:
             logger.info(f"    ❌ Не удалось создать spec для {path}")
             return None
-
-        if module_spec.loader is None:
-            logger.info(f"    ❌ Loader не найден для {path}")
-            return None
-
+            
         module = importlib.util.module_from_spec(module_spec)
         sys.modules[module_spec.name] = module
         module_spec.loader.exec_module(module)
@@ -343,7 +335,7 @@ def collect_modules_info(refresh: bool = False) -> List[Dict[str, Any]]:
                 logger.warning(f"Failed to load class for module: {module_name}")
                 continue
 
-            class_name = getattr(module_class, '__name__', str(module_class))
+            class_name = module_class.__name__
             funcs = []
             
             for name, member in inspect.getmembers(module_class):

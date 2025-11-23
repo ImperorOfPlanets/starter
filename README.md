@@ -1,12 +1,11 @@
 <div style="text-align: center;">
-  <H1>Стартер Ночной | 夜间启动器 | Night Starter</H1>
+  <H1>Стартер | 启动器 | Starter</H1>
   <hr />
 
   С инструкцией вы можете ознакомиться тут <a href="https://myidon.site/instruction/starter">Инструкция</a><br />
   您可以在 <a href="https://myidon.site/instruction/starter">这里</a> 查看说明。<br />
   You can check the instructions <a href="https://myidon.site/instruction/starter">here</a>.<br />
 </div>
-<hr />
 <hr />
 <div style="color: red; font-size: large; text-align: center;">
 ЕСЛИ ВЫ НЕ ЯВЛЯЕТЕСЬ АДМИНИСТРАТОРОМ ИЛИ СОТРУДНИКОМ ПРОЕКТА — НЕ УСТАНАВЛИВАЙТЕ ЭТУ ПРОГРАММУ!<br/>
@@ -18,10 +17,4 @@
 IF YOU ARE NOT AN ADMINISTRATOR OR EMPLOYEE OF THE PROJECT DO NOT INSTALL THIS PROGRAM!<br/>
 INSTALLING THIS PROGRAM WILL RESULT IN LOSS OF CONTROL OVER YOUR DEVICE.<br/>
 IT CAN ONLY BE REMOVED BY PHYSICAL ACCESS TO IT!
-</div>
-<hr />
-<div style="color: orange; font-size: large; text-align: center;">
- ЭТО НЕСТАБИЛЬНАЯ ВЕТКА! ПРОГРАММА МОЖЕТ СНЕСТИ ВАШУ СИСТЕМУ! ЛОЛ))) Я ПРЕДУПРЕДИЛ <br/>
- THIS IS AN UNSTABLE BRANCH! THE PROGRAM MAY DESTROY YOUR SYSTEM!  <br/>
- 这是一个不稳定的分支！程序可能会破坏您的系统！
 </div>

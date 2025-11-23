@@ -22,13 +22,7 @@ class UpdatesModule:
         'CLEANUP_DAYS': 7,
         'MAX_RETRIES': 3,
         'TIMEOUT': 30,
-        'MIN_CHECK_INTERVAL': 30,
-        'STARTER_CONFIG': {
-            'DOWNLOAD_URL': 'https://api.github.com/repos/your-org/starter/zipball/main',
-            'TARGETS': ['**/*.py', '**/*.txt', '**/*.md', '**/*.html', '**/*.css', '**/*.js'],
-            'IGNORED': ['__pycache__/**', '*.pyc', '.git/**', 'venv/**', '.env*', 'logs/**', 'updates/**'],
-            'RESTART_AFTER_UPDATE': True
-        }
+        'MIN_CHECK_INTERVAL': 30
     }
 
     @staticmethod
@@ -112,41 +106,6 @@ class UpdatesModule:
                 return f.read()
         except Exception as e:
             return f"Ошибка чтения лог-файла: {str(e)}"
-
-    @staticmethod
-    def update_starter() -> Dict[str, Any]:
-        """Обновляет сам starter"""
-        config = UpdatesModule.get_updates_config()
-        return UpdatesModule.update_project('starter', config['STARTER_CONFIG'])
-
-    @staticmethod
-    def check_starter_updates() -> Dict[str, Any]:
-        """Проверяет наличие обновлений для starter"""
-        config = UpdatesModule.get_updates_config()
-
-        if not UpdatesModule.should_check_updates('starter', config):
-            return {'available': False, 'reason': 'too_soon'}
-
-        try:
-            # Проверяем доступность обновлений через GitHub API
-            response = requests.get('https://api.github.com/repos/your-org/starter/releases/latest', timeout=10)
-            if response.status_code == 200:
-                release_data = response.json()
-                latest_version = release_data.get('tag_name', 'unknown')
-
-                # Здесь можно добавить логику сравнения версий
-                # Пока просто возвращаем, что обновления доступны
-                return {
-                    'available': True,
-                    'latest_version': latest_version,
-                    'release_url': release_data.get('html_url'),
-                    'changelog': release_data.get('body', '')
-                }
-            else:
-                return {'available': False, 'reason': 'api_error'}
-
-        except Exception as e:
-            return {'available': False, 'reason': f'error: {str(e)}'}
 
     @staticmethod
     def update_project(project_name: str, project_config: Dict) -> Dict[str, Any]:
@@ -257,11 +216,7 @@ class UpdatesModule:
 
         logger.info(f"Созданы временные директории: EXTRACTED_DIR={extracted_dir}, BACKUPS_DIR={backups_dir}")
 
-        # Определяем путь к проекту
-        if project_name == 'starter':
-            project_base_path = Path(get_global('script_path'))
-        else:
-            project_base_path = Path(get_global(f"{project_name}_path"))
+        project_base_path = Path(get_global(f"{project_name}_path"))
         logger.info(f"Текущая папка проекта: {project_base_path}")
         logger.info(f"URL загрузки: {project_config['DOWNLOAD_URL']}")
 
@@ -385,12 +340,7 @@ class UpdatesModule:
 
     @staticmethod
     def _get_current_hashes(project_name: str, project_config: Dict, logger: logging.Logger) -> Dict[str, str]:
-        # Определяем путь к проекту
-        if project_name == 'starter':
-            base_path = Path(get_global('script_path'))
-        else:
-            base_path = Path(get_global(f"{project_name}_path"))
-
+        base_path = Path(get_global(f"{project_name}_path"))
         logger.info(f"Вычисление хешей текущих файлов проекта в {base_path}")
 
         matched_files = UpdatesModule._walk_files_with_ignore(
@@ -405,7 +355,7 @@ class UpdatesModule:
             rel_path_str = str(f.relative_to(base_path)).replace('\\', '/')
             file_hash = hashlib.sha256(f.read_bytes()).hexdigest()
             file_hashes[rel_path_str] = file_hash
-
+        
         logger.info(f"Вычислено хешей текущих файлов: {len(file_hashes)}")
         return file_hashes
 
@@ -526,15 +476,11 @@ class UpdatesModule:
         """
         config = UpdatesModule.get_updates_config()
         backups_dir = Path(config['BASE_UPDATES_DIR']) / config['BACKUPS_SUBDIR'] / project_name / update_id
-
+        
         if not backups_dir.exists():
             return {'status': 'error', 'message': 'Резервная копия для отката не найдена'}
-
-        # Определяем путь к проекту
-        if project_name == 'starter':
-            project_base_path = Path(get_global('script_path'))
-        else:
-            project_base_path = Path(get_global(f"{project_name}_path"))
+        
+        project_base_path = Path(get_global(f"{project_name}_path"))
         
         # Создаем логгер для отката
         log_dir = Path(config['LOG_DIR'])

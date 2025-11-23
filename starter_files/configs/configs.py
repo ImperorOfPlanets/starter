@@ -40,7 +40,7 @@ PROJECTS = {
     },
     
     'docker': {
-        'DOWNLOAD_URL':'https://gitflic.ru/project/imperor/docker/file/downloadAll?branch=Night&format=zip',
+        'DOWNLOAD_URL':'https://gitflic.ru/project/imperor/docker/file/downloadAll?branch=master&format=zip',
         
         'TARGETS': [
             'configs/browser/*',

@@ -63,21 +63,15 @@ class DockerModule(BaseModule):
 
                 log("Starting Docker installation...")
                 commands = get("docker", "return_commands_install_docker")
-                if not commands:
-                    log("No installation commands found")
-                    result['status'] = 'error'
-                    result['message'] = "No installation commands available"
-                    return result
                 for cmd in commands:
                     log(f"Executing: {cmd}")
                     process = subprocess.Popen(
                         cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         text=True, bufsize=1, universal_newlines=True
                     )
-                    if process.stdout is not None:
-                        for line in iter(process.stdout.readline, ''):
-                            if line:
-                                log(line.strip())
+                    for line in iter(process.stdout.readline, ''):
+                        if line:
+                            log(line.strip())
                     return_code = process.wait()
                     if return_code != 0:
                         log(f"Command failed with exit code {return_code}")
@@ -128,21 +122,15 @@ class DockerModule(BaseModule):
 
                 log("Starting Docker Compose installation...")
                 commands = get("docker", "return_commands_install_compose")
-                if not commands:
-                    log("No installation commands found")
-                    result['status'] = 'error'
-                    result['message'] = "No installation commands available"
-                    return result
                 for cmd in commands:
                     log(f"Executing: {cmd}")
                     process = subprocess.Popen(
                         cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         text=True, bufsize=1, universal_newlines=True
                     )
-                    if process.stdout is not None:
-                        for line in iter(process.stdout.readline, ''):
-                            if line:
-                                log(line.strip())
+                    for line in iter(process.stdout.readline, ''):
+                        if line:
+                            log(line.strip())
                     return_code = process.wait()
                     if return_code != 0:
                         log(f"Command failed with exit code {return_code}")
@@ -189,7 +177,7 @@ class DockerModule(BaseModule):
         """Заменяет ${VAR} на значение из env_vars (если есть)"""
         def repl(match):
             var = match.group(1)
-            return env_vars.get(var, match.group(0)) or match.group(0)
+            return env_vars.get(var, match.group(0))
         return re.sub(r'\$\{(\w+)\}', repl, content)
 
     @staticmethod
@@ -459,7 +447,7 @@ class DockerModule(BaseModule):
     # Запуск docker-compose (включая подготовку .env и compose)
     # ---------------------------
     @staticmethod
-    def run_compose(log_path: Optional[Path] = None) -> bool:
+    def run_compose(log_path: Path = None) -> bool:
         """
         Запускает docker-compose с логированием всех этапов.
         """
@@ -608,18 +596,17 @@ class DockerModule(BaseModule):
             )
             
             logger.info("[run_compose] === DOCKER COMPOSE OUTPUT ===")
-            if process.stdout:
-                for line in iter(process.stdout.readline, b''):
-                    if line:
-                        try:
-                            # Декодируем с UTF-8 и заменяем проблемные символы
-                            decoded_line = line.decode('utf-8', errors='replace').rstrip()
-                            logger.info(f"[compose] {decoded_line}")
-                        except UnicodeDecodeError as decode_error:
-                            # Если даже с errors='replace' не получается, логируем ошибку
-                            logger.warning(f"[compose] Unicode decode error: {decode_error}")
-                            # Пытаемся вывести сырые байты для отладки
-                            logger.info(f"[compose] Raw bytes: {line.hex()}")
+            for line in iter(process.stdout.readline, b''):
+                if line:
+                    try:
+                        # Декодируем с UTF-8 и заменяем проблемные символы
+                        decoded_line = line.decode('utf-8', errors='replace').rstrip()
+                        logger.info(f"[compose] {decoded_line}")
+                    except UnicodeDecodeError as decode_error:
+                        # Если даже с errors='replace' не получается, логируем ошибку
+                        logger.warning(f"[compose] Unicode decode error: {decode_error}")
+                        # Пытаемся вывести сырые байты для отладки
+                        logger.info(f"[compose] Raw bytes: {line.hex()}")
 
             return_code = process.wait()
 
@@ -768,7 +755,7 @@ class DockerModule(BaseModule):
         return mounts_map
 
     @staticmethod
-    def get_current_container_name() -> Optional[str]:
+    def get_current_container_name() -> str:
         """
         Возвращает имя контейнера самого же себя где запущен
         """
@@ -806,15 +793,13 @@ class DockerModule(BaseModule):
     # Генерация docker-compose (низкоуровневая и высокоуровневая)
     # ---------------------------
     @staticmethod
-    def generate_docker_compose(env_vars: Optional[Dict[str, str]] = None, log_path: Optional[Path] = None) -> bool:
+    def generate_docker_compose(env_vars: Dict[str, str] = None, log_path: Optional[Path] = None) -> bool:
         try:
             docker_path = Path(get_global("docker_path"))
             docker_path.mkdir(parents=True, exist_ok=True)
 
             if env_vars is None:
                 env_vars = DockerModule.ensure_docker_env(docker_path, log_path)
-
-            assert env_vars is not None  # env_vars is now guaranteed to be Dict[str, str]
 
             # Получаем PULL_FROM_REGISTRY из env_vars
             pull_from_registry = env_vars.get("PULL_FROM_REGISTRY", "false").lower() == "true"
@@ -831,9 +816,7 @@ class DockerModule(BaseModule):
             return False
 
     @staticmethod
-    def generate_compose(docker_dir: Union[str, Path], env_vars: Optional[Dict[str, str]] = None, pull_from_registry: bool = False, log_path: Optional[Path] = None) -> bool:
-        if env_vars is None:
-            env_vars = {}
+    def generate_compose(docker_dir: Union[str, Path], env_vars: Dict[str, str], pull_from_registry: bool = False, log_path: Optional[Path] = None) -> bool:
         """
         Генерирует docker-compose.yml на основе шаблона и переменных.
         Универсальная версия для всех платформ.
@@ -1079,7 +1062,7 @@ class DockerModule(BaseModule):
             _, template_lines = DockerModule.parse_env_content(env_example_path.read_text(encoding='utf-8'))
         else:
             # Создаём шаблонные строки на основе переданного словаря (сохранится порядок vars_dict)
-            template_lines: List[Union[str, Tuple[str, str]]] = [(k, f"{k}={v}") for k, v in vars_dict.items()]
+            template_lines = [(k, f"{k}={v}") for k, v in vars_dict.items()]
 
         content = DockerModule.generate_env_content(vars_dict, template_lines)
         env_path.write_text(content, encoding='utf-8')

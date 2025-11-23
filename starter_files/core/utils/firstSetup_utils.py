@@ -10,11 +10,7 @@ from starter_files.core.utils.loader_utils import get
 from starter_files.core.utils.globalVars_utils import get_global
 from starter_files.core.utils.log_utils import LogManager
 
-# Логгер будет инициализирован позже, при необходимости
-try:
-    logger = LogManager.get_logger()
-except RuntimeError:
-    logger = None
+logger = LogManager.get_logger()
 
 # Обязательные переменные для первоначальной настройки asd sa
 REQUIRED_ENV_VARS = [
@@ -29,7 +25,7 @@ def is_first_run() -> bool:
     base_dir = get_global('script_path')
     env_path = base_dir / '.env'
 
-    if logger: logger.info(f"[DEBUG] Проверка .env файла: {env_path.resolve()}")
+    logger.info(f"[DEBUG] Проверка .env файла: {env_path.resolve()}")
 
     if not env_path.exists():
         return True
@@ -60,27 +56,27 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
     if not is_first_run():
         return False, None
 
-    if logger: logger.info(f"[DEBUG] script_path глобальная переменная: {get_global('script_path')}")
+    logger.info(f"[DEBUG] script_path глобальная переменная: {get_global('script_path')}")
     # Получаем путь относительно запускаемого скрипта
     base_dir = get_global('script_path')
     env_path = base_dir / '.env'
     env_example_path = base_dir / '.env.example'
-    if logger: logger.info(f"[DEBUG] Путь для .env: {env_path}")
-    if logger: logger.info(f"[DEBUG] Путь для .env.example: {env_example_path}")
+    logger.info(f"[DEBUG] Путь для .env: {env_path}")
+    logger.info(f"[DEBUG] Путь для .env.example: {env_example_path}")
 
     # Выводим информацию о создании файла
-    if logger: logger.info(f"\n{'='*50}")
-    if logger: logger.info("ВЫПОЛНЕНИЕ ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ")
-    if logger: logger.info(f"Создаем файл конфигурации: {env_path}")
-    if logger: logger.info(f"Используем шаблон: {env_example_path}")
-    if logger: logger.info(f"{'='*50}\n")
+    logger.info(f"\n{'='*50}")
+    logger.info("ВЫПОЛНЕНИЕ ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ")
+    logger.info(f"Создаем файл конфигурации: {env_path}")
+    logger.info(f"Используем шаблон: {env_example_path}")
+    logger.info(f"{'='*50}\n")
 
     if not env_example_path.exists():
-        if logger: logger.info(f"Файл шаблона .env.example не найден в {base_dir}")
+        logger.info(f"Файл шаблона .env.example не найден в {base_dir}")
         return False, None
 
     # Выводим информацию о создании файла
-    if logger: logger.info(f"\nСоздаем файл конфигурации: {env_path}")
+    logger.info(f"\nСоздаем файл конфигурации: {env_path}")
 
     with open(env_example_path, 'r', encoding='utf-8') as f:
         example_content = f.read()
@@ -90,34 +86,19 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
     
     if interactive:
         languages = get_available_languages()
-        print("\n=== Первоначальная настройка ===")
-        print("Доступные языки:")
-
+        logger.info("\n=== Первоначальная настройка ===")
+        logger.info("Доступные языки:")
+        
         for i, (code, data) in enumerate(languages.items(), 1):
-            print(f"{i}. {data['this_language']} ({code})")
-
-        if languages:
-            while True:
-                try:
-                    choice = input("\nВыберите язык (номер или код): ").strip()
-                    if choice.isdigit():
-                        idx = int(choice) - 1
-                        if 0 <= idx < len(languages):
-                            lang_code = list(languages.keys())[idx]
-                            break
-                    elif choice in languages:
-                        lang_code = choice
-                        break
-                    print("Неверный выбор. Попробуйте снова.")
-                except (ValueError, EOFError):
-                    print("Неверный ввод. Попробуйте снова.")
-
-            credentials['language'] = languages[lang_code]['this_language']
-            print(f"Выбран язык: {credentials['language']} ({lang_code})")
-        else:
-            lang_code = 'en'  # Язык по умолчанию если языки не найдены
-            credentials['language'] = 'English'
-            print("Языки не найдены, используется английский по умолчанию")
+            logger.info(f"{i}. {data['this_language']} ({code})")
+        
+        while True:
+            choice = input(f"Выберите язык (1-{len(languages)}): ")
+            if choice.isdigit() and 1 <= int(choice) <= len(languages):
+                lang_code = list(languages.keys())[int(choice)-1]
+                credentials['language'] = languages[lang_code]['this_language']
+                break
+            logger.info(f"Пожалуйста, введите число от 1 до {len(languages)}")
     else:
         lang_code = 'en'  # Язык по умолчанию для сервисного режима
         credentials['language'] = 'English'
@@ -133,11 +114,11 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
         f.write(generate_env_content(example_vars, example_lines))
 
     if interactive:
-        if logger: logger.info("\n=== Учетные данные ===")
-        if logger: logger.info(f"Язык интерфейса: {credentials['language']}")
-        if logger: logger.info(f"Логин: {credentials['login']}")
-        if logger: logger.info(f"Пароль: {credentials['password']} (сохраните этот пароль!)")
-        if logger: logger.info("="*30)
+        logger.info("\n=== Учетные данные ===")
+        logger.info(f"Язык интерфейса: {credentials['language']}")
+        logger.info(f"Логин: {credentials['login']}")
+        logger.info(f"Пароль: {credentials['password']} (сохраните этот пароль!)")
+        logger.info("="*30)
 
     return True, {
         'login': credentials['login'],
@@ -149,9 +130,9 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
 def get_server_url() -> list:
     """Возвращает список всех URL сервера с учетом порта"""
     docker_port = os.environ.get('dockerPort', '8000')
-    ips = get('network','get_all_local_ips') or []
+    ips = get('network','get_all_local_ips')
     # Выводим в консоль
-    if logger: logger.info("Список локальных IP из кеша: %s", ips)
+    logger.info("Список локальных IP из кеша: %s", ips)
 
     return [f"https://{ip}:{docker_port}" for ip in ips]
 
@@ -164,7 +145,7 @@ def open_browser() -> None:
     docker_port = os.environ.get('dockerPort', '8000')
     urls = get_server_url()
 
-    if logger: logger.info("\nСервер запущен. Доступен по адресам:")
+    logger.info("\nСервер запущен. Доступен по адресам:")
     
     # Основной URL для вывода/открытия
     primary_url = None
@@ -172,15 +153,15 @@ def open_browser() -> None:
     if is_docker:
         # В Docker - показываем специальный URL для доступа с хоста
         docker_url = f"https://localhost:{docker_port}"
-        if logger: logger.info(docker_url)
-        if logger: logger.info("(Это Docker-контейнер. Используйте этот URL на хост-машине)")
+        logger.info(docker_url)
+        logger.info("(Это Docker-контейнер. Используйте этот URL на хост-машине)")
         if logger:
             logger.info(f"Docker-контейнер: доступ через {docker_url}")
         primary_url = docker_url
     else:
         # Не в Docker - показываем все IP
         for url in urls:
-            if logger: logger.info(url)
+            logger.info(url)
             if logger:
                 logger.info(f"Сервер запущен: {url}")
         primary_url = urls[0] if urls else None

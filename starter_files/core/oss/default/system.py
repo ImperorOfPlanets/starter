@@ -101,9 +101,8 @@ class SystemModule(BaseModule):
         is_root = False
         try:
             # Linux/MacOS
-            getuid = getattr(os, 'getuid', None)
-            if getuid:
-                is_root = getuid() == 0
+            if hasattr(os, 'getuid'):
+                is_root = os.getuid() == 0
             # Windows
             else:
                 is_root = ctypes.windll.shell32.IsUserAnAdmin() != 0
@@ -263,14 +262,13 @@ class SystemModule(BaseModule):
                         except:
                             return 'unknown'
 
-    @staticmethod
     def get_os_type() -> str:
         """
         Определяет тип операционной системы.
         Возвращает: 'linux', 'windows', 'macos' или 'unknown'
         """
         system = platform.system().lower()
-
+        
         if system == 'linux':
             return 'linux'
         elif system == 'windows':
@@ -302,8 +300,8 @@ class SystemModule(BaseModule):
         try:
             cpu_info = {
                 'name': 'N/A',
-                'cores': None,
-                'logical_cores': None,
+                'cores': 'N/A',
+                'logical_cores': 'N/A',
                 'usage': 'N/A'
             }
             
@@ -323,10 +321,6 @@ class SystemModule(BaseModule):
                         if line.startswith('physical id'):
                             cores.add(line.split(':')[1].strip())
                     cpu_info['cores'] = len(cores) if cores else os.cpu_count()
-            else:
-                # Для других систем устанавливаем значения по умолчанию
-                cpu_info['logical_cores'] = os.cpu_count()
-                cpu_info['cores'] = os.cpu_count()
             
             # Получаем модель процессора
             if platform.system() == "Darwin":
@@ -360,8 +354,8 @@ class SystemModule(BaseModule):
         except Exception as e:
             return {
                 'name': 'N/A',
-                'cores': None,
-                'logical_cores': None,
+                'cores': 'N/A',
+                'logical_cores': 'N/A',
                 'usage': 'N/A'
             }
 
@@ -598,8 +592,11 @@ class SystemModule(BaseModule):
             return env_venv_path
         
         # 2. Проверяем виртуальное окружение Python
-        if hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix:
-            # venv module (covers both venv and virtualenv in modern Python)
+        if hasattr(sys, 'real_prefix'):
+            # virtualenv
+            return sys.real_prefix
+        elif hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix:
+            # venv module
             return sys.prefix
         
         # 3. Проверяем стандартные пути

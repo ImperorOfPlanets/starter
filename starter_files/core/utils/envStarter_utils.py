@@ -1,7 +1,6 @@
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 from starter_files.core.utils.globalVars_utils import get_global
-from starter_files.core.utils.log_utils import LogManager
 
 def parse_env_content(content: str) -> Tuple[Dict[str, str], List[Union[str, Tuple[str, str]]]]:
     """Парсит содержимое .env файла, сохраняя структуру"""
@@ -65,9 +64,9 @@ def read_env_file(env_path: Path) -> Dict[str, str]:
     variables, _ = parse_env_content(content)
     return variables
 
-def write_env_file(env_path: Path,
-                  vars_dict: Dict[str, str],
-                  template_path: Optional[Path] = None):
+def write_env_file(env_path: Path, 
+                  vars_dict: Dict[str, str], 
+                  template_path: Path = None):
     """Записывает .env файл с сохранением структуры шаблона"""
     if template_path and template_path.exists():
         with open(template_path, 'r', encoding='utf-8') as f:
@@ -82,13 +81,11 @@ def write_env_file(env_path: Path,
 
 def ensure_env_variables():
     """Обновляет .env файл в соответствии с .env.example"""
-    logger = LogManager.get_logger('envStarter')
+    script_path = get_global('script_pat')
 
-    script_path = get_global('script_path')
-
-    env_path = script_path / '.env'
+    env_path = script_path / 'script_pat'
     logger.info('.env')
-
+    
     env_example_path = script_path / '.env.example'
     logger.info(env_example_path)
     
@@ -97,7 +94,6 @@ def ensure_env_variables():
     
     current_vars = read_env_file(env_path)
     with open(env_example_path, 'r', encoding='utf-8') as f:
-
         example_content = f.read()
     example_vars, example_lines = parse_env_content(example_content)
     

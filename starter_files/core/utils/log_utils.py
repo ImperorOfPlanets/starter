@@ -51,9 +51,6 @@ class LogManager:
     def register_log_dir(cls, logger_name, subdirectory):
         """Регистрирует специальную директорию для логгера"""
         base_dir = get_global('script_path')
-        if base_dir is None:
-            # Если script_path еще не установлен, используем текущую директорию
-            base_dir = Path.cwd()
         log_dir = base_dir / "starter_files" / "logs" / subdirectory
         log_dir.mkdir(parents=True, exist_ok=True)
         cls._log_dirs[logger_name] = log_dir

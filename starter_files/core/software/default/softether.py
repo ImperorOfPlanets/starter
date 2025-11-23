@@ -1,5 +1,5 @@
 from starter_files.core.base_module import BaseModule
-from typing import List, Dict, Any
+from typing import List, Dict
 from datetime import datetime
 from pathlib import Path
 from starter_files.core.utils.globalVars_utils import get_global, set_global
@@ -56,12 +56,6 @@ class SoftetherModule(BaseModule):
 
                 commands = get("softether","return_commands_install_softether")
 
-                if not commands or not isinstance(commands, list):
-                    log("No installation commands found or invalid commands format")
-                    result['status'] = 'error'
-                    result['message'] = "No installation commands available"
-                    return result
-
                 # Выполняем команды установки
                 for cmd in commands:
                     log(f"Executing: {cmd}")
@@ -76,10 +70,9 @@ class SoftetherModule(BaseModule):
                     )
                     
                     # Читаем вывод в реальном времени
-                    if process.stdout:
-                        for line in iter(process.stdout.readline, ''):
-                            if line:
-                                log(line.strip())
+                    for line in iter(process.stdout.readline, ''):
+                        if line:
+                            log(line.strip())
                     
                     # Проверяем статус завершения
                     return_code = process.wait()
@@ -93,11 +86,11 @@ class SoftetherModule(BaseModule):
                 time.sleep(2)
                 if get('softether','check_softether_installed'):
                     log("SoftEtherVPN installed successfully! Please restart your session.")
-                    result['message'] = "SoftEtherVPN installed successfully! Please restart your session."
+                    result['message'] = "Docker installed successfully! Please restart your session."
                 else:
-                    log("Installation completed but SoftEtherVPN not detected. Try restarting your system.")
+                    log("Installation completed but Docker not detected. Try restarting your system.")
                     result['status'] = 'warning'
-                    result['message'] = "Installation completed but SoftEtherVPN not detected. Try restarting your system."
+                    result['message'] = "Installation completed but Docker not detected. Try restarting your system."
         
         except Exception as e:
             # Записываем ошибку в лог
@@ -191,43 +184,21 @@ class SoftetherModule(BaseModule):
         return [
             f"vpncmd /CLIENT localhost /CMD AccountDelete {profile_name}"
         ]
-    @staticmethod
-    def get_service_status() -> Dict[str, Any]:
-        """Получает статус службы SoftEther VPN"""
-        try:
-            os_type = get_global('os_type')
-            if os_type == 'linux' or os_type == 'macos':
-                # Проверяем статус службы через systemctl или service
-                result = subprocess.run(
-                    ['systemctl', 'is-active', 'softether-vpnserver'],
-                    capture_output=True,
-                    text=True
-                )
-                if result.returncode == 0:
-                    return {'status_text': 'active', 'active': True}
-                else:
-                    return {'status_text': 'inactive', 'active': False}
-            elif os_type == 'windows':
-                # Для Windows проверяем через sc или powershell
-                result = subprocess.run(
-                    ['sc', 'query', 'SEVPNCLIENT'],
-                    capture_output=True,
-                    text=True
-                )
-                if 'RUNNING' in result.stdout.upper():
-                    return {'status_text': 'active', 'active': True}
-                else:
-                    return {'status_text': 'inactive', 'active': False}
-            return {'status_text': 'unknown', 'active': False}
-        except Exception:
-            return {'status_text': 'error', 'active': False}
-
+        """Устанавливает глобальные переменные для SoftEther"""
+        installed = get('softether', 'check_softether_installed')
+        set_global('softether_installed', installed)
+        
+        if installed:
+            status = SoftEtherModule.get_service_status()
+            set_global('softether_status', status['status_text'])
+            set_global('softether_active', status['active'])
+    
     @staticmethod
     def set_globals():
         """Устанавливает глобальные переменные для SoftEther"""
         installed = get('softether', 'check_softether_installed')
         set_global('softether_installed', installed)
-
+        
         if installed:
             status = SoftetherModule.get_service_status()
             set_global('softether_status', status['status_text'])

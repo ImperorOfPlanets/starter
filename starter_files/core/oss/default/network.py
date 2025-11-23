@@ -3,10 +3,7 @@ from starter_files.core.base_module import BaseModule
 import socket
 import platform
 import os
-try:
-    import fcntl
-except ImportError:
-    fcntl = None
+import fcntl
 import struct
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
@@ -15,18 +12,14 @@ from dataclasses import dataclass
 from starter_files.core.utils.globalVars_utils import get_global
 from starter_files.core.utils.log_utils import LogManager
 
-# Логгер будет инициализирован позже, при необходимости
-try:
-    logger = LogManager.get_logger('network')
-except RuntimeError:
-    logger = None
+logger = LogManager.get_logger('network')
 
 @dataclass
 class NetworkConnection:
     ip: str
     netmask: str
     gateway: Optional[str] = None
-    dns_servers: Optional[List[str]] = None
+    dns_servers: List[str] = None
     status: str = "Unknown"
 
 @dataclass
@@ -86,8 +79,7 @@ class NetworkModule(BaseModule):
             return valid_ips if valid_ips else ['127.0.0.1']
             
         except Exception as e:
-            if logger:
-                logger.error(f"Error getting local IPs: {str(e)}")
+            logger.error(f"Error getting local IPs: {str(e)}")
             return ['127.0.0.1']
 
     @staticmethod
@@ -144,8 +136,7 @@ class NetworkModule(BaseModule):
             return NetworkModule._get_linux_minimal()
             
         except Exception as e:
-            if logger:
-                logger.error(f"Error getting Linux network info: {str(e)}")
+            logger.error(f"Error getting Linux network info: {str(e)}")
             return [], []
 
     @staticmethod
@@ -198,8 +189,7 @@ class NetworkModule(BaseModule):
                             virtual_devices.append(device)
         
         except Exception as e:
-            if logger:
-                logger.error(f"Error reading from /sys: {str(e)}")
+            logger.error(f"Error reading from /sys: {str(e)}")
         
         return physical_devices, virtual_devices
 
@@ -235,8 +225,7 @@ class NetworkModule(BaseModule):
                         virtual_devices.append(device)
         
         except Exception as e:
-            if logger:
-                logger.error(f"Error in minimal Linux method: {str(e)}")
+            logger.error(f"Error in minimal Linux method: {str(e)}")
         
         return physical_devices, virtual_devices
 
@@ -274,8 +263,7 @@ class NetworkModule(BaseModule):
                 ips.append({'ip': local_ip, 'netmask': 24})
         
         except Exception as e:
-            if logger:
-                logger.error(f"Error getting IP addresses for {ifname}: {str(e)}")
+            logger.error(f"Error getting IP addresses for {ifname}: {str(e)}")
         
         return ips
 
