@@ -6,10 +6,10 @@ import sys
 import textwrap
 from pathlib import Path
 
-from starter_files.core.utils import venv_utils
-from starter_files.core.utils.globalVars_utils import get_global
-from starter_files.core.oss.default.system import SystemModule
-from starter_files.core.utils.log_utils import LogManager
+from files.core.utils import venv_utils
+from files.core.utils.globalVars_utils import get_global
+from files.core.oss.default.system import SystemModule
+from files.core.utils.log_utils import LogManager
 
 # Устанавливает глобальные переменные
 SystemModule.collect_basic_system_info()
@@ -29,9 +29,9 @@ def start_service_mode():
 
 def start_interactive_mode():
     # Обычный режим
-    from starter_files.core.utils.configurateApp_utils import configure_app
-    from starter_files.core.utils.ssl_utils import get_ssl_context
-    from starter_files.core.utils.firstSetup_utils import open_browser
+    from files.core.utils.configurateApp_utils import configure_app
+    from files.core.utils.ssl_utils import get_ssl_context
+    from files.core.utils.firstSetup_utils import open_browser
     from dotenv import load_dotenv
 
     env_file = Path(get_global('script_path')) / '.env'
@@ -69,7 +69,7 @@ if __name__ == '__main__':
         import flask
         import dotenv
     except ImportError:
-        from starter_files.core.utils.requirements_utils import install_and_restart
+        from files.core.utils.requirements_utils import install_and_restart
         install_and_restart()
     
 
@@ -83,13 +83,13 @@ if __name__ == '__main__':
     logger = LogManager.get_logger("main")
 
     # Устанавливаем глобальный обработчик исключений
-    from starter_files.core.utils.exceptionHandler_utils import ExceptionHandler
+    from files.core.utils.exceptionHandler_utils import ExceptionHandler
     handler = ExceptionHandler()
     sys.excepthook = handler.handle_unhandled_exception
     logger.debug("Exception handler initialized")
 
     # Проверка на настроенность
-    from starter_files.core.utils.firstSetup_utils import first_run_setup
+    from files.core.utils.firstSetup_utils import first_run_setup
     is_first_run, credentials = first_run_setup()
     if is_first_run and credentials:
         logger.info("First run setup completed")
@@ -100,14 +100,14 @@ if __name__ == '__main__':
         print("="*50 + "\n")
 
         print("=== ПРОВЕРКА ОБНОВЛЕНИЙ ===")
-        from starter_files.core.oss.default.updates import UpdatesModule
+        from files.core.oss.default.updates import UpdatesModule
         config = UpdatesModule.get_updates_config()
         seconds = UpdatesModule.seconds_since_last_update('starter', config)
         print(f"Секунд с последнего обновления: {seconds}")
         print("===========================")
 
     # Собираем информацию о фаерволе
-    from starter_files.core.oss.default.firewall import FirewallModule
+    from files.core.oss.default.firewall import FirewallModule
     print("=== ПРОВЕРКА ПОРТОВ ===")
     firewall_info = FirewallModule.collect_firewall_info()
     

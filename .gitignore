@@ -17,9 +17,9 @@ service.log
 **/__pycache__/
 
 # Файл логов запуска для предотвращения зацикеливания запуска при обновлении
-/starter_files/logs
-/starter_files/web/ssl
-starter_files/updates
+/files/logs
+/files/web/ssl
+files/updates
 
 # Файл настроек стартера
 temp.txt
