@@ -4,7 +4,7 @@ import secrets
 
 from pathlib import Path
 from typing import Dict, Optional, Tuple
-from files.core.utils.envutils import read_env_file, parse_env_content, generate_env_content
+from files.core.utils.env_utils import read_env_file, parse_env_content, generate_env_content
 from files.core.utils.i18n_utils import get_available_languages
 from files.core.utils.loader_utils import get
 from files.core.utils.globalVars_utils import get_global
