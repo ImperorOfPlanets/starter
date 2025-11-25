@@ -7,7 +7,7 @@ from flask import Flask, render_template, request,session
 from flask_session import Session
 from pathlib import Path
 
-from files.core.utils.envutils import read_env_file
+from files.core.utils.env_utils import read_env_file
 from files.core.utils.globalVars_utils import get_global
 from files.web.routes import routes
 
