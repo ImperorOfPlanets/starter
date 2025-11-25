@@ -45,7 +45,12 @@ def start_interactive_mode():
 
     app = configure_app()
     ssl_context = get_ssl_context()
+    
+    # ЧТЕНИЕ ПОРТА ИЗ .env С ЗНАЧЕНИЕМ ПО УМОЛЧАНИЮ
     port = int(os.environ.get('PORT', 8000))
+    
+    print(f"[INFO] Запуск приложения на порту: {port}")
+    
     open_browser()
     app.run(
         host='0.0.0.0',
