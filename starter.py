@@ -78,81 +78,6 @@ def parse_args():
     parser.add_argument('--show-vars', action='store_true', help='Показать переменные SystemModule')
     return parser.parse_args()
 
-def check_and_apply_updates():
-    """Проверяет и применяет обновления с выводом на экран"""
-    print("\n" + "="*60)
-    print("🔄 ПРОВЕРКА ОБНОВЛЕНИЙ")
-    print("="*60)
-    
-    try:
-        from files.core.oss.default.updates import UpdatesModule
-        from files.configs.configs import PROJECTS
-        
-        config = UpdatesModule.get_updates_config()
-        
-        for project_name, project_config in PROJECTS.items():
-            print(f"\n📦 Проект: {project_name}")
-            print(f"   URL: {project_config['DOWNLOAD_URL']}")
-            
-            # Проверяем, нужно ли проверять обновления
-            if UpdatesModule.should_check_updates(project_name, config):
-                print("   🔍 Проверяем наличие обновлений...")
-                
-                # Выполняем обновление
-                result = UpdatesModule.update_project(project_name, project_config)
-                
-                if result['changes_count'] == -1:
-                    print("   ✅ Новая установка выполнена")
-                elif result['changes_count'] > 0:
-                    print(f"   ✅ Обновление применено! Изменений: {result['changes_count']}")
-                    if result['need_restart']:
-                        print("   ⚠️  Требуется перезапуск приложения")
-                else:
-                    print("   ✅ Актуальная версия, обновлений не требуется")
-                    
-                # Показываем лог обновления
-                log_content = UpdatesModule.get_update_log(result['update_id'])
-                print(f"   📋 Лог обновления сохранен: {result['update_id']}.log")
-                
-            else:
-                seconds = UpdatesModule.seconds_since_last_update(project_name, config)
-                print(f"   ⏰ Проверка не требуется (последняя проверка {int(seconds)} сек назад)")
-                
-    except Exception as e:
-        print(f"   ❌ Ошибка при проверке обновлений: {str(e)}")
-        import traceback
-        traceback.print_exc()
-    
-    print("="*60 + "\n")
-
-def show_update_history():
-    """Показывает историю обновлений"""
-    try:
-        from files.core.oss.default.updates import UpdatesModule
-        
-        print("\n" + "="*60)
-        print("📊 ИСТОРИЯ ОБНОВЛЕНИЙ")
-        print("="*60)
-        
-        history = UpdatesModule.get_update_history('all')
-        
-        if not history['history']:
-            print("   История обновлений пуста")
-            return
-            
-        for update in history['history'][:5]:  # Показываем последние 5 записей
-            status_icons = {
-                'completed': '✅',
-                'error': '❌',
-                'in_progress': '🔄',
-                'unknown': '❓'
-            }
-            icon = status_icons.get(update['status'], '❓')
-            print(f"   {icon} {update['project']} - {update['timestamp'].split('T')[0]} - {update['status']}")
-            
-    except Exception as e:
-        print(f"   ❌ Ошибка при получении истории: {str(e)}")
-
 def start_service_mode():
     """Запускает сервисный режим"""
     logger = get_global('logger')
@@ -234,16 +159,6 @@ if __name__ == '__main__':
         print(f"Пароль: {credentials['password']}")
         print("Сохраните эти данные!")
         print("="*50 + "\n")
-
-    # АВТОМАТИЧЕСКАЯ ПРОВЕРКА ОБНОВЛЕНИЙ ПРИ ЗАПУСКЕ
-    if not args.no_update:
-        # Выводим переменные SystemModule перед обновлением
-        print_system_module_variables()
-        
-        check_and_apply_updates()
-        show_update_history()
-    else:
-        print("\n⏭️  Автоматическое обновление пропущено (используйте --no-update)")
 
     # Собираем информацию о фаерволе
     from files.core.oss.default.firewall import FirewallModule
