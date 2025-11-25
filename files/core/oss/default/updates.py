@@ -550,3 +550,71 @@ class UpdatesModule:
         available_versions.sort(key=lambda x: x['timestamp'], reverse=True)
         
         return available_versions
+
+    @staticmethod
+    def update_server_project(server_type: str = None) -> Dict[str, Any]:
+        """Обновляет проект сервера на основе его типа"""
+        # Получаем модуль server_type через систему модулей
+        server_type_module = get('server_type')
+        if not server_type_module:
+            return {'status': 'error', 'message': 'Server type module not available'}
+        
+        if not server_type:
+            server_type = server_type_module.get_current_server_type()
+            if not server_type:
+                return {'status': 'error', 'message': 'Server type not configured'}
+        
+        # Получаем информацию о сервере
+        server_info = server_type_module.get_server_info()
+        if not server_info['configured']:
+            return {'status': 'error', 'message': 'Server type not configured'}
+        
+        # Находим доступный репозиторий
+        repo = server_type_module.get_best_available_repository(server_type)
+        if not repo:
+            # Получаем fallback репозиторий через конфиг
+            from files.configs.server_types import FALLBACK_REPOSITORY
+            repo = FALLBACK_REPOSITORY
+            logger.warning(f"Using fallback repository for server type: {server_type}")
+        
+        # Создаем временную конфигурацию для обновления
+        server_config = {
+            'DOWNLOAD_URL': repo['url'],
+            'TARGETS': [
+                'code/**',
+                'docker/**',
+                '.env.example',
+                'README.md'
+            ],
+            'IGNORED': [
+                '**/__pycache__/**',
+                '**/*.pyc',
+                '**/.git/**'
+            ],
+            'RESTART_AFTER_UPDATE': True,
+            # Критические файлы для проверки установки
+            'CRITICAL_FILES': [
+                'docker/docker-compose.example',
+                'code/requirements.txt'
+            ]
+        }
+        
+        # Используем существующий механизм обновления
+        return UpdatesModule.update_project(f"server_{server_type}", server_config)
+
+    @staticmethod
+    def get_server_update_history(server_type: str = None):
+        """Получает историю обновлений серверных проектов"""
+        if server_type:
+            return UpdatesModule.get_update_history(f"server_{server_type}")
+        else:
+            # Возвращаем историю всех серверных проектов
+            all_history = []
+            # Получаем типы серверов через модуль
+            server_type_module = get('server_type')
+            if server_type_module:
+                from files.configs.server_types import SERVER_TYPES
+                for stype in SERVER_TYPES.keys():
+                    history = UpdatesModule.get_update_history(f"server_{stype}")
+                    all_history.extend(history.get('history', []))
+            return {'history': all_history}

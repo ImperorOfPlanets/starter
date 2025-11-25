@@ -24,6 +24,7 @@ files/updates
 # Файл настроек стартера
 temp.txt
 .env
+.vscode
 
 /venv
 venv8*/

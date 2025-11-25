@@ -37,61 +37,6 @@ PROJECTS = {
         
         # Автоматически перезапускать приложение после обновления (опционально)
         'RESTART_AFTER_UPDATE': True
-    },
-    
-    'docker': {
-        'DOWNLOAD_URL':'https://gitflic.ru/project/imperor/docker/file/downloadAll?branch=master&format=zip',
-        
-        'TARGETS': [
-            'configs/browser/*',
-            'configs/init/*',
-            'configs/mariadb/mariadb.cnf',
-            'configs/mariadb/conf.d/logging.cnf',
-            'configs/nginx/confs/templates/default.conf.template',
-            'configs/php/cli/*',
-            'configs/php/fpm/*',
-            'configs/scripts/*',
-            'configs/supervisor/supervisord.conf',
-            'configs/transformer/app.py',
-            'configs/transformer/requirements.txt',
-            'configs/transformer/start.sh',
-            'dockerfiles/*',
-            'configs/voice/*',
-            'configs/voicetts/*',
-            '.env.example',
-            '.gitignore',
-            'Инструкция',
-            'check_files.py',
-            'docker-compose.example',
-            'generate_compose.py'
-        ],
-
-        # Шаблоны файлов для ИГНОРИРОВАНИЯ при проверке изменений (опционально)
-        'IGNORED': [
-            'configs/vpn/*',
-            'configs/nginx/certs/*',
-            'logs',
-            '.env'
-        ],
-        # Дополнительные файлы для включения в бэкапы (опционально)
-        'ADD_IN_BACKUPS': [
-            'configs/vpn',
-            'configs/nginx',
-            'logs',
-            'shared',
-            '.env'
-        ],
-        # Критические файлы для docker-проекта, если их нет то считается новой установкой
-        'CRITICAL_FILES': [
-            'docker-compose.example'
-        ],
-        'RESTART_AFTER_UPDATE': True,
-        
-        # Специальные функции для обработки обновлений (опционально)
-        # Формат: {'относительный_путь': 'имя_функции'}
-        'FUNCTIONS_IF_UPDATE': {
-            '.env.example': 'copy_environment_variables'
-        }
     }
 }
 
