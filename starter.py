@@ -14,12 +14,68 @@ from files.core.utils.log_utils import LogManager
 # Устанавливает глобальные переменные
 SystemModule.collect_basic_system_info()
 
+def print_system_module_variables():
+    """Выводит все переменные SystemModule, которые находятся в памяти"""
+    print("\n" + "="*60)
+    print("🔧 ПЕРЕМЕННЫЕ SYSTEMMODULE В ПАМЯТИ")
+    print("="*60)
+    
+    try:
+        # Получаем все атрибуты SystemModule
+        all_attributes = dir(SystemModule)
+        
+        # Фильтруем только публичные атрибуты (не начинающиеся с _)
+        public_attributes = [attr for attr in all_attributes if not attr.startswith('_')]
+        
+        print("📋 Доступные атрибуты SystemModule:")
+        for attr in sorted(public_attributes):
+            try:
+                value = getattr(SystemModule, attr)
+                # Форматируем вывод в зависимости от типа данных
+                if callable(value):
+                    print(f"   🔷 {attr}: <method>")
+                elif isinstance(value, (dict, list, tuple)) and len(str(value)) > 100:
+                    print(f"   📦 {attr}: {type(value).__name__} (размер: {len(str(value))} chars)")
+                else:
+                    print(f"   ✅ {attr}: {value}")
+            except Exception as e:
+                print(f"   ❌ {attr}: <error: {str(e)}>")
+                
+        # Дополнительно выводим содержимое глобальных переменных
+        print("\n📋 Глобальные переменные (globalVars):")
+        global_vars = [
+            'os_name', 'os_version', 'os_arch', 'hostname', 
+            'username', 'script_path', 'current_path', 'python_version',
+            'is_admin', 'is_service', 'hardware_info'
+        ]
+        
+        for var_name in global_vars:
+            try:
+                value = get_global(var_name)
+                if value is not None:
+                    if isinstance(value, (dict, list)) and len(str(value)) > 50:
+                        print(f"   📦 {var_name}: {type(value).__name__} (размер: {len(str(value))} chars)")
+                    else:
+                        print(f"   ✅ {var_name}: {value}")
+                else:
+                    print(f"   ⚠️  {var_name}: <not set>")
+            except Exception as e:
+                print(f"   ❌ {var_name}: <error: {str(e)}>")
+                
+    except Exception as e:
+        print(f"   💥 Ошибка при получении переменных SystemModule: {str(e)}")
+        import traceback
+        traceback.print_exc()
+    
+    print("="*60 + "\n")
+
 def parse_args():
     """Парсит аргументы командной строки"""
     parser = argparse.ArgumentParser()
     parser.add_argument('--service', action='store_true', help='Запуск в сервисном режиме')
     parser.add_argument('--debug', action='store_true', help='Запуск в режиме отладки')
     parser.add_argument('--no-update', action='store_true', help='Пропустить автоматическое обновление')
+    parser.add_argument('--show-vars', action='store_true', help='Показать переменные SystemModule')
     return parser.parse_args()
 
 def check_and_apply_updates():
@@ -164,6 +220,10 @@ if __name__ == '__main__':
     sys.excepthook = handler.handle_unhandled_exception
     logger.debug("Exception handler initialized")
 
+    # Показываем переменные SystemModule если запрошено
+    if args.show_vars:
+        print_system_module_variables()
+
     # Проверка на настроенность
     from files.core.utils.firstSetup_utils import first_run_setup
     is_first_run, credentials = first_run_setup()
@@ -177,6 +237,9 @@ if __name__ == '__main__':
 
     # АВТОМАТИЧЕСКАЯ ПРОВЕРКА ОБНОВЛЕНИЙ ПРИ ЗАПУСКЕ
     if not args.no_update:
+        # Выводим переменные SystemModule перед обновлением
+        print_system_module_variables()
+        
         check_and_apply_updates()
         show_update_history()
     else:
