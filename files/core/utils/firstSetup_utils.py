@@ -17,7 +17,8 @@ REQUIRED_ENV_VARS = [
     'LANGUAGE',
     'ADMIN_LOGIN', 
     'ADMIN_PASSWORD_HASH',
-    'APP_SECRET_KEY'
+    'APP_SECRET_KEY',
+    'TYPE_SERVER'
 ]
 
 def is_first_run() -> bool:
@@ -65,18 +66,18 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
     logger.info(f"[DEBUG] Путь для .env.example: {env_example_path}")
 
     # Выводим информацию о создании файла
-    logger.info(f"\n{'='*50}")
-    logger.info("ВЫПОЛНЕНИЕ ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ")
-    logger.info(f"Создаем файл конфигурации: {env_path}")
-    logger.info(f"Используем шаблон: {env_example_path}")
-    logger.info(f"{'='*50}\n")
+    print(f"\n{'='*50}")
+    print("ВЫПОЛНЕНИЕ ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ")
+    print(f"Создаем файл конфигурации: {env_path}")
+    print(f"Используем шаблон: {env_example_path}")
+    print(f"{'='*50}\n")
 
     if not env_example_path.exists():
-        logger.info(f"Файл шаблона .env.example не найден в {base_dir}")
+        print(f"Файл шаблона .env.example не найден в {base_dir}")
         return False, None
 
     # Выводим информацию о создании файла
-    logger.info(f"\nСоздаем файл конфигурации: {env_path}")
+    print(f"\nСоздаем файл конфигурации: {env_path}")
 
     with open(env_example_path, 'r', encoding='utf-8') as f:
         example_content = f.read()
@@ -86,19 +87,23 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
     
     if interactive:
         languages = get_available_languages()
-        logger.info("\n=== Первоначальная настройка ===")
-        logger.info("Доступные языки:")
+        print("\n=== Первоначальная настройка ===")
+        print("Доступные языки:")
         
         for i, (code, data) in enumerate(languages.items(), 1):
-            logger.info(f"{i}. {data['this_language']} ({code})")
+            print(f"{i}. {data['this_language']} ({code})")
         
         while True:
-            choice = input(f"Выберите язык (1-{len(languages)}): ")
-            if choice.isdigit() and 1 <= int(choice) <= len(languages):
-                lang_code = list(languages.keys())[int(choice)-1]
-                credentials['language'] = languages[lang_code]['this_language']
-                break
-            logger.info(f"Пожалуйста, введите число от 1 до {len(languages)}")
+            try:
+                choice = input(f"Выберите язык (1-{len(languages)}): ")
+                if choice.isdigit() and 1 <= int(choice) <= len(languages):
+                    lang_code = list(languages.keys())[int(choice)-1]
+                    credentials['language'] = languages[lang_code]['this_language']
+                    break
+                print(f"Пожалуйста, введите число от 1 до {len(languages)}")
+            except (EOFError, KeyboardInterrupt):
+                print("\nПрервано пользователем")
+                return False, None
     else:
         lang_code = 'en'  # Язык по умолчанию для сервисного режима
         credentials['language'] = 'English'
@@ -114,11 +119,11 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
         f.write(generate_env_content(example_vars, example_lines))
 
     if interactive:
-        logger.info("\n=== Учетные данные ===")
-        logger.info(f"Язык интерфейса: {credentials['language']}")
-        logger.info(f"Логин: {credentials['login']}")
-        logger.info(f"Пароль: {credentials['password']} (сохраните этот пароль!)")
-        logger.info("="*30)
+        print("\n=== Учетные данные ===")
+        print(f"Язык интерфейса: {credentials['language']}")
+        print(f"Логин: {credentials['login']}")
+        print(f"Пароль: {credentials['password']} (сохраните этот пароль!)")
+        print("="*30)
 
     return True, {
         'login': credentials['login'],
@@ -126,6 +131,95 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
         'language': credentials['language'],
         'app_secret_key': credentials['app_secret_key']
     }
+
+def get_available_server_types():
+    """Получает доступные типы серверов из конфигурации"""
+    try:
+        from files.configs.server_types import SERVER_TYPES
+        return SERVER_TYPES
+    except ImportError:
+        logger.error("Не удалось загрузить конфигурацию типов серверов")
+        return {}
+
+def detect_server_type_from_folder():
+    """Пытается определить тип сервера по структуре папок"""
+    base_dir = get_global('script_path')
+    
+    # Проверяем наличие common папки для определения типа
+    common_dir = base_dir / 'common'
+    if common_dir.exists():
+        return 'common'
+    
+    # Проверяем другие признаки
+    docker_dir = base_dir / 'docker'
+    if docker_dir.exists():
+        docker_compose_file = docker_dir / 'docker-compose.yml'
+        if docker_compose_file.exists():
+            try:
+                with open(docker_compose_file, 'r') as f:
+                    content = f.read()
+                    if 'tei' in content.lower():
+                        return 'tei'
+                    elif 'tts' in content.lower():
+                        return 'TTS'
+                    elif 'stt' in content.lower():
+                        return 'STT'
+                    elif 'browser' in content.lower():
+                        return 'BROWSER'
+            except:
+                pass
+    
+    return 'client'  # тип по умолчанию
+
+def select_server_type(interactive: bool = True):
+    """Выбор типа сервера"""
+    server_types = get_available_server_types()
+    
+    if not server_types:
+        logger.warning("Не найдены конфигурации типов серверов")
+        return None
+    
+    if not interactive:
+        # В сервисном режиме пытаемся определить автоматически
+        detected_type = detect_server_type_from_folder()
+        if detected_type in server_types:
+            return detected_type
+        return list(server_types.keys())[0]  # первый доступный тип
+    
+    # Интерактивный выбор
+    print("\n=== Выбор типа сервера ===")
+    print("Доступные типы серверов:")
+    
+    type_list = list(server_types.keys())
+    for i, server_type in enumerate(type_list, 1):
+        server_info = server_types[server_type]
+        print(f"{i}. {server_info['name']} - {server_info['description']}")
+    
+    print(f"{len(type_list) + 1}. Автоопределение")
+    
+    while True:
+        try:
+            choice = input(f"Выберите тип сервера (1-{len(type_list) + 1}): ")
+            if choice.isdigit():
+                choice_num = int(choice)
+                if 1 <= choice_num <= len(type_list):
+                    selected_type = type_list[choice_num - 1]
+                    break
+                elif choice_num == len(type_list) + 1:
+                    # Автоопределение
+                    selected_type = detect_server_type_from_folder()
+                    if selected_type in server_types:
+                        print(f"Автоопределен тип: {server_types[selected_type]['name']}")
+                        break
+                    else:
+                        print("Не удалось определить тип сервера автоматически")
+                        continue
+            print(f"Пожалуйста, введите число от 1 до {len(type_list) + 1}")
+        except (EOFError, KeyboardInterrupt):
+            print("\nПрервано пользователем")
+            return None
+    
+    return selected_type
 
 def get_server_url() -> list:
     """Возвращает список всех URL сервера с учетом порта"""
