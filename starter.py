@@ -105,7 +105,7 @@ def start_interactive_mode():
     ssl_context = get_ssl_context()
     
     # ЧТЕНИЕ ПОРТА ИЗ .env С ЗНАЧЕНИЕМ ПО УМОЛЧАНИЮ
-    port = int(os.environ.get('PORT', 8000))
+    port = int(os.environ.get('PORT') or 8000)
     
     print(f"[INFO] Запуск приложения на порту: {port}")
     
