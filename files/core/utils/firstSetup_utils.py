@@ -7,7 +7,7 @@ from typing import Dict, Optional, Tuple
 from files.core.utils.env_utils import read_env_file, parse_env_content, generate_env_content
 from files.core.utils.i18n_utils import get_available_languages
 from files.core.utils.loader_utils import get
-from files.core.utils.globalVars_utils import get_global
+from files.core.utils.globalVars_utils import get_global, set_global
 from files.core.utils.log_utils import LogManager
 
 logger = LogManager.get_logger()
@@ -18,7 +18,8 @@ REQUIRED_ENV_VARS = [
     'ADMIN_LOGIN', 
     'ADMIN_PASSWORD_HASH',
     'APP_SECRET_KEY',
-    'TYPE_SERVER'
+    'TYPE_SERVER',
+    'PORT'
 ]
 
 def is_first_run() -> bool:
@@ -108,28 +109,54 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
         lang_code = 'en'  # Язык по умолчанию для сервисного режима
         credentials['language'] = 'English'
 
+    # ВЫБОР ТИПА СЕРВЕРА - ДОБАВЛЕНО
+    print("\n=== Выбор типа сервера ===")
+    server_type = select_server_type(interactive)
+    if not server_type:
+        print("Не удалось определить тип сервера")
+        return False, None
+
+    # Устанавливаем порт по умолчанию
+    default_port = 8000
+
+    # ОБНОВЛЯЕМ ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ - ДОБАВЛЯЕМ TYPE_SERVER И PORT
     example_vars.update({
         'LANGUAGE': lang_code,
         'ADMIN_LOGIN': credentials['login'],
         'ADMIN_PASSWORD_HASH': credentials['password_hash'],
         'APP_SECRET_KEY': credentials['app_secret_key'],
+        'TYPE_SERVER': server_type,
+        'PORT': str(default_port),
     })
+
+    # УСТАНАВЛИВАЕМ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ - ДОБАВЛЕНО
+    set_global('port', default_port)
+    set_global('server_type', server_type)
+    set_global('language', lang_code)
 
     with open(env_path, 'w', encoding='utf-8') as f:
         f.write(generate_env_content(example_vars, example_lines))
 
     if interactive:
-        print("\n=== Учетные данные ===")
+        server_types = get_available_server_types()
+        server_name = server_types.get(server_type, {}).get('name', server_type)
+
+        print("\n=== Настройка завершена ===")
         print(f"Язык интерфейса: {credentials['language']}")
+        print(f"Тип сервера: {server_name}")
+        print(f"Порт: {default_port}")
         print(f"Логин: {credentials['login']}")
         print(f"Пароль: {credentials['password']} (сохраните этот пароль!)")
-        print("="*30)
+        print("="*40)
+        print("="*40)
 
     return True, {
         'login': credentials['login'],
         'password': credentials['password'],
         'language': credentials['language'],
-        'app_secret_key': credentials['app_secret_key']
+        'app_secret_key': credentials['app_secret_key'],
+        'server_type': server_type,  # ДОБАВЛЕНО
+        'port': default_port         # ДОБАВЛЕНО
     }
 
 def get_available_server_types():
@@ -141,83 +168,40 @@ def get_available_server_types():
         logger.error("Не удалось загрузить конфигурацию типов серверов")
         return {}
 
-def detect_server_type_from_folder():
-    """Пытается определить тип сервера по структуре папок"""
-    base_dir = get_global('script_path')
-    
-    # Проверяем наличие common папки для определения типа
-    common_dir = base_dir / 'common'
-    if common_dir.exists():
-        return 'common'
-    
-    # Проверяем другие признаки
-    docker_dir = base_dir / 'docker'
-    if docker_dir.exists():
-        docker_compose_file = docker_dir / 'docker-compose.yml'
-        if docker_compose_file.exists():
-            try:
-                with open(docker_compose_file, 'r') as f:
-                    content = f.read()
-                    if 'tei' in content.lower():
-                        return 'tei'
-                    elif 'tts' in content.lower():
-                        return 'TTS'
-                    elif 'stt' in content.lower():
-                        return 'STT'
-                    elif 'browser' in content.lower():
-                        return 'BROWSER'
-            except:
-                pass
-    
-    return 'client'  # тип по умолчанию
-
 def select_server_type(interactive: bool = True):
     """Выбор типа сервера"""
     server_types = get_available_server_types()
     
     if not server_types:
         logger.warning("Не найдены конфигурации типов серверов")
-        return None
+        return 'client'  # тип по умолчанию
     
     if not interactive:
-        # В сервисном режиме пытаемся определить автоматически
-        detected_type = detect_server_type_from_folder()
-        if detected_type in server_types:
-            return detected_type
-        return list(server_types.keys())[0]  # первый доступный тип
+        # В сервисном режиме используем тип по умолчанию
+        return 'client'
     
     # Интерактивный выбор
-    print("\n=== Выбор типа сервера ===")
-    print("Доступные типы серверов:")
+    print("\nДоступные типы серверов:")
     
     type_list = list(server_types.keys())
     for i, server_type in enumerate(type_list, 1):
         server_info = server_types[server_type]
         print(f"{i}. {server_info['name']} - {server_info['description']}")
     
-    print(f"{len(type_list) + 1}. Автоопределение")
-    
     while True:
         try:
-            choice = input(f"Выберите тип сервера (1-{len(type_list) + 1}): ")
+            choice = input(f"Выберите тип сервера (1-{len(type_list)}): ")
             if choice.isdigit():
                 choice_num = int(choice)
                 if 1 <= choice_num <= len(type_list):
                     selected_type = type_list[choice_num - 1]
+                    server_info = server_types[selected_type]
+                    print(f"Выбран: {server_info['name']}")
                     break
-                elif choice_num == len(type_list) + 1:
-                    # Автоопределение
-                    selected_type = detect_server_type_from_folder()
-                    if selected_type in server_types:
-                        print(f"Автоопределен тип: {server_types[selected_type]['name']}")
-                        break
-                    else:
-                        print("Не удалось определить тип сервера автоматически")
-                        continue
-            print(f"Пожалуйста, введите число от 1 до {len(type_list) + 1}")
+            print(f"Пожалуйста, введите число от 1 до {len(type_list)}")
         except (EOFError, KeyboardInterrupt):
             print("\nПрервано пользователем")
-            return None
+            return 'client'  # тип по умолчанию при прерывании
     
     return selected_type
 

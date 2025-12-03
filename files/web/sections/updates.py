@@ -7,7 +7,7 @@ import threading
 
 from files.core.utils.i18n_utils import t
 from files.core.oss.default.updates import UpdatesModule
-from files.configs.configs import PROJECTS
+from files.core.oss.default.starterupdates import StarterUpdates
 from files.core.utils.log_utils import LogManager
 
 # Настройка логирования
@@ -21,95 +21,65 @@ section_order = 10
 
 def index(data, session):
     """Главная страница модуля обновлений"""
-    update_status = get_update_status_list()
+    # Статус обновления стартера
+    starter_status = StarterUpdates.get_update_status()
+    
+    # Доступные репозитории
+    repositories = StarterUpdates.get_available_repositories()
+    
+    # Настройки обновлений
+    update_settings = StarterUpdates.get_update_settings()
+    
     return render_template(
         'sections/updates/index.html',
         t=t,
-        update_status=update_status
+        starter_status=starter_status,
+        repositories=repositories,
+        update_settings=update_settings
     )
 
-def get_update_status_list():
-    """Получение статуса обновлений для всех проектов из логов"""
-    status = []
-    config = UpdatesModule.get_updates_config()
-    
-    for project_name in PROJECTS.keys():
-        last_update = UpdatesModule.get_last_update_time(project_name, config)
-        seconds_passed = UpdatesModule.seconds_since_last_update(project_name, config)
-        
-        # Определяем статус на основе времени последнего обновления
-        if last_update:
-            if seconds_passed < 3600:  # Менее часа назад
-                status_text = t('up_to_date')
-                status_color = 'success'
-            elif seconds_passed < 86400:  # Менее суток назад
-                status_text = t('recently_updated')
-                status_color = 'warning'
-            else:
-                status_text = t('update_available')
-                status_color = 'danger'
-        else:
-            status_text = t('never_updated')
-            status_color = 'secondary'
-        
-        status.append({
-            'name': project_name,
-            'last_update': last_update,
-            'status': status_text,
-            'status_color': status_color
-        })
-    
-    return status
-
-def check_all(data, session):
-    """Проверка всех обновлений"""
+def check_starter_updates(data, session):
+    """Проверяет обновления для стартера"""
     try:
-        # Запускаем обновление каждого проекта в отдельном потоке
-        for project_name in PROJECTS.keys():
-            thread = threading.Thread(
-                target=UpdatesModule.update_project,
-                args=(project_name, PROJECTS[project_name])
-            )
-            thread.daemon = True
-            thread.start()
-        
-        return jsonify({'success': True, 'message': t('updates_check_started')})
+        update_info = StarterUpdates.check_for_updates()
+        return jsonify({
+            'success': True,
+            'has_update': update_info['has_update'],
+            'update_available': update_info['update_available'],
+            'last_update': update_info['last_update']
+        })
     except Exception as e:
-        logger.error(f"Error in check_all: {str(e)}")
+        logger.error(f"Error in check_starter_updates: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
 
-def get_project_details(data, session):
-    """Получение детальной информации о проекте"""
-    project_name = data.get('project')
-    if project_name not in PROJECTS:
-        return jsonify({'success': False, 'message': t('project_not_found')})
-    
-    project_config = PROJECTS[project_name]
-    config = UpdatesModule.get_updates_config()
-    
-    # Получаем информацию о последнем обновлении из логов
-    last_update = UpdatesModule.get_last_update_time(project_name, config)
-    seconds_passed = UpdatesModule.seconds_since_last_update(project_name, config)
-    
-    # Форматируем информацию о проекте
-    project_info = {
-        'name': project_name,
-        'download_url': project_config['DOWNLOAD_URL'],
-        'base_path': project_config['BASE_PATH'],
-        'targets': project_config['TARGETS'],
-        'ignored': project_config.get('IGNORED', []),
-        'critical_files': project_config.get('CRITICAL_FILES', []),
-        'add_in_backups': project_config.get('ADD_IN_BACKUPS', []),
-        'functions_if_update': project_config.get('FUNCTIONS_IF_UPDATE', {}),
-        'restart_after_update': project_config.get('RESTART_AFTER_UPDATE', False),
-        'last_update': last_update.isoformat() if last_update else None,
-        'seconds_since_update': seconds_passed
-    }
-    
-    return jsonify({'success': True, 'project_info': project_info})
+def update_starter(data, session):
+    """Выполняет обновление стартера"""
+    try:
+        result = StarterUpdates.update_starter()
+        
+        return jsonify({
+            'success': result.get('status') != 'error',
+            'message': result.get('message', 'Update completed'),
+            'update_id': result.get('update_id')
+        })
+    except Exception as e:
+        logger.error(f"Error in update_starter: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+def get_starter_history(data, session):
+    """Получает историю обновлений стартера"""
+    try:
+        history = StarterUpdates.get_update_history()
+        return jsonify({
+            'success': True,
+            'history': history
+        })
+    except Exception as e:
+        logger.error(f"Error in get_starter_history: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
 
 def get_update_log(data, session):
-    """Получение лога обновления"""
+    """Получает лог обновления"""
     update_id = data.get('update_id')
     
     if not update_id:
@@ -117,24 +87,28 @@ def get_update_log(data, session):
     
     try:
         log_content = UpdatesModule.get_update_log(update_id)
-        return jsonify({'success': True, 'log': log_content})
+        return jsonify({
+            'success': True,
+            'log': log_content
+        })
     except Exception as e:
+        logger.error(f"Error in get_update_log: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
 
 def download_update_log(data, session):
-    """Скачивание лога обновления"""
+    """Скачивает лог обновления"""
     update_id = data.get('update_id')
     
     if not update_id:
-        return "Update ID required", 400
-    
-    config = UpdatesModule.get_updates_config()
-    log_file = Path(config['LOG_DIR']) / f"{update_id}.log"
-    
-    if not log_file.exists():
-        return "Log file not found", 404
+        return jsonify({'success': False, 'message': 'Update ID required'})
     
     try:
+        config = UpdatesModule.get_updates_config()
+        log_file = Path(config['LOG_DIR']) / f"{update_id}.log"
+        
+        if not log_file.exists():
+            return jsonify({'success': False, 'message': 'Log file not found'})
+        
         return send_file(
             log_file,
             as_attachment=True,
@@ -142,43 +116,228 @@ def download_update_log(data, session):
             mimetype='text/plain'
         )
     except Exception as e:
-        return str(e), 500
-
-def get_project_history(data, session):
-    """Получение истории обновлений проекта из логов"""
-    project_name = data.get('project')
-    
-    try:
-        history = UpdatesModule.get_update_history(project_name)
-        return jsonify({'success': True, 'history': history['history']})
-    except Exception as e:
+        logger.error(f"Error in download_update_log: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
 
-def update_project(data, session):
-    """Обновление конкретного проекта"""
-    project_name = data.get('project')
-    if project_name not in PROJECTS:
-        return jsonify({'success': False, 'message': t('project_not_found')})
-    
-    # Запуск обновления в отдельном потоке
-    def run_update():
-        try:
-            update_id = UpdatesModule.update_project(project_name, PROJECTS[project_name])
-            logger.info(f"Обновление {project_name} завершено, ID: {update_id}")
-        except Exception as e:
-            logger.error(f"Ошибка при обновлении {project_name}: {str(e)}")
+def get_repositories(data, session):
+    """Получение списка доступных репозиториев"""
+    try:
+        repositories = StarterUpdates.get_available_repositories()
+        current_repo = StarterUpdates.get_current_repository()
+        
+        return jsonify({
+            'success': True,
+            'repositories': repositories,
+            'current_repository': current_repo
+        })
+    except Exception as e:
+        logger.error(f"Error in get_repositories: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
 
-    thread = threading.Thread(target=run_update)
-    thread.daemon = True
-    thread.start()
+def switch_repository(data, session):
+    """Переключение репозитория"""
+    repo_name = data.get('repo_name')
     
-    # Создаем ID для отслеживания (будет использовано в логах)
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    update_id = f"{project_name}_{timestamp}"
+    if not repo_name:
+        return jsonify({'success': False, 'message': 'Repository name required'})
     
-    return jsonify({
-        'success': True, 
-        'message': t('update_started'),
-        'update_id': update_id,
-        'project': project_name
-    })
+    try:
+        success = StarterUpdates.switch_repository(repo_name)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Repository switched to {repo_name}'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': f'Repository {repo_name} not found'
+            })
+    except Exception as e:
+        logger.error(f"Error in switch_repository: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+def get_update_settings(data, session):
+    """Получение настроек обновлений"""
+    try:
+        settings = StarterUpdates.get_update_settings()
+        return jsonify({'success': True, 'settings': settings})
+    except Exception as e:
+        logger.error(f"Error in get_update_settings: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+def update_settings(data, session):
+    """Обновление настроек обновлений"""
+    try:
+        new_settings = {
+            'AUTO_UPDATE': data.get('auto_update') == 'true',
+            'NOTIFY_AVAILABLE': data.get('notify_available') == 'true',
+            'CHECK_INTERVAL_MINUTES': int(data.get('check_interval', 60))
+        }
+        
+        success = StarterUpdates.update_settings(new_settings)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Settings updated successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to update settings'
+            })
+    except Exception as e:
+        logger.error(f"Error in update_settings: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+def check_all(data, session):
+    """Проверяет обновления для всех компонентов"""
+    try:
+        # Проверяем обновления стартера
+        starter_info = StarterUpdates.check_for_updates()
+        
+        # Проверяем обновления серверов
+        from files.core.oss.default.serverupdates import ServerUpdates
+        server_status = ServerUpdates.get_all_server_updates_status()
+        
+        return jsonify({
+            'success': True,
+            'starter': {
+                'has_update': starter_info['has_update'],
+                'update_available': starter_info['update_available']
+            },
+            'servers': server_status
+        })
+    except Exception as e:
+        logger.error(f"Error in check_all: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+# =============================================================================
+# ФУНКЦИИ ДЛЯ СЕРВЕРНЫХ ОБНОВЛЕНИЙ
+# =============================================================================
+
+def get_server_updates_status(data, session):
+    """Получает статус обновлений для всех серверов"""
+    try:
+        from files.core.oss.default.serverupdates import ServerUpdates
+        server_status = ServerUpdates.get_all_server_updates_status()
+        
+        return jsonify({
+            'success': True,
+            'server_status': server_status
+        })
+    except Exception as e:
+        logger.error(f"Error in get_server_updates_status: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+def update_server(data, session):
+    """Выполняет обновление сервера"""
+    server_type = data.get('server_type')
+    
+    if not server_type:
+        return jsonify({'success': False, 'message': 'Server type required'})
+    
+    try:
+        from files.core.oss.default.serverupdates import ServerUpdates
+        result = ServerUpdates.update_server(server_type)
+        
+        return jsonify({
+            'success': result.get('status') != 'error',
+            'message': result.get('message', 'Update completed'),
+            'update_id': result.get('update_id')
+        })
+    except Exception as e:
+        logger.error(f"Error in update_server: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+def check_server_updates(data, session):
+    """Проверяет обновления для сервера"""
+    server_type = data.get('server_type')
+    
+    try:
+        from files.core.oss.default.serverupdates import ServerUpdates
+        result = ServerUpdates.check_server_updates(server_type)
+        
+        return jsonify({
+            'success': True,
+            'has_update': result.get('has_update', False),
+            'update_available': result.get('update_available', False),
+            'last_update': result.get('last_update')
+        })
+    except Exception as e:
+        logger.error(f"Error in check_server_updates: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+def get_server_update_history(data, session):
+    """Получает историю обновлений сервера"""
+    server_type = data.get('server_type')
+    
+    try:
+        from files.core.oss.default.serverupdates import ServerUpdates
+        history = ServerUpdates.get_server_update_history(server_type)
+        
+        return jsonify({
+            'success': True,
+            'history': history,
+            'server_type': server_type
+        })
+    except Exception as e:
+        logger.error(f"Error in get_server_update_history: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+def get_server_update_log(data, session):
+    """Получает лог обновления сервера"""
+    update_id = data.get('update_id')
+    
+    if not update_id:
+        return jsonify({'success': False, 'message': 'Update ID required'})
+    
+    try:
+        log_content = UpdatesModule.get_update_log(update_id)
+        return jsonify({
+            'success': True,
+            'log': log_content
+        })
+    except Exception as e:
+        logger.error(f"Error in get_server_update_log: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+def rollback_server_update(data, session):
+    """Откатывает обновление сервера"""
+    server_type = data.get('server_type')
+    update_id = data.get('update_id')
+    
+    if not server_type or not update_id:
+        return jsonify({'success': False, 'message': 'Server type and update ID required'})
+    
+    try:
+        result = UpdatesModule.rollback_update(f"server_{server_type}", update_id)
+        
+        return jsonify({
+            'success': result.get('status') == 'success',
+            'message': result.get('message', 'Rollback completed')
+        })
+    except Exception as e:
+        logger.error(f"Error in rollback_server_update: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+def get_available_rollbacks(data, session):
+    """Получает список доступных откатов для сервера"""
+    server_type = data.get('server_type')
+    
+    if not server_type:
+        return jsonify({'success': False, 'message': 'Server type required'})
+    
+    try:
+        rollbacks = UpdatesModule.get_available_rollbacks(f"server_{server_type}")
+        
+        return jsonify({
+            'success': True,
+            'rollbacks': rollbacks,
+            'server_type': server_type
+        })
+    except Exception as e:
+        logger.error(f"Error in get_available_rollbacks: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
