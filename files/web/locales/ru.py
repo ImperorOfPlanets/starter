@@ -11,7 +11,7 @@ translations = {
         "this_error_missing_section": "[{lang}] Отсутствует перевод: sections['{section}']['?']['{key}']",
         "this_error_invalid_section": "[{lang}] Некорректный модуль: sections['{section}'] не является словарём",
         "this_error_missing_main": "[{lang}] Отсутствует перевод: main['{section}']['{key}']",
-        "this_error_missing_section": "[{lang}] Отсутствует раздел: main['{section}'] не существует",
+        "this_error_missing_main_section": "[{lang}] Отсутствует раздел: main['{section}'] не существует",
         "this_error_invalid_key": "[{lang}] Некорректный ключ: '{key}' (ожидается section_key или section_file_key)"
     },
 
@@ -111,18 +111,18 @@ translations = {
                 "registry_url": "URL реестра",
                 "network_info": "Сетевая информация",
                 "no_ips_found": "IP-адреса не найдены",
-                'corporate': 'Corporate',
-                'other': 'Other',
-                'disabled': 'Disabled',
-                'active': 'Active',
-                'inactive': 'Inactive',
-                'ip_address': 'IP Address',
-                'netmask': 'Netmask',
-                'mac_address': 'MAC Address',
-                'status': 'Status',
-                'external': 'External',
-                'default_gateway': 'Default Gateway',
-                'no_network_interfaces': 'No network interfaces found',
+                'corporate': 'Корпоративный',
+                'other': 'Другой',
+                'disabled': 'Отключен',
+                'active': 'Активен',
+                'inactive': 'Неактивен',
+                'ip_address': 'IP-адрес',
+                'netmask': 'Маска подсети',
+                'mac_address': 'MAC-адрес',
+                'status': 'Статус',
+                'external': 'Внешний',
+                'default_gateway': 'Шлюз по умолчанию',
+                'no_network_interfaces': 'Сетевые интерфейсы не найдены',
                 "cpu": "Процессор",
                 "processor": "Модель",
                 "cores": "Ядра",
@@ -702,6 +702,7 @@ translations = {
                 # docker_files
                 "docker_files": "Папка Docker",
                 "docker_files_help": "Путь до папки с .env и docker-compose.example.yml",
+                "docker_env_file": "Файл переменных окружения Docker",
 
                 # project_type
                 "project_type": "Тип проекта",
@@ -715,6 +716,7 @@ translations = {
                 # validation blocks
                 "project_validation": "Проверка проекта",
                 "docker_validation": "Проверка Docker файлов",
+                "validate_docker": "Проверить Docker",
                 "run_validation_to_see_results": "Запустите проверку, чтобы увидеть результаты",
 
                 # statuses
@@ -735,7 +737,8 @@ translations = {
                 "save_env": "Сохранить .env",
                 "generate_docker_compose": "Сгенерировать docker-compose.yml",
                 "env_saved_successfully": "Файл .env успешно сохранён",
-                "env_save_failed": "Ошибка сохранения файла .env"
+                "env_save_failed": "Ошибка сохранения файла .env",
+                "docker_env_editor": "Редактор переменных окружения Docker"
             }
         }
     }
