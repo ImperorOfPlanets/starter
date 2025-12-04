@@ -16,16 +16,80 @@ class SettingsModule(BaseModule):
 
     @staticmethod
     def set_globals():
-        """Устанавливаем глобальные переменные из системных переменных или .env.example"""
-        # Получаем пути из системных переменных или используем значения по умолчанию
-        docker_path = os.environ.get("PATH_APP_DOCKER", "/app/docker")
-        docker_logs_path = os.environ.get("PATH_APP_DOCKER_LOGS", "/app/docker/logs")
+        """Устанавливаем глобальные переменные с приоритетом: .env > системные переменные > дефолтные"""
+        from pathlib import Path
         
-        set_global("docker_path", docker_path)
-        set_global("docker_logs_path", docker_logs_path)
+        # Получаем путь к скрипту
+        script_path = get_global('script_path')
+        if not script_path:
+            script_path = Path(__file__).parent.parent.parent.parent.parent.absolute()
+            set_global('script_path', script_path)
+        
+        script_path = Path(script_path)
+        
+        # 1. Сначала пытаемся прочитать .env файл в папке docker
+        possible_docker_paths = [
+            script_path.parent / "docker",  # C:\control\mentoria\docker
+            script_path / "docker"         # C:\control\mentoria\starter\docker
+        ]
+        
+        docker_path = None
+        docker_logs_path = None
+        
+        # Ищем .env файл и читаем пути из него
+        for test_path in possible_docker_paths:
+            env_file = test_path / ".env"
+            if env_file.exists():
+                try:
+                    with open(env_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            line = line.strip()
+                            if line.startswith('PATH_APP_DOCKER='):
+                                docker_path = line.split('=', 1)[1].strip()
+                                # Убираем кавычки если есть
+                                docker_path = docker_path.strip('"\'')
+                            elif line.startswith('PATH_APP_DOCKER_LOGS='):
+                                docker_logs_path = line.split('=', 1)[1].strip()
+                                docker_logs_path = docker_logs_path.strip('"\'')
+                except Exception as e:
+                    logger.error(f"Error reading .env file {env_file}: {e}")
+        
+        # 2. Если не нашли в .env, проверяем системные переменные
+        if not docker_path:
+            docker_path = os.environ.get("PATH_APP_DOCKER")
+        
+        if not docker_logs_path:
+            docker_logs_path = os.environ.get("PATH_APP_DOCKER_LOGS")
+        
+        # 3. Если все еще нет, используем дефолтный путь (предполагаемая структура)
+        if not docker_path:
+            docker_path = str(script_path.parent / "docker")
+        
+        if not docker_logs_path:
+            docker_logs_path = str(Path(docker_path) / "logs")
+        
+        # Преобразуем пути в абсолютные
+        docker_path = Path(docker_path)
+        if not docker_path.is_absolute():
+            docker_path = script_path.parent / docker_path
+        
+        docker_logs_path = Path(docker_logs_path)
+        if not docker_logs_path.is_absolute():
+            docker_logs_path = script_path.parent / docker_logs_path
+        
+        # Создаем директории если их нет
+        docker_path.mkdir(parents=True, exist_ok=True)
+        docker_logs_path.mkdir(parents=True, exist_ok=True)
+        
+        set_global("docker_path", str(docker_path))
+        set_global("docker_logs_path", str(docker_logs_path))
         
         logger.info(f"Set docker_path: {docker_path}")
         logger.info(f"Set docker_logs_path: {docker_logs_path}")
+        
+        # Также сохраняем в переменные окружения для дочерних процессов
+        os.environ["PATH_APP_DOCKER"] = str(docker_path)
+        os.environ["PATH_APP_DOCKER_LOGS"] = str(docker_logs_path)
 
     @staticmethod
     def get_docker_env_path() -> Path:

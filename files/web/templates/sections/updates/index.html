@@ -2,170 +2,21 @@
     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
         <h1 class="h2">{{ t('updates_status_title') }}</h1>
         <div class="btn-toolbar mb-2 mb-md-0">
-            <button id="check-updates-btn" class="btn btn-sm btn-outline-primary">
+            <button id="check-all-btn" class="btn btn-sm btn-outline-primary me-2">
                 <i class="bi bi-arrow-repeat"></i> {{ t('check_all_updates') }}
             </button>
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <i class="bi bi-info-circle me-2"></i> {{ t('update_status') }}
-                </div>
-                <div class="card-body">
-                    {% if update_status %}
-                    <div class="table-responsive">
-                        <table class="table table-striped table-sm">
-                            <thead>
-                                <tr>
-                                    <th>{{ t('project') }}</th>
-                                    <th>{{ t('last_update') }}</th>
-                                    <th>{{ t('status') }}</th>
-                                    <th>{{ t('actions') }}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for project in update_status %}
-                                <tr>
-                                    <td>
-                                        <a href="#" class="project-details-link" data-project="{{ project.name }}">
-                                            {{ project.name }}
-                                        </a>
-                                    </td>
-                                    <td>
-                                        {% if project.last_update %}
-                                            {{ project.last_update.strftime('%Y-%m-%d %H:%M:%S') }}
-                                        {% else %}
-                                            <span class="text-muted">{{ t('never_updated') }}</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-{{ project.status_color }}">
-                                            {{ project.status }}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <button class="btn btn-sm btn-outline-secondary update-project-btn" 
-                                                data-project="{{ project.name }}">
-                                            <i class="bi bi-cloud-arrow-down"></i> {{ t('update_now') }}
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-info view-history-btn" 
-                                                data-project="{{ project.name }}">
-                                            <i class="bi bi-clock-history"></i> {{ t('view_history') }}
-                                        </button>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% else %}
-                    <div class="text-center py-5">
-                        <i class="bi bi-cloud-arrow-down display-1 text-muted mb-4"></i>
-                        <h3>{{ t('no_projects_configured') }}</h3>
-                        <p class="text-muted">{{ t('configure_projects_in_config') }}</p>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Секция обновления стартера -->
+    {% include 'sections/updates/partials/starter_section.html' %}
+
+    <!-- Секция для серверных проектов -->
+    {% include 'sections/updates/partials/projects_section.html' %}
 </div>
 
-<!-- Модальное окно для деталей проекта -->
-<div class="modal fade" id="projectDetailsModal" tabindex="-1" aria-labelledby="projectDetailsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="projectDetailsModalLabel">Детали проекта</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div id="projectDetailsContent">
-                    <!-- Содержимое будет заполнено через JavaScript -->
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Модальное окно для истории обновлений -->
-<div class="modal fade" id="historyModal" tabindex="-1" aria-labelledby="historyModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="historyModalLabel">История обновлений</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="table-responsive">
-                    <table class="table table-striped table-sm">
-                        <thead>
-                            <tr>
-                                <th>Дата и время</th>
-                                <th>Статус</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody id="historyTableBody">
-                            <!-- История будет заполнена через JavaScript -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Модальное окно для просмотра логов -->
-<div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Лог обновления</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <pre class="bg-dark text-white p-3" style="max-height: 60vh; overflow-y: auto; font-family: monospace;"></pre>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-                <button type="button" class="btn btn-primary" id="downloadLogBtn">
-                    <i class="bi bi-download"></i> Скачать лог
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Модальное окно для отслеживания прогресса обновления -->
-<div class="modal fade" id="updateProgressModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Прогресс обновления: <span id="updateProjectName"></span></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <pre class="bg-dark text-white p-3" style="max-height: 60vh; overflow-y: auto; font-family: monospace;" id="updateLogContent"></pre>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-                <button type="button" class="btn btn-primary" id="downloadProgressLogBtn">
-                    <i class="bi bi-download"></i> Скачать лог
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- Модальные окна -->
+{% include 'sections/updates/partials/modals.html' %}
 
 <script>
 $(document).ready(function() {
@@ -173,14 +24,10 @@ $(document).ready(function() {
     
     // Функция для отправки POST запроса
     function postFormData(action, data) {
-        console.log('Sending request:', action, data);
-        
-        // Создаем форму для отправки данных
         var formData = new FormData();
         formData.append('section', 'updates');
         formData.append('action', action);
         
-        // Добавляем дополнительные данные
         for (var key in data) {
             if (data.hasOwnProperty(key)) {
                 formData.append(key, data[key]);
@@ -197,31 +44,279 @@ $(document).ready(function() {
         });
     }
 
-    // Кнопка проверки всех обновлений
-    $('#check-updates-btn').on('click', function() {
-        console.log('Check all updates button clicked');
-        var $btn = $(this);
+    // =========================================================================
+    // ФУНКЦИИ ДЛЯ СТАРТЕРА
+    // =========================================================================
+
+    // Обновление стартера
+    $('.update-starter-btn').on('click', function() {
+        const $btn = $(this);
         $btn.prop('disabled', true);
-        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("checking") }}');
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("updating") }}');
         
-        postFormData('check_all', {})
+        postFormData('update_starter', {})
             .done(function(data) {
-                console.log('Check all response:', data);
                 if (data.success) {
-                    alert('Проверка обновлений запущена для всех проектов');
+                    trackUpdateProgress(data.update_id, 'Starter');
                 } else {
                     alert('Error: ' + data.message);
                 }
                 $btn.prop('disabled', false);
-                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_all_updates") }}');
+                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
             })
             .fail(function(error) {
-                console.error('Check all error:', error);
                 alert('Network error: ' + error.statusText);
                 $btn.prop('disabled', false);
-                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_all_updates") }}');
+                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
             });
     });
+
+    // Проверка обновлений стартера
+    $('.check-starter-btn').on('click', function() {
+        const $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i>');
+        
+        postFormData('check_starter_updates', {})
+            .done(function(data) {
+                if (data.success) {
+                    let message = '{{ t("up_to_date") }}';
+                    if (data.update_available) {
+                        message = '{{ t("update_strongly_recommended") }}';
+                    } else if (data.has_update) {
+                        message = '{{ t("update_available") }}';
+                    }
+                    alert(message);
+                } else {
+                    alert('Error: ' + data.message);
+                }
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_updates") }}');
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_updates") }}');
+            });
+    });
+
+    // Просмотр истории стартера
+    $('.view-starter-history-btn').on('click', function() {
+        postFormData('get_starter_history', {})
+            .done(function(response) {
+                if (response.success) {
+                    showHistoryModal(response.history, '{{ t("starter_update_history") }}');
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+            });
+    });
+
+    // =========================================================================
+    // ФУНКЦИИ ДЛЯ СЕРВЕРОВ
+    // =========================================================================
+
+    // Загрузка статуса серверов
+    function loadServersStatus() {
+        console.log('Loading servers status...');
+        
+        postFormData('get_server_updates_status', {})
+            .done(function(response) {
+                if (response.success) {
+                    renderServersStatus(response.server_status);
+                } else {
+                    $('#servers-status-container').html(`
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            Error loading servers status: ${response.message}
+                        </div>
+                    `);
+                }
+            })
+            .fail(function(error) {
+                $('#servers-status-container').html(`
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Network error: ${error.statusText}
+                    </div>
+                `);
+            });
+    }
+
+    // Отрисовка статуса серверов
+    function renderServersStatus(servers) {
+        const container = $('#servers-status-container');
+        
+        if (servers.length === 0) {
+            container.html(`
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    {{ t('no_servers_configured') }}
+                </div>
+            `);
+            return;
+        }
+        
+        let html = '';
+        servers.forEach(server => {
+            html += `
+                <div class="server-card mb-3 p-3 border rounded" data-server-type="${server.type}">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <h6 class="mb-1">${server.name}</h6>
+                            <p class="text-muted small mb-2">${server.description}</p>
+                            <span class="badge bg-${server.color}">${server.status}</span>
+                            ${server.is_current ? '<span class="badge bg-primary ms-1">{{ t("current") }}</span>' : ''}
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-secondary check-server-btn" 
+                                        data-server-type="${server.type}">
+                                    <i class="bi bi-arrow-repeat"></i> {{ t("check") }}
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary update-server-btn" 
+                                        data-server-type="${server.type}">
+                                    <i class="bi bi-cloud-arrow-down"></i> {{ t("update") }}
+                                </button>
+                                <button class="btn btn-sm btn-outline-info view-server-history-btn" 
+                                        data-server-type="${server.type}">
+                                    <i class="bi bi-clock-history"></i> {{ t("history") }}
+                                </button>
+                            </div>
+                            ${server.last_update ? `
+                            <p class="small text-muted mt-2 mb-0">
+                                {{ t("last_update") }}: ${new Date(server.last_update).toLocaleString()}
+                            </p>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.html(html);
+    }
+
+    // Проверка обновлений сервера
+    $(document).on('click', '.check-server-btn', function() {
+        const serverType = $(this).data('server-type');
+        const $btn = $(this);
+        
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i>');
+        
+        postFormData('check_server_updates', { server_type: serverType })
+            .done(function(response) {
+                if (response.success) {
+                    let message = '{{ t("up_to_date") }}';
+                    if (response.update_available) {
+                        message = '{{ t("update_strongly_recommended") }}';
+                    } else if (response.has_update) {
+                        message = '{{ t("update_available") }}';
+                    }
+                    alert(message);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check") }}');
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check") }}');
+            });
+    });
+
+    // Обновление сервера
+    $(document).on('click', '.update-server-btn', function() {
+        const serverType = $(this).data('server-type');
+        const $btn = $(this);
+        
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("updating") }}');
+        
+        postFormData('update_server', { server_type: serverType })
+            .done(function(response) {
+                if (response.success) {
+                    trackUpdateProgress(response.update_id, serverType);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update") }}');
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update") }}');
+            });
+    });
+
+    // Просмотр истории сервера
+    $(document).on('click', '.view-server-history-btn', function() {
+        const serverType = $(this).data('server-type');
+        
+        postFormData('get_server_update_history', { server_type: serverType })
+            .done(function(response) {
+                if (response.success) {
+                    showHistoryModal(response.history, `{{ t("server_update_history") }}: ${serverType}`);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+            });
+    });
+
+    // =========================================================================
+    // ОБЩИЕ ФУНКЦИИ
+    // =========================================================================
+
+    // Функция для отображения модального окна истории
+    function showHistoryModal(history, title) {
+        const historyTable = $('#historyTableBody');
+        historyTable.empty();
+        
+        if (history.length === 0) {
+            historyTable.append(`
+                <tr>
+                    <td colspan="3" class="text-center text-muted py-4">
+                        <i class="bi bi-clock-history display-4 mb-3"></i>
+                        <p>{{ t("no_update_history") }}</p>
+                    </td>
+                </tr>
+            `);
+        } else {
+            history.forEach(item => {
+                const date = new Date(item.timestamp);
+                const row = `
+                    <tr>
+                        <td>${date.toLocaleString()}</td>
+                        <td>
+                            <span class="badge bg-${getStatusColor(item.status)}">
+                                ${item.status}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info view-log-btn" 
+                                    data-update-id="${item.update_id}">
+                                <i class="bi bi-file-text"></i> {{ t("view_log") }}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                historyTable.append(row);
+            });
+        }
+        
+        $('#historyModal .modal-title').text(title);
+        $('#historyModal').modal('show');
+    }
 
     // Функция для отслеживания прогресса обновления
     function trackUpdateProgress(updateId, projectName) {
@@ -268,76 +363,6 @@ $(document).ready(function() {
         });
     }
 
-    // Обработчик для кнопки обновления проекта
-    $(document).on('click', '.update-project-btn', function() {
-        const project = $(this).data('project');
-        const $btn = $(this);
-        $btn.prop('disabled', true);
-        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("updating") }}');
-        
-        postFormData('update_project', { project: project })
-            .done(function(data) {
-                if (data.success) {
-                    // Запускаем отслеживание прогресса
-                    trackUpdateProgress(data.update_id, data.project);
-                } else {
-                    alert('Error: ' + data.message);
-                }
-                $btn.prop('disabled', false);
-                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
-            })
-            .fail(function(error) {
-                alert('Network error: ' + error.statusText);
-                $btn.prop('disabled', false);
-                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
-            });
-    });
-
-    // Обработчик для кнопки просмотра истории
-    $(document).on('click', '.view-history-btn', function() {
-        const project = $(this).data('project');
-        
-        postFormData('get_project_history', { project: project })
-            .done(function(response) {
-                if (response.success) {
-                    const historyTable = $('#historyTableBody');
-                    historyTable.empty();
-                    
-                    response.history.forEach(item => {
-                        const date = new Date(item.timestamp);
-                        const row = `
-                            <tr>
-                                <td>${date.toLocaleString()}</td>
-                                <td>
-                                    <span class="badge bg-${getStatusColor(item.status)}">
-                                        ${item.status}
-                                    </span>
-                                </td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline-info view-log-btn" 
-                                            data-update-id="${item.update_id}">
-                                        <i class="bi bi-file-text"></i> Показать лог
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-primary download-log-btn" 
-                                            data-update-id="${item.update_id}">
-                                        <i class="bi bi-download"></i> Скачать
-                                    </button>
-                                </td>
-                            </tr>
-                        `;
-                        historyTable.append(row);
-                    });
-                    
-                    $('#historyModal').modal('show');
-                } else {
-                    alert('Ошибка загрузки истории: ' + response.message);
-                }
-            })
-            .fail(function(error) {
-                alert('Ошибка сети: ' + error.statusText);
-            });
-    });
-
     function getStatusColor(status) {
         switch(status) {
             case 'completed': return 'success';
@@ -358,44 +383,15 @@ $(document).ready(function() {
                     $('#logModal').modal('show');
                     $('#downloadLogBtn').data('update-id', updateId);
                 } else {
-                    alert('Ошибка загрузки лога: ' + response.message);
+                    alert('Error: ' + response.message);
                 }
             })
             .fail(function(error) {
-                alert('Ошибка сети: ' + error.statusText);
+                alert('Network error: ' + error.statusText);
             });
     });
 
     // Обработчик для кнопки скачивания лога
-    $(document).on('click', '.download-log-btn', function() {
-        const updateId = $(this).data('update-id');
-        
-        // Создаем временную форму для скачивания
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '/';
-        form.style.display = 'none';
-        
-        const params = {
-            'section': 'updates',
-            'action': 'download_update_log',
-            'update_id': updateId
-        };
-        
-        for (const [key, value] of Object.entries(params)) {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = key;
-            input.value = value;
-            form.appendChild(input);
-        }
-        
-        document.body.appendChild(form);
-        form.submit();
-        document.body.removeChild(form);
-    });
-
-    // Обработчик для кнопки скачивания лога в модальном окне
     $('#downloadLogBtn, #downloadProgressLogBtn').on('click', function() {
         const updateId = $(this).data('update-id');
         
@@ -424,97 +420,40 @@ $(document).ready(function() {
         document.body.removeChild(form);
     });
 
-    // Обработчик клика по названию проекта
-    $(document).on('click', '.project-details-link', function(e) {
-        e.preventDefault();
-        var projectName = $(this).data('project');
-        console.log('Project details link clicked:', projectName);
+    // Кнопка проверки всех обновлений
+    $('#check-all-btn').on('click', function() {
+        console.log('Check all updates button clicked');
+        const $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("checking") }}');
         
-        // Запрос детальной информации о проекте
-        postFormData('get_project_details', { project: projectName })
+        postFormData('check_all', {})
             .done(function(data) {
-                console.log('Project details response:', data);
                 if (data.success) {
-                    // Форматируем и отображаем информацию
-                    var info = data.project_info;
-                    var html = `
-                        <h6>Базовая директория</h6>
-                        <p><code>${info.base_path}</code></p>
-                        
-                        <h6>URL для загрузки</h6>
-                        <p><a href="${info.download_url}" target="_blank">${info.download_url}</a></p>
-                        
-                        <h6>Отслеживаемые файловые шаблоны</h6>
-                        <ul class="list-group mb-3">
-                            ${info.targets.map(target => `<li class="list-group-item"><code>${target}</code></li>`).join('')}
-                        </ul>
-                    `;
-                    
-                    if (info.ignored && info.ignored.length > 0) {
-                        html += `
-                            <h6>Игнорируемые файловые шаблоны</h6>
-                            <ul class="list-group mb-3">
-                                ${info.ignored.map(ignore => `<li class="list-group-item"><code>${ignore}</code></li>`).join('')}
-                            </ul>
-                        `;
-                    }
-                    
-                    if (info.critical_files && info.critical_files.length > 0) {
-                        html += `
-                            <h6>Критические файлы</h6>
-                            <ul class="list-group mb-3">
-                                ${info.critical_files.map(file => `<li class="list-group-item"><code>${file}</code></li>`).join('')}
-                            </ul>
-                        `;
-                    }
-                    
-                    if (info.add_in_backups && info.add_in_backups.length > 0) {
-                        html += `
-                            <h6>Дополнительные файлы для бэкапа</h6>
-                            <ul class="list-group mb-3">
-                                ${info.add_in_backups.map(file => `<li class="list-group-item"><code>${file}</code></li>`).join('')}
-                            </ul>
-                        `;
-                    }
-                    
-                    if (info.functions_if_update && Object.keys(info.functions_if_update).length > 0) {
-                        html += `
-                            <h6>Специальные функции обновления</h6>
-                            <ul class="list-group mb-3">
-                                ${Object.entries(info.functions_if_update).map(([file, func]) => 
-                                    `<li class="list-group-item"><code>${file}</code> → ${func}</li>`).join('')}
-                            </ul>
-                        `;
-                    }
-                    
-                    html += `
-                        <h6>Перезапуск после обновления</h6>
-                        <p>${info.restart_after_update ? 
-                            '<span class="badge bg-success">Да</span>' : 
-                            '<span class="badge bg-secondary">Нет</span>'}</p>
-                        
-                        <h6>Последнее обновление</h6>
-                        <p>${info.last_update ? 
-                            new Date(info.last_update).toLocaleString() : 
-                            '<span class="text-muted">Никогда</span>'}</p>
-                        
-                        <h6>Секунд с последнего обновления</h6>
-                        <p>${Math.round(info.seconds_since_update)}</p>
-                    `;
-                    
-                    $('#projectDetailsContent').html(html);
-                    
-                    // Показываем модальное окно
-                    $('#projectDetailsModal').modal('show');
+                    alert('{{ t("updates_check_started") }}');
+                    // Перезагружаем статус серверов
+                    loadServersStatus();
                 } else {
-                    alert('Ошибка: ' + data.message);
+                    alert('Error: ' + data.message);
                 }
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_all_updates") }}');
             })
             .fail(function(error) {
-                console.error('Project details error:', error);
-                alert('Ошибка сети: ' + error.statusText);
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_all_updates") }}');
             });
     });
+
+    // Кнопка обновления статуса серверов
+    $('#refresh-servers-btn').on('click', function() {
+        loadServersStatus();
+    });
+
+    // Загрузка статуса серверов при загрузке страницы
+    console.log('Loading servers status on page load...');
+    loadServersStatus();
     
     console.log('Update section initialized successfully');
 });
@@ -528,13 +467,4 @@ $(document).ready(function() {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
-.project-details-link {
-    text-decoration: none;
-    color: #0d6efd;
-    font-weight: 500;
-}
-.project-details-link:hover {
-    text-decoration: underline;
-}
 </style>
-</div>

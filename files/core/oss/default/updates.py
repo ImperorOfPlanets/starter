@@ -15,10 +15,10 @@ from files.core.utils.globalVars_utils import get_global
 
 class UpdatesModule:
     DEFAULT_CONFIG = {
-        'BASE_UPDATES_DIR': 'files/updates',
+        'BASE_UPDATES_DIR': 'files/update',
         'EXTRACTED_SUBDIR': 'extracted',
         'BACKUPS_SUBDIR': 'backups',
-        'LOG_DIR': 'files/logs/updates',
+        'LOG_DIR': 'files/logs/update',
         'CLEANUP_DAYS': 7,
         'MAX_RETRIES': 3,
         'TIMEOUT': 30,
@@ -29,8 +29,8 @@ class UpdatesModule:
     def get_updates_config() -> Dict[str, Any]:
         config = UpdatesModule.DEFAULT_CONFIG.copy()
         script_path = Path(get_global('script_path'))
-        base_updates_dir = script_path / 'files' / 'updates'
-        logs_dir = script_path / 'files' / 'logs' / 'updates'
+        base_updates_dir = script_path / 'files' / 'update'
+        logs_dir = script_path / 'files' / 'logs' / 'update'
         base_updates_dir.mkdir(parents=True, exist_ok=True)
         logs_dir.mkdir(parents=True, exist_ok=True)
         config['BASE_UPDATES_DIR'] = str(base_updates_dir)
@@ -618,3 +618,28 @@ class UpdatesModule:
                     history = UpdatesModule.get_update_history(f"server_{stype}")
                     all_history.extend(history.get('history', []))
             return {'history': all_history}
+
+    @staticmethod
+    def get_current_server_info(data, session):
+        """Получает информацию о текущем сервере"""
+        try:
+            from files.core.oss.default.serverupdates import ServerUpdates
+            from files.configs.server_types import SERVER_TYPES
+            
+            server_type = ServerUpdates.get_current_server_type()
+            if not server_type or server_type not in SERVER_TYPES:
+                return jsonify({
+                    'success': False,
+                    'message': 'Server type not configured'
+                })
+            
+            server_info = SERVER_TYPES[server_type]
+            
+            return jsonify({
+                'success': True,
+                'server_type': server_type,
+                'server_info': server_info
+            })
+        except Exception as e:
+            logger.error(f"Error in get_current_server_info: {str(e)}")
+            return jsonify({'success': False, 'message': str(e)})

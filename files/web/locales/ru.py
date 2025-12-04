@@ -519,35 +519,88 @@ translations = {
             }
         },
 
-        # ==================== UPDATES ====================
         'updates': {
             'basic': {
                 'title': 'Обновления',
-                'description': 'Информация об обновления'
+                'description': 'Управление обновлениями системы и серверов'
             },
-            'index':{
+            'index': {
+                # Основные заголовки
                 'updates_status_title': 'Статус обновлений',
-                'check_updates': 'Проверить обновления',
-                'update_status': 'Статус обновлений',
-                'project': 'Проект',
-                'last_update': 'Последнее обновление',
-                'status': 'Статус',
-                'actions': 'Действия',
+                'starter_updates': 'Обновления Стартера',
+                'server_updates': 'Обновления Серверов',
+                'check_all_updates': 'Проверить все обновления',
+                'updates_check_started': 'Проверка обновлений запущена',
+                
+                # Статусы обновлений
+                'up_to_date': 'Актуально',
+                'recently_updated': 'Недавно обновлено', 
+                'update_available': 'Доступно обновление',
+                'update_strongly_recommended': 'Срочное обновление рекомендуется',
                 'never_updated': 'Никогда не обновлялся',
+                'current_status': 'Текущий статус',
+                'last_update': 'Последнее обновление',
+                
+                # Действия
+                'check_updates': 'Проверить обновления',
                 'update_now': 'Обновить сейчас',
+                'check': 'Проверить',
+                'update': 'Обновить',
+                'history': 'История',
+                'settings': 'Настройки',
+                'refresh': 'Обновить',
                 'checking': 'Проверка...',
                 'updating': 'Обновление...',
-                'up_to_date': 'Актуально',
-                'recently_updated': 'Недавно обновлено',
-                'update_available': 'Доступно обновление',
-                'updates_check_success': 'Обновления проверены успешно',
-                'project_not_found': 'Проект не найден',
-                'update_started': 'Обновление запущено',
-                'view_history': 'История',
-                'no_projects_configured': 'Нет настроенных проектов',
-                'configure_projects_in_config': 'Настройте проекты в конфигурации',
-                'check_all_updates': 'Проверить все обновления',
-                'updates_check_started': 'Проверка обновлений запущена'
+                
+                # Стартер секция
+                'current_repository': 'Текущий репозиторий',
+                'available_repositories': 'Доступные репозитории',
+                'switch': 'Переключить',
+                'current': 'Текущий',
+                
+                # Настройки обновлений
+                'update_settings': 'Настройки обновлений',
+                'auto_update': 'Автообновление',
+                'notifications': 'Уведомления',
+                'check_interval': 'Интервал проверки',
+                'minutes': 'минут',
+                'hours': 'часов',
+                'enabled': 'Включено',
+                'disabled': 'Выключено',
+                
+                # Серверная секция
+                'server_updates_info': 'Информация об обновлениях серверов',
+                'server_updates_coming_soon': 'Обновления серверных проектов будут доступны в ближайших версиях',
+                'no_servers_configured': 'Нет настроенных серверов',
+                'loading_servers_status': 'Загрузка статуса серверов...',
+                'server_update_history': 'История обновлений сервера',
+                'starter_update_history': 'История обновлений стартера',
+                
+                # История и логи
+                'view_history': 'Просмотр истории',
+                'view_log': 'Просмотр лога',
+                'download_log': 'Скачать лог',
+                'no_update_history': 'История обновлений отсутствует',
+                
+                # Настройки
+                'enable_auto_update': 'Включить автоматическое обновление',
+                'auto_update_description': 'Автоматически проверять и устанавливать обновления',
+                'enable_notifications': 'Включить уведомления',
+                'notifications_description': 'Уведомлять о доступных обновлениях',
+                'check_interval_description': 'Интервал проверки новых обновлений',
+                'save_settings': 'Сохранить настройки',
+                'cancel': 'Отмена',
+                
+                # Модальные окна
+                'update_progress': 'Прогресс обновления',
+                'update_logs': 'Логи обновления',
+                'update_completed': 'Обновление завершено',
+                'update_failed': 'Обновление не удалось',
+                
+                # Статусы в истории
+                'completed': 'Завершено',
+                'error': 'Ошибка',
+                'in_progress': 'В процессе'
             }
         },
    

@@ -1,0 +1,54 @@
+<!-- Модальное окно настроек обновлений -->
+<div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ t('update_settings') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="settingsForm">
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="autoUpdate" name="auto_update">
+                            <label class="form-check-label" for="autoUpdate">
+                                {{ t('enable_auto_update') }}
+                            </label>
+                        </div>
+                        <div class="form-text">{{ t('auto_update_description') }}</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="notifyAvailable" name="notify_available">
+                            <label class="form-check-label" for="notifyAvailable">
+                                {{ t('enable_notifications') }}
+                            </label>
+                        </div>
+                        <div class="form-text">{{ t('notifications_description') }}</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="checkInterval" class="form-label">{{ t('check_interval') }}</label>
+                        <select class="form-select" id="checkInterval" name="check_interval">
+                            <option value="15">15 {{ t('minutes') }}</option>
+                            <option value="30">30 {{ t('minutes') }}</option>
+                            <option value="60" selected>60 {{ t('minutes') }}</option>
+                            <option value="120">2 {{ t('hours') }}</option>
+                            <option value="360">6 {{ t('hours') }}</option>
+                            <option value="720">12 {{ t('hours') }}</option>
+                            <option value="1440">24 {{ t('hours') }}</option>
+                        </select>
+                        <div class="form-text">{{ t('check_interval_description') }}</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('cancel') }}</button>
+                <button type="button" class="btn btn-primary" id="saveSettingsBtn">
+                    {{ t('save_settings') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
