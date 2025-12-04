@@ -5,8 +5,6 @@ import subprocess
 import sys
 import time
 
-import psutil
-
 from pathlib import Path
 
 from files.core.utils.venv_requirements_manager import VenvRequirementsManager
@@ -18,6 +16,8 @@ from files.core.utils.log_utils import LogManager
 SystemModule.collect_basic_system_info()
 
 def print_starter_processes():
+    import psutil
+
     """Выводит список всех процессов starter.py"""
     print("\n" + "="*70)
     print("🚀 ПРОЦЕССЫ STARTER.PY")
@@ -248,7 +248,7 @@ def main():
     print("\n" + "=" * 60)
     print("🚀 ЗАПУСК СТАРТЕРА СЕРВЕРА")
     print("=" * 60)
-    print_starter_processes()
+    # print_starter_processes()
 
     # 2. Анализируем аргументы (только для --new на этом этапе)
     # Парсим аргументы вручную для --new, чтобы обработать его до создания venv
