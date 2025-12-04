@@ -221,10 +221,18 @@ def start_interactive_mode():
     app = configure_app()
     ssl_context = get_ssl_context()
 
-    # ПОЛУЧАЕМ ПОРТ ИЗ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ
-    port = get_global('port', 8000)  # ← ИСПОЛЬЗУЕМ ГЛОБАЛЬНУЮ ПЕРЕМЕННУЮ
+    # ПОЛУЧАЕМ ПОРТ ИЗ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ - КЛЮЧЕВАЯ ИСПРАВЛЕНИЕ
+    port = get_global('port')  # ← Убираем значение по умолчанию
+    if port is None:
+        # Если порт не установлен в глобальных переменных, пробуем получить из env
+        port_from_env = os.environ.get('PORT', '8000')
+        try:
+            port = int(port_from_env)
+        except ValueError:
+            port = 8000
+        print(f"[WARNING] Порт не найден в глобальных переменных, используем из env: {port}")
 
-    print(f"[INFO] Запуск приложения на порту: {port} (из глобальных переменных)")
+    print(f"[INFO] Запуск приложения на порту: {port}")
 
     open_browser()
     app.run(
