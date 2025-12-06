@@ -248,6 +248,7 @@ def main():
     print("\n" + "=" * 60)
     print("🚀 ЗАПУСК СТАРТЕРА СЕРВЕРА")
     print("=" * 60)
+    print(f"Текущий PID: {os.getpid()}")
     # print_starter_processes()
 
     # 2. Анализируем аргументы (только для --new на этом этапе)
@@ -314,7 +315,12 @@ def main():
         import flask
         import dotenv
         import OpenSSL
+        import psutil
         print("✅ Критические зависимости загружены успешно")
+
+        print("\n📊 АНАЛИЗ ПРОЦЕССОВ")
+        print("="*60)
+        print_starter_processes()  # Используем оригинальную функцию с psutil
     except ImportError as e:
         print(f"\n❌ ОТСУТСТВУЮТ КРИТИЧЕСКИЕ ЗАВИСИМОСТИ: {e}")
         
@@ -435,7 +441,6 @@ def main():
     print("🚀 ЗАПУСК СЕРВЕРА...")
     logger.info("Starting interactive mode")
     start_interactive_mode()
-
 
 if __name__ == '__main__':
     main()
