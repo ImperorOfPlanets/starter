@@ -13,7 +13,6 @@ from typing import Optional, Tuple, List, Dict
 import tempfile
 import argparse
 import datetime
-import psutil
 
 from files.core.utils.globalVars_utils import get_global, set_global
 from files.core.utils.log_utils import LogManager
@@ -47,6 +46,7 @@ class VenvRequirementsManager:
         
         # Информация о процессе
         try:
+            import psutil
             process = psutil.Process()
             cmdline = ' '.join(process.cmdline())
             info['process_info'] = {
@@ -59,7 +59,7 @@ class VenvRequirementsManager:
                 'threads': process.num_threads(),
                 'status': process.status()
             }
-            
+
             # Определяем куда идет установка
             if 'pip install' in cmdline:
                 # Смотрим аргументы pip
@@ -71,9 +71,13 @@ class VenvRequirementsManager:
                 info['installation_target'] = 'VENV (через subprocess)'
             else:
                 info['installation_target'] = 'N/A (не установка)'
-                
+
+        except ImportError:
+            info['process_info'] = {}
+            info['installation_target'] = 'N/A (psutil не установлен)'
         except:
-            pass
+            info['process_info'] = {}
+            info['installation_target'] = 'N/A (ошибка получения информации)'
         
         # Информация о venv
         venv_dir = VenvRequirementsManager.get_venv_dir()
@@ -113,11 +117,20 @@ class VenvRequirementsManager:
         info['dependencies_status'] = VenvRequirementsManager.check_critical_dependencies()
         
         # Метрики производительности
+        try:
+            import psutil
+            memory_info = psutil.virtual_memory()
+            memory_total_gb = memory_info.total / 1024 / 1024 / 1024
+            memory_available_gb = memory_info.available / 1024 / 1024 / 1024
+        except ImportError:
+            memory_total_gb = 0
+            memory_available_gb = 0
+
         info['performance_metrics'] = {
             'load_avg': os.getloadavg() if hasattr(os, 'getloadavg') else [],
             'cpu_count': os.cpu_count(),
-            'memory_total_gb': psutil.virtual_memory().total / 1024 / 1024 / 1024 if hasattr(psutil, 'virtual_memory') else 0,
-            'memory_available_gb': psutil.virtual_memory().available / 1024 / 1024 / 1024 if hasattr(psutil, 'virtual_memory') else 0
+            'memory_total_gb': memory_total_gb,
+            'memory_available_gb': memory_available_gb
         }
         
         return info
