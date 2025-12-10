@@ -235,12 +235,26 @@ def start_interactive_mode():
     print(f"[INFO] Запуск приложения на порту: {port}")
 
     open_browser()
-    app.run(
-        host='0.0.0.0',
-        port=port,
-        ssl_context=ssl_context,
-        debug=True
-    )
+
+    # Получаем домен из переменных окружения
+    domain = os.environ.get('DOMAIN', '').strip()
+
+    if domain:
+        print(f"🌐 Запуск сервера на домене: {domain}")
+        app.run(
+            host=domain,
+            port=port,
+            ssl_context=ssl_context,
+            debug=True
+        )
+    else:
+        print("🌐 Запуск сервера на всех интерфейсах (0.0.0.0)")
+        app.run(
+            host='0.0.0.0',
+            port=port,
+            ssl_context=ssl_context,
+            debug=True
+        )
 
 def main():
     """Основная функция запуска"""
