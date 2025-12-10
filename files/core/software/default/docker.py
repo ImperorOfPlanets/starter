@@ -156,20 +156,6 @@ class DockerModule(BaseModule):
         return result
 
     # ---------------------------
-    # Работа с Dockerfile и compose (legacy helper)
-    # ---------------------------
-    @staticmethod
-    def check_dockerfiles(docker_dir: str) -> bool:
-        required = [
-            os.path.join("dockerfiles", "Dockerfile_other"),
-            os.path.join("dockerfiles", "Dockerfile_php")
-        ]
-        for path in required:
-            if not (Path(docker_dir) / path).exists():
-                return False
-        return True
-
-    # ---------------------------
     # Общие утилиты для подстановки переменных и блоков
     # ---------------------------
     @staticmethod
@@ -179,34 +165,6 @@ class DockerModule(BaseModule):
             var = match.group(1)
             return env_vars.get(var, match.group(0))
         return re.sub(r'\$\{(\w+)\}', repl, content)
-
-    @staticmethod
-    def process_service_blocks(content: str, enabled_services: List[str], env_vars: Dict[str, str], remove_markers: bool = False) -> str:
-        """
-        Обрабатывает блоки ### START SERVICE ### ... ### END SERVICE ###
-        - Подставляет переменные окружения
-        - Убирает полностью блоки для не включенных сервисов
-        - Если remove_markers=True, то активные блоки тоже очищают маркеры
-        """
-        pattern = re.compile(r'### START (\w+) ###(.*?)### END \1 ###', re.DOTALL | re.IGNORECASE)
-
-        def replace_block(match):
-            service_name = match.group(1).strip().upper()
-            block_content = match.group(2)
-            if service_name in [s.upper() for s in enabled_services]:
-                # логируем включённый сервис
-                logger.info(f"Including service block: {service_name}")
-                # подставляем переменные
-                block_content = DockerModule.replace_env_variables(block_content, env_vars)
-                if remove_markers:
-                    return block_content
-                else:
-                    return match.group(0).replace(match.group(2), block_content)
-            # логируем пропуск сервиса
-            logger.info(f"Skipping service block: {service_name}")
-            return ''
-
-        return pattern.sub(replace_block, content)
 
     @staticmethod
     def remove_build_sections(content: str) -> str:
@@ -856,19 +814,6 @@ class DockerModule(BaseModule):
                     with open(log_path, 'a', encoding='utf-8') as log_file:
                         log_file.write("[generate_compose] Removed build sections (pull_from_registry=True)\n")
 
-            enabled_services = [s.strip().upper() for s in env_vars.get("ENABLED_SERVICES", "").split(",") if s.strip()]
-            
-            if log_path:
-                with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write(f"[generate_compose] Enabled services: {enabled_services}\n")
-
-            # Обрабатываем блоки сервисов
-            content = DockerModule.process_service_blocks(content, enabled_services, env_vars, remove_markers=True)
-            
-            if log_path:
-                with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write("[generate_compose] After service blocks processing\n")
-
             # Заменяем переменные окружения вне блоков
             content = DockerModule.replace_env_variables(content, env_vars)
             
@@ -1066,3 +1011,429 @@ class DockerModule(BaseModule):
 
         content = DockerModule.generate_env_content(vars_dict, template_lines)
         env_path.write_text(content, encoding='utf-8')
+
+    # ----------------------------------------------------
+    # НОВЫЕ ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ ПОДСЕТЯМИ
+    # ----------------------------------------------------
+    
+    @staticmethod
+    def get_used_subnets() -> List[str]:
+        """
+        Возвращает список всех используемых подсетей в формате '172.20.0.0/16'
+        
+        Returns:
+            Список занятых подсетей, отсортированный по октету
+        """
+        used_subnets = set()
+        
+        try:
+            # 1. Проверяем существующие сети Docker
+            try:
+                result = subprocess.run(
+                    ['docker', 'network', 'ls', '-q'],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                
+                network_ids = result.stdout.strip().split()
+                for net_id in network_ids:
+                    try:
+                        inspect_result = subprocess.run(
+                            ['docker', 'network', 'inspect', net_id],
+                            capture_output=True,
+                            text=True,
+                            check=True
+                        )
+                        if inspect_result.returncode == 0:
+                            networks = json.loads(inspect_result.stdout)
+                            for network in networks:
+                                if 'IPAM' in network and network['IPAM']['Config']:
+                                    for config in network['IPAM']['Config']:
+                                        if 'Subnet' in config:
+                                            subnet = config['Subnet']
+                                            # Фильтруем только подсети 172.x.x.x/16
+                                            if subnet.startswith('172.') and subnet.endswith('/16'):
+                                                used_subnets.add(subnet)
+                    except Exception:
+                        continue
+            except Exception as e:
+                logger.warning(f"Error checking Docker networks: {e}")
+            
+            # 2. Проверяем запущенные контейнеры
+            try:
+                result = subprocess.run(
+                    ['docker', 'ps', '-a', '--format', '{{.ID}}'],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                
+                container_ids = result.stdout.strip().split()
+                for container_id in container_ids:
+                    try:
+                        inspect_result = subprocess.run(
+                            ['docker', 'inspect', container_id],
+                            capture_output=True,
+                            text=True,
+                            check=True
+                        )
+                        if inspect_result.returncode == 0:
+                            container = json.loads(inspect_result.stdout)[0]
+                            if 'NetworkSettings' in container and container['NetworkSettings']['Networks']:
+                                for network in container['NetworkSettings']['Networks'].values():
+                                    if 'IPAMConfig' in network and network['IPAMConfig']:
+                                        if 'IPv4Address' in network['IPAMConfig']:
+                                            ip = network['IPAMConfig']['IPv4Address']
+                                            # Извлекаем подсеть из IP (первые два октета)
+                                            parts = ip.split('.')
+                                            if len(parts) >= 2 and parts[0] == '172':
+                                                subnet = f"172.{parts[1]}.0.0/16"
+                                                used_subnets.add(subnet)
+                    except Exception:
+                        continue
+            except Exception as e:
+                logger.warning(f"Error checking containers: {e}")
+            
+            # 3. Ищем в docker-compose файлах в текущей директории и родительских
+            try:
+                current_dir = Path.cwd()
+                search_dirs = [
+                    current_dir,
+                    current_dir.parent,
+                    current_dir.parent.parent if current_dir.parent.parent else None
+                ]
+                
+                for search_dir in filter(None, search_dirs):
+                    for compose_file in search_dir.rglob("docker-compose*.yml"):
+                        try:
+                            content = compose_file.read_text(encoding='utf-8', errors='ignore')
+                            # Ищем подсети 172.XX.0.0/16
+                            pattern = r'172\.(\d{1,3})\.0\.0/16'
+                            matches = re.findall(pattern, content)
+                            for octet in matches:
+                                if octet.isdigit() and 0 <= int(octet) <= 255:
+                                    subnet = f"172.{octet}.0.0/16"
+                                    used_subnets.add(subnet)
+                        except Exception:
+                            continue
+            except Exception as e:
+                logger.warning(f"Error scanning compose files: {e}")
+            
+        except Exception as e:
+            logger.error(f"Unexpected error in get_used_subnets: {e}")
+        
+        # Сортируем по второму октету
+        sorted_subnets = sorted(
+            list(used_subnets),
+            key=lambda x: int(x.split('.')[1]) if len(x.split('.')) > 1 else 0
+        )
+        
+        logger.debug(f"Found {len(sorted_subnets)} used subnets: {sorted_subnets}")
+        return sorted_subnets
+    
+    @staticmethod
+    def get_used_subnets_simple() -> List[str]:
+        """
+        Упрощенная версия - возвращает только подсети вида 172.XX.0.0/16
+        
+        Returns:
+            Список занятых подсетей
+        """
+        try:
+            # Получаем все подсети
+            all_subnets = DockerModule.get_used_subnets()
+            
+            # Фильтруем только 172.XX.0.0/16
+            filtered = []
+            for subnet in all_subnets:
+                if (subnet.startswith('172.') and 
+                    subnet.endswith('/16') and 
+                    subnet.count('.') == 3):
+                    filtered.append(subnet)
+            
+            return filtered
+            
+        except Exception as e:
+            logger.error(f"Error in get_used_subnets_simple: {e}")
+            return []
+    
+    @staticmethod
+    def get_used_octets() -> List[int]:
+        """
+        Возвращает список занятых вторых октетов (20, 21, 22...)
+        
+        Returns:
+            Список занятых октетов, отсортированный по возрастанию
+        """
+        used_subnets = DockerModule.get_used_subnets_simple()
+        octets = []
+        
+        for subnet in used_subnets:
+            try:
+                # Извлекаем второй октет из 172.XX.0.0/16
+                parts = subnet.split('.')
+                if len(parts) >= 2:
+                    octet = int(parts[1])
+                    octets.append(octet)
+            except (ValueError, IndexError):
+                continue
+        
+        # Убираем дубликаты и сортируем
+        unique_octets = sorted(set(octets))
+        logger.debug(f"Found {len(unique_octets)} used octets: {unique_octets}")
+        return unique_octets
+    
+    @staticmethod
+    def is_subnet_available(subnet: str) -> Tuple[bool, str]:
+        """
+        Проверяет, свободна ли подсеть
+        
+        Args:
+            subnet: Подсеть в формате '172.20.0.0/16'
+            
+        Returns:
+            Tuple[bool, str]: (доступна ли, сообщение об ошибке)
+        """
+        try:
+            # Проверяем формат
+            if not subnet.startswith('172.') or not subnet.endswith('/16'):
+                return False, f"Неправильный формат подсети. Должно быть: 172.XX.0.0/16"
+            
+            # Извлекаем октет
+            parts = subnet.split('.')
+            if len(parts) != 4:
+                return False, f"Неправильный формат подсети: {subnet}"
+            
+            octet_str = parts[1].split('/')[0]
+            try:
+                octet = int(octet_str)
+                if octet < 20 or octet > 250:
+                    return False, f"Октет должен быть в диапазоне 20-250"
+            except ValueError:
+                return False, f"Октет должен быть числом: {octet_str}"
+            
+            # Проверяем занятость
+            used_octets = DockerModule.get_used_octets()
+            
+            if octet in used_octets:
+                return False, f"Подсеть {subnet} уже используется"
+            
+            return True, f"Подсеть {subnet} свободна"
+            
+        except Exception as e:
+            return False, f"Ошибка проверки подсети: {str(e)}"
+    
+    @staticmethod
+    def find_available_subnet(start_octet: int = 20, max_attempts: int = 100) -> str:
+        """
+        Находит свободную подсеть, начиная с start_octet
+        
+        Args:
+            start_octet: С какого октета начать поиск
+            max_attempts: Максимальное количество попыток
+            
+        Returns:
+            Свободная подсеть вида '172.XX.0.0/16'
+            
+        Raises:
+            ValueError: Если не найдено свободных подсетей
+        """
+        used_octets = DockerModule.get_used_octets()
+        
+        # Ищем свободный октет
+        for attempt in range(max_attempts):
+            test_octet = start_octet + attempt
+            if test_octet > 250:  # Ограничиваем диапазон
+                break
+            
+            if test_octet not in used_octets:
+                subnet = f"172.{test_octet}.0.0/16"
+                logger.info(f"Found available subnet: {subnet}")
+                return subnet
+        
+        # Если не нашли
+        used_str = ", ".join(str(o) for o in sorted(used_octets)[:10])
+        raise ValueError(
+            f"Не найдено свободных подсетей в диапазоне 172.{start_octet}.0.0 - 172.{start_octet + max_attempts}.0.0. "
+            f"Занятые октеты: {used_str}"
+        )
+    
+    @staticmethod
+    def increment_subnet(subnet: str) -> str:
+        """
+        Увеличивает подсеть на 1 октет
+        
+        Args:
+            subnet: Исходная подсеть вида '172.20.0.0/16'
+            
+        Returns:
+            Новая подсеть вида '172.21.0.0/16'
+            
+        Raises:
+            ValueError: Если неправильный формат или превышен лимит
+        """
+        try:
+            # Проверяем формат
+            if not subnet.startswith('172.') or not subnet.endswith('/16'):
+                raise ValueError(f"Неправильный формат подсети: {subnet}. Должно быть: 172.XX.0.0/16")
+            
+            # Извлекаем октет
+            parts = subnet.split('.')
+            if len(parts) != 4:
+                raise ValueError(f"Неправильный формат подсети: {subnet}")
+            
+            octet_part = parts[1]
+            try:
+                current_octet = int(octet_part)
+            except ValueError:
+                raise ValueError(f"Октет должен быть числом: {octet_part}")
+            
+            # Проверяем диапазон
+            if current_octet < 20 or current_octet >= 250:
+                raise ValueError(f"Октет должен быть в диапазоне 20-249. Текущий: {current_octet}")
+            
+            # Увеличиваем на 1
+            new_octet = current_octet + 1
+            new_subnet = f"172.{new_octet}.0.0/16"
+            
+            # Проверяем, свободна ли новая подсеть
+            used_octets = DockerModule.get_used_octets()
+            attempts = 0
+            
+            while new_octet in used_octets and attempts < 50:
+                new_octet += 1
+                attempts += 1
+                if new_octet > 250:
+                    raise ValueError(f"Достигнут предел октетов (250)")
+            
+            new_subnet = f"172.{new_octet}.0.0/16"
+            logger.info(f"Incremented subnet: {subnet} -> {new_subnet}")
+            return new_subnet
+            
+        except Exception as e:
+            raise ValueError(f"Ошибка при увеличении подсети: {str(e)}")
+    
+    @staticmethod
+    def get_available_subnet_or_increment(requested_subnet: str) -> Tuple[str, bool]:
+        """
+        Проверяет запрошенную подсеть, если занята - увеличивает
+        
+        Args:
+            requested_subnet: Запрашиваемая подсеть вида '172.20.0.0/16'
+            
+        Returns:
+            Tuple[подсеть, была_ли_увеличена]
+            
+        Пример:
+            get_available_subnet_or_increment('172.20.0.0/16')
+            → ('172.20.0.0/16', False)  # если свободна
+            → ('172.21.0.0/16', True)   # если занята, увеличили
+        """
+        try:
+            # Проверяем запрошенную подсеть
+            available, message = DockerModule.is_subnet_available(requested_subnet)
+            
+            if available:
+                logger.info(f"Requested subnet {requested_subnet} is available")
+                return requested_subnet, False
+            else:
+                logger.info(f"Requested subnet {requested_subnet} is occupied: {message}")
+                
+                # Пробуем увеличить
+                try:
+                    new_subnet = DockerModule.increment_subnet(requested_subnet)
+                    logger.info(f"Using incremented subnet: {new_subnet}")
+                    return new_subnet, True
+                except ValueError as e:
+                    logger.warning(f"Could not increment {requested_subnet}: {e}")
+                    
+                    # Ищем любую свободную
+                    try:
+                        start_octet = int(requested_subnet.split('.')[1])
+                        new_subnet = DockerModule.find_available_subnet(start_octet)
+                        logger.info(f"Found alternative subnet: {new_subnet}")
+                        return new_subnet, True
+                    except ValueError as e2:
+                        # Последняя попытка - найти любую свободную с начала
+                        try:
+                            new_subnet = DockerModule.find_available_subnet(20)
+                            logger.info(f"Found free subnet from beginning: {new_subnet}")
+                            return new_subnet, True
+                        except ValueError:
+                            raise ValueError(f"Не найдено свободных подсетей: {e2}")
+                        
+        except Exception as e:
+            raise ValueError(f"Ошибка при поиске подсети: {str(e)}")
+    
+    @staticmethod
+    def generate_subnet_for_project(project_name: str, 
+                                    preferred_octet: int = None) -> Dict[str, any]:
+        """
+        Генерирует подсеть для нового проекта
+        
+        Args:
+            project_name: Имя проекта
+            preferred_octet: Предпочитаемый октет (если None - автоматически)
+            
+        Returns:
+            Словарь с информацией о подсети
+        """
+        try:
+            # Определяем начальный октет
+            if preferred_octet is None:
+                # Можно использовать хэш имени проекта для более равномерного распределения
+                import hashlib
+                hash_int = int(hashlib.md5(project_name.encode()).hexdigest()[:8], 16)
+                start_octet = 20 + (hash_int % 50)  # 20-69
+            else:
+                start_octet = preferred_octet
+            
+            # Формируем запрашиваемую подсеть
+            requested_subnet = f"172.{start_octet}.0.0/16"
+            
+            # Получаем доступную подсеть
+            final_subnet, was_incremented = DockerModule.get_available_subnet_or_increment(
+                requested_subnet
+            )
+            
+            # Извлекаем октет
+            final_octet = int(final_subnet.split('.')[1])
+            
+            result = {
+                'project_name': project_name,
+                'requested_subnet': requested_subnet,
+                'final_subnet': final_subnet,
+                'octet': final_octet,
+                'was_incremented': was_incremented,
+                'network_prefix': f'172.{final_octet}',
+                'gateway': f'172.{final_octet}.0.1',
+                'container_prefix': f'172.{final_octet}.0',
+                'generated_at': datetime.now().isoformat(),
+            }
+            
+            logger.info(f"Generated subnet for '{project_name}': {final_subnet}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error generating subnet for {project_name}: {e}")
+            raise
+
+    # ----------------------------------------------------
+    # АЛИАСЫ ДЛЯ ПРОСТОГО ИСПОЛЬЗОВАНИЯ
+    # ----------------------------------------------------
+
+    @staticmethod
+    def get_used_networks() -> List[str]:
+        """Алиас для DockerModule.get_used_subnets_simple()"""
+        return DockerModule.get_used_subnets_simple()
+
+    @staticmethod
+    def check_and_increment_subnet(subnet: str) -> str:
+        """Алиас: проверяет подсеть, если занята - увеличивает"""
+        return DockerModule.get_available_subnet_or_increment(subnet)[0]
+
+    @staticmethod
+    def get_free_network() -> str:
+        """Алиас: находит любую свободную подсеть"""
+        return DockerModule.find_available_subnet()
