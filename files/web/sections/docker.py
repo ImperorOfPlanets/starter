@@ -3,7 +3,6 @@ import platform
 import socket
 import subprocess
 import json
-import psutil
 import threading
 import uuid
 

@@ -235,12 +235,26 @@ def start_interactive_mode():
     print(f"[INFO] Запуск приложения на порту: {port}")
 
     open_browser()
-    app.run(
-        host='0.0.0.0',
-        port=port,
-        ssl_context=ssl_context,
-        debug=True
-    )
+
+    # Получаем домен из переменных окружения
+    domain = os.environ.get('DOMAIN', '').strip()
+
+    if domain:
+        print(f"🌐 Запуск сервера на домене: {domain}")
+        app.run(
+            host=domain,
+            port=port,
+            ssl_context=ssl_context,
+            debug=True
+        )
+    else:
+        print("🌐 Запуск сервера на всех интерфейсах (0.0.0.0)")
+        app.run(
+            host='0.0.0.0',
+            port=port,
+            ssl_context=ssl_context,
+            debug=True
+        )
 
 def main():
     """Основная функция запуска"""
@@ -390,7 +404,7 @@ def main():
         print("💾 Сохраните эти данные!")
         print("="*50 + "\n")
 
-    # 11. Собираем информацию о фаерволе
+    # 11. Собираем информацию о фаерволе и открываем порт 8000
     print("\n🔒 ПРОВЕРКА ФАЕРВОЛА И ПОРТОВ")
     print("="*60)
     from files.core.oss.default.firewall import FirewallModule
@@ -421,6 +435,18 @@ def main():
             print(f"     - Порт {port_info['port']}/{port_info['protocol']} ({port_info.get('state', 'LISTEN')})")
     else:
         print("\n   Нет слушающих портов")
+
+    # Автоматическое открытие порта 8000
+    print("\n🔓 АВТОМАТИЧЕСКАЯ НАСТРОЙКА ПОРТА 8000")
+    print("="*60)
+    FirewallModule.ensure_port_open(8000, 'tcp')
+
+    # Настройка домена, если он указан
+    domain = os.environ.get('DOMAIN', '').strip()
+    if domain:
+        print("\n🌐 НАСТРОЙКА ДОМЕННОГО ДОСТУПА")
+        print("="*60)
+        FirewallModule.ensure_domain_access(domain, 8000, 'tcp')
 
     print("="*60)
 
