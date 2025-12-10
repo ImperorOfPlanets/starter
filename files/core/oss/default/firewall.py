@@ -318,25 +318,61 @@ class FirewallModule(BaseModule):
     def open_port(port: int, protocol: str = 'tcp') -> bool:
         """Открывает порт в фаерволе"""
         firewall_type = FirewallModule.detect_active_firewall()
-        
+
         handlers = {
             'ufw': ['ufw', 'allow', f'{port}/{protocol}'],
             'firewalld': [
                 'firewall-cmd', '--add-port', f'{port}/{protocol}', '--permanent'
             ],
             'iptables': [
-                'iptables', '-A', 'INPUT', '-p', protocol, 
+                'iptables', '-A', 'INPUT', '-p', protocol,
                 '--dport', str(port), '-j', 'ACCEPT'
             ],
             'nftables': [
-                'nft', 'add', 'rule', 'inet', 'filter', 'input', 
+                'nft', 'add', 'rule', 'inet', 'filter', 'input',
                 f'{protocol} dport {port} accept'
             ]
         }
-        
+
         if firewall_type in handlers:
-            return FirewallModule._run_privileged_command(handlers[firewall_type])
-        
+            success = FirewallModule._run_privileged_command(handlers[firewall_type])
+            if success and firewall_type == 'firewalld':
+                # Для firewalld нужно перезагрузить конфигурацию
+                FirewallModule._run_privileged_command(['firewall-cmd', '--reload'])
+            return success
+
+        return False
+
+    @staticmethod
+    def allow_domain(domain: str, port: int = 8000, protocol: str = 'tcp') -> bool:
+        """Разрешает доступ к домену в фаерволе"""
+        if not domain:
+            return False
+
+        firewall_type = FirewallModule.detect_active_firewall()
+
+        handlers = {
+            'ufw': ['ufw', 'allow', 'proto', protocol, 'to', 'any', 'port', str(port)],
+            'firewalld': [
+                'firewall-cmd', '--add-service', f'{port}/{protocol}', '--permanent'
+            ],
+            'iptables': [
+                'iptables', '-A', 'INPUT', '-p', protocol,
+                '--dport', str(port), '-j', 'ACCEPT'
+            ],
+            'nftables': [
+                'nft', 'add', 'rule', 'inet', 'filter', 'input',
+                f'{protocol} dport {port} accept'
+            ]
+        }
+
+        if firewall_type in handlers:
+            success = FirewallModule._run_privileged_command(handlers[firewall_type])
+            if success and firewall_type == 'firewalld':
+                # Для firewalld нужно перезагрузить конфигурацию
+                FirewallModule._run_privileged_command(['firewall-cmd', '--reload'])
+            return success
+
         return False
 
     @staticmethod
@@ -370,12 +406,12 @@ class FirewallModule(BaseModule):
         active_firewall = FirewallModule.detect_active_firewall()
         open_ports = FirewallModule.get_open_ports()
         listening_ports = FirewallModule._get_generic_ports()
-        
+
         # Проверяем, открыты ли все порты
         all_ports_open = False
         if open_ports and open_ports[0].get('port') == 'ALL':
             all_ports_open = True
-        
+
         return {
             'active_firewall': active_firewall,
             'open_ports': open_ports,
@@ -383,6 +419,66 @@ class FirewallModule(BaseModule):
             'is_available': active_firewall != "unknown",
             'all_ports_open': all_ports_open
         }
+
+    @staticmethod
+    def ensure_port_open(port: int, protocol: str = 'tcp', domain: str = None) -> bool:
+        """Проверяет и открывает порт в фаерволе при запуске"""
+        firewall_type = FirewallModule.detect_active_firewall()
+
+        if firewall_type == "unknown":
+            print(f"   ⚠️  Не обнаружен активный фаервол, порт {port} не может быть открыт автоматически")
+            return False
+
+        print(f"   🔍 Проверка порта {port} в фаерволе {firewall_type}...")
+
+        # Проверяем, открыт ли уже порт
+        open_ports = FirewallModule.get_open_ports()
+        port_open = False
+
+        for port_info in open_ports:
+            if (port_info.get('port') == str(port) or port_info.get('port') == 'ALL') and \
+               port_info.get('protocol') == protocol:
+                port_open = True
+                break
+
+        if port_open:
+            print(f"   ✅ Порт {port}/{protocol} уже открыт в фаерволе")
+            return True
+
+        # Если порт не открыт, пытаемся его открыть
+        print(f"   🔓 Открытие порта {port}/{protocol} в фаерволе...")
+        success = FirewallModule.open_port(port, protocol)
+
+        if success:
+            print(f"   ✅ Порт {port}/{protocol} успешно открыт в фаерволе")
+            return True
+        else:
+            print(f"   ❌ Не удалось открыть порт {port}/{protocol} в фаерволе")
+            return False
+
+    @staticmethod
+    def ensure_domain_access(domain: str, port: int = 8000, protocol: str = 'tcp') -> bool:
+        """Обеспечивает доступ к домену через фаервол"""
+        if not domain:
+            return False
+
+        firewall_type = FirewallModule.detect_active_firewall()
+
+        if firewall_type == "unknown":
+            print(f"   ⚠️  Не обнаружен активный фаервол, домен {domain} не может быть настроен автоматически")
+            return False
+
+        print(f"   🌐 Настройка доступа к домену {domain} в фаерволе {firewall_type}...")
+
+        # Разрешаем доступ к домену
+        success = FirewallModule.allow_domain(domain, port, protocol)
+
+        if success:
+            print(f"   ✅ Домен {domain} успешно настроен в фаерволе")
+            return True
+        else:
+            print(f"   ❌ Не удалось настроить домен {domain} в фаерволе")
+            return False
 
     @staticmethod
     def _get_iptables_policies() -> Dict[str, str]:

@@ -384,7 +384,7 @@ def main():
         print("💾 Сохраните эти данные!")
         print("="*50 + "\n")
 
-    # 11. Собираем информацию о фаерволе
+    # 11. Собираем информацию о фаерволе и открываем порт 8000
     print("\n🔒 ПРОВЕРКА ФАЕРВОЛА И ПОРТОВ")
     print("="*60)
     from files.core.oss.default.firewall import FirewallModule
@@ -415,6 +415,18 @@ def main():
             print(f"     - Порт {port_info['port']}/{port_info['protocol']} ({port_info.get('state', 'LISTEN')})")
     else:
         print("\n   Нет слушающих портов")
+
+    # Автоматическое открытие порта 8000
+    print("\n🔓 АВТОМАТИЧЕСКАЯ НАСТРОЙКА ПОРТА 8000")
+    print("="*60)
+    FirewallModule.ensure_port_open(8000, 'tcp')
+
+    # Настройка домена, если он указан
+    domain = os.environ.get('DOMAIN', '').strip()
+    if domain:
+        print("\n🌐 НАСТРОЙКА ДОМЕННОГО ДОСТУПА")
+        print("="*60)
+        FirewallModule.ensure_domain_access(domain, 8000, 'tcp')
 
     print("="*60)
 

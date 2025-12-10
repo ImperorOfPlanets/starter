@@ -119,7 +119,16 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
     # Устанавливаем порт по умолчанию
     default_port = 8000
 
-    # ОБНОВЛЯЕМ ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ - ДОБАВЛЯЕМ TYPE_SERVER И PORT
+    # Запрос доменного имени
+    domain_name = None
+    if interactive:
+        domain_choice = input("\n🌐 Хотите использовать доменное имя вместо IP-адреса? (y/N): ").strip().lower()
+        if domain_choice == 'y':
+            domain_name = input("🔤 Введите ваше доменное имя (например, example.com): ").strip()
+            if domain_name:
+                print(f"✅ Доменное имя {domain_name} будет использоваться для доступа к серверу")
+
+    # ОБНОВЛЯЕМ ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ - ДОБАВЛЯЕМ TYPE_SERVER, PORT и DOMAIN
     example_vars.update({
         'LANGUAGE': lang_code,
         'ADMIN_LOGIN': credentials['login'],
@@ -127,6 +136,7 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
         'APP_SECRET_KEY': credentials['app_secret_key'],
         'TYPE_SERVER': server_type,
         'PORT': str(default_port),
+        'DOMAIN': domain_name if domain_name else '',
     })
 
     # УСТАНАВЛИВАЕМ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ - ДОБАВЛЕНО
@@ -156,7 +166,8 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
         'language': credentials['language'],
         'app_secret_key': credentials['app_secret_key'],
         'server_type': server_type,  # ДОБАВЛЕНО
-        'port': default_port         # ДОБАВЛЕНО
+        'port': default_port,         # ДОБАВЛЕНО
+        'domain': domain_name if domain_name else ''  # ДОБАВЛЕНО
     }
 
 def get_available_server_types():
@@ -206,13 +217,22 @@ def select_server_type(interactive: bool = True):
     return selected_type
 
 def get_server_url() -> list:
-    """Возвращает список всех URL сервера с учетом порта"""
+    """Возвращает список всех URL сервера с учетом порта и домена"""
     docker_port = os.environ.get('dockerPort', '8000')
     ips = get('network','get_all_local_ips')
+    domain = os.environ.get('DOMAIN', '').strip()
+
     # Выводим в консоль
     logger.info("Список локальных IP из кеша: %s", ips)
+    logger.info("Доменное имя: %s", domain)
 
-    return [f"https://{ip}:{docker_port}" for ip in ips]
+    urls = []
+    if domain:
+        urls.append(f"https://{domain}:{docker_port}")
+    if ips:
+        urls.extend([f"https://{ip}:{docker_port}" for ip in ips])
+
+    return urls
 
 def open_browser() -> None:
     """
