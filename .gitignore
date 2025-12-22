@@ -12,7 +12,7 @@ service.log
 /differences/*
 /docker/*
 /logs/*
-
+/.vscode
 # Игнорируем все директории __pycache__, независимо от местоположения
 **/__pycache__/
 
