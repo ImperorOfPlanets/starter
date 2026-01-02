@@ -1016,6 +1016,32 @@ class DockerModule(BaseModule):
         project_container_name = f"php-{project_name}"
         return any(c['name'] == project_container_name and 'running' in c['status'].lower() for c in containers)
 
+    # ---------------------------
+    # Генерация docker-compose (низкоуровневая и высокоуровневая)
+    # ---------------------------
+    @staticmethod
+    def generate_docker_compose(env_vars: Dict[str, str] = None, log_path: Optional[Path] = None) -> bool:
+        try:
+            docker_path = Path(get_global("docker_path"))
+            docker_path.mkdir(parents=True, exist_ok=True)
+
+            if env_vars is None:
+                env_vars = DockerModule.ensure_docker_env(docker_path, log_path)
+
+            # Получаем PULL_FROM_REGISTRY из env_vars
+            pull_from_registry = env_vars.get("PULL_FROM_REGISTRY", "false").lower() == "true"
+
+            if not DockerModule.generate_compose(docker_path, env_vars, pull_from_registry=pull_from_registry, log_path=log_path):
+                return False
+
+            return True
+        except Exception as e:
+            if log_path:
+                with open(log_path, 'a', encoding='utf-8') as log_file:
+                    log_file.write(f"[generate_docker_compose] Error: {str(e)}\n")
+            logger.error(f"Error generating docker-compose: {e}")
+            return False
+
     @staticmethod
     def generate_compose(docker_dir: Union[str, Path], env_vars: Dict[str, str], pull_from_registry: bool = False, log_path: Optional[Path] = None) -> bool:
         """
@@ -2125,40 +2151,7 @@ class DockerModule(BaseModule):
             logger.info(f"[run_compose] Logging output to {log_file_path}")
             
             logger.info(f"[run_compose] ===== START DOCKER COMPOSE =====")
-
-            # ==================== ПОЛУЧЕНИЕ ПУТЕЙ К ПРОЕКТУ И КОДУ ====================
-            logger.info("[run_compose] Получение путей к проекту и коду...")
-            
-            # Определяем корень проекта (папка с docker, code, starter)
-            # script_path может быть /путь/к/starter или /путь/к/starter/files/core/software/default
-            if script_path.name == "starter":
-                project_root = script_path.parent  # поднимаемся на уровень выше
-            elif "starter" in script_path.parts:
-                # Находим папку starter в пути
-                starter_index = list(script_path.parts).index("starter")
-                project_root = Path(*script_path.parts[:starter_index])
-            else:
-                # По умолчанию считаем, что docker_path находится в корне проекта
-                project_root = docker_path.parent
-            
-            code_dir = project_root / "code"
-            
-            logger.info(f"[run_compose] Script path: {script_path}")
-            logger.info(f"[run_compose] Docker path: {docker_path}")
-            logger.info(f"[run_compose] Project root: {project_root}")
-            logger.info(f"[run_compose] Code directory: {code_dir}")
-            logger.info(f"[run_compose] Code exists: {code_dir.exists()}")
-            
-            if code_dir.exists():
-                logger.info(f"[run_compose] Code directory contents preview: {list(code_dir.glob('*'))[:5]}...")
-                # Проверяем наличие artisan
-                artisan_exists = (code_dir / "artisan").exists()
-                logger.info(f"[run_compose] Artisan exists in code: {artisan_exists}")
-            else:
-                logger.warning("[run_compose] Code directory NOT found!")
-            # ===========================================================================
-
-            # ==================== АВТОГЕНЕРАЦИЯ SSL СЕРТИФИКАТОВ (ЧИСТЫЙ PYTHON) ====================
+                        # ==================== АВТОГЕНЕРАЦИЯ SSL СЕРТИФИКАТОВ (ЧИСТЫЙ PYTHON) ====================
             logger.info("[run_compose] Проверка и автогенерация SSL сертификатов (на Python)...")
             certs_dir = docker_path / "configs" / "nginx" / "certs"
             fullchain_path = certs_dir / "fullchain.pem"
@@ -2256,15 +2249,6 @@ class DockerModule(BaseModule):
             # Получаем env_vars из текущего .env файла
             logger.info("[run_compose] Loading environment variables from .env...")
             env_vars = DockerModule.ensure_docker_env(docker_path, log_file_path)
-            
-            # ==================== ДОБАВЛЯЕМ ПУТИ К КОДУ В ПЕРЕМЕННЫЕ ====================
-            # Добавляем пути к code в env_vars для передачи в Dockerfile
-            env_vars["PROJECT_ROOT"] = str(project_root.absolute())
-            env_vars["CODE_DIR_ABSOLUTE"] = str(code_dir.absolute()) if code_dir.exists() else ""
-            
-            logger.info(f"[run_compose] Added to env_vars: PROJECT_ROOT={env_vars['PROJECT_ROOT']}")
-            logger.info(f"[run_compose] Added to env_vars: CODE_DIR_ABSOLUTE={env_vars['CODE_DIR_ABSOLUTE']}")
-            # ===========================================================================
             
             # Генерация compose файла
             logger.info("[run_compose] Generating docker-compose.yml from .env...")
@@ -2754,36 +2738,6 @@ class DockerModule(BaseModule):
 
             # Получаем PULL_FROM_REGISTRY из env_vars
             pull_from_registry = env_vars.get("PULL_FROM_REGISTRY", "false").lower() == "true"
-
-            # ==================== ПРОВЕРКА ПЕРЕМЕННЫХ CODE ====================
-            # Если пути не были переданы из run_compose, вычисляем их здесь
-            if "PROJECT_ROOT" not in env_vars or "CODE_DIR_ABSOLUTE" not in env_vars:
-                script_path = Path(get_global("script_path", "."))
-                if script_path.name == "starter":
-                    project_root = script_path.parent
-                elif "starter" in script_path.parts:
-                    starter_index = list(script_path.parts).index("starter")
-                    project_root = Path(*script_path.parts[:starter_index])
-                else:
-                    project_root = docker_path.parent
-                
-                code_dir = project_root / "code"
-                
-                env_vars["PROJECT_ROOT"] = str(project_root.absolute())
-                env_vars["CODE_DIR_ABSOLUTE"] = str(code_dir.absolute()) if code_dir.exists() else ""
-                
-                if log_path:
-                    with open(log_path, 'a', encoding='utf-8') as log_file:
-                        log_file.write(f"[generate_docker_compose] Calculated paths:\n")
-                        log_file.write(f"  PROJECT_ROOT: {env_vars['PROJECT_ROOT']}\n")
-                        log_file.write(f"  CODE_DIR_ABSOLUTE: {env_vars['CODE_DIR_ABSOLUTE']}\n")
-            else:
-                if log_path:
-                    with open(log_path, 'a', encoding='utf-8') as log_file:
-                        log_file.write(f"[generate_docker_compose] Using provided paths:\n")
-                        log_file.write(f"  PROJECT_ROOT: {env_vars['PROJECT_ROOT']}\n")
-                        log_file.write(f"  CODE_DIR_ABSOLUTE: {env_vars['CODE_DIR_ABSOLUTE']}\n")
-            # ===================================================================
 
             if not DockerModule.generate_compose(docker_path, env_vars, pull_from_registry=pull_from_registry, log_path=log_path):
                 return False
