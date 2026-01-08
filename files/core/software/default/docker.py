@@ -689,7 +689,8 @@ class DockerModule(BaseModule):
             # 3. Запуск docker-compose с билдом
             # -------------------------------
             logger.info("[run_compose] Building Docker images...")
-            build_cmd = compose_cmd + ["-f", str(compose_file), "build", "--no-cache", "--pull"]
+            #build_cmd = compose_cmd + ["-f", str(compose_file), "build", "--no-cache", "--pull"]
+            build_cmd = compose_cmd + ["-f", str(compose_file), "build"]
             logger.info(f"[run_compose] Build command: {' '.join(build_cmd)}")
             
             try:
