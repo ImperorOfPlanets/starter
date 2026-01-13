@@ -289,7 +289,6 @@ class VenvRequirementsManager:
         """Получает путь к папке venv с учетом порта"""
         script_path = get_global('script_path')
         port = VenvRequirementsManager.get_port()
-        
         if port == VenvRequirementsManager.DEFAULT_PORT:
             return script_path / "venv"
         else:
