@@ -12,12 +12,7 @@ from files.core.utils.globalVars_utils import get_global, set_global
 from files.core.oss.default.system import SystemModule
 from files.core.utils.log_utils import LogManager
 
-# Устанавливает глобальные переменные
-SystemModule.collect_basic_system_info()
-
 def print_starter_processes():
-    import psutil
-
     """Выводит список всех процессов starter.py"""
     print("\n" + "="*70)
     print("🚀 ПРОЦЕССЫ STARTER.PY")
@@ -28,6 +23,7 @@ def print_starter_processes():
     script_path = Path(sys.argv[0]).resolve()
 
     try:
+        import psutil
         starter_processes = []
         
         # Ищем все процессы starter.py
@@ -108,6 +104,8 @@ def print_starter_processes():
                 if not proc['is_current']:
                     print(f"     kill {proc['pid']}")
             
+    except ImportError:
+        print("   ⚠️  Модуль psutil не установлен, невозможно показать процессы")
     except Exception as e:
         print(f"   ❌ Ошибка при получении процессов: {e}")
 
@@ -143,9 +141,9 @@ def print_system_module_variables():
         # Дополнительно выводим содержимое глобальных переменных
         print("\n📋 Глобальные переменные (globalVars):")
         global_vars = [
-            'os_name', 'os_version', 'os_arch', 'hostname', 
-            'username', 'script_path', 'current_path', 'python_version',
-            'is_admin', 'is_service', 'hardware_info'
+            'os', 'os_version', 'os_family', 'hostname', 
+            'username', 'script_path', 'python_info',
+            'is_service', 'running_in_docker'
         ]
         
         for var_name in global_vars:
@@ -171,6 +169,9 @@ def print_system_module_variables():
 def reset_configuration():
     """Удаляет файл конфигурации и сбрасывает настройки"""
     base_dir = get_global('script_path')
+    if base_dir is None:
+        base_dir = Path(__file__).parent.absolute()
+    
     env_file = base_dir / '.env'
 
     if env_file.exists():
@@ -197,7 +198,7 @@ def parse_args():
 
 def start_service_mode():
     """Запускает сервисный режим"""
-    logger = get_global('logger')
+    logger = LogManager.get_logger('main')
     logger.info("Запуск в сервисном режиме...")
     sys.exit(0)
 
@@ -208,9 +209,14 @@ def start_interactive_mode():
     from files.core.utils.firstSetup_utils import open_browser
     from dotenv import load_dotenv
 
-    env_file = Path(get_global('script_path')) / '.env'
-    load_dotenv(env_file)
-    print(f"[DEBUG] Переменные окружения загружены из {env_file}")
+    base_dir = get_global('script_path')
+    env_file = base_dir / '.env'
+    
+    if env_file.exists():
+        load_dotenv(env_file)
+        print(f"[DEBUG] Переменные окружения загружены из {env_file}")
+    else:
+        print(f"[WARNING] Файл .env не найден: {env_file}")
 
     # Для отладки: проверка переменных окружения
     env_vars = ["APP_SECRET_KEY", "ADMIN_LOGIN", "ADMIN_PASSWORD_HASH", "PORT", "TYPE_SERVER"]
@@ -221,8 +227,8 @@ def start_interactive_mode():
     app = configure_app()
     ssl_context = get_ssl_context()
 
-    # ПОЛУЧАЕМ ПОРТ ИЗ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ - КЛЮЧЕВАЯ ИСПРАВЛЕНИЕ
-    port = get_global('port')  # ← Убираем значение по умолчанию
+    # ПОЛУЧАЕМ ПОРТ ИЗ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ
+    port = get_global('port')
     if port is None:
         # Если порт не установлен в глобальных переменных, пробуем получить из env
         port_from_env = os.environ.get('PORT', '8000')
@@ -258,215 +264,256 @@ def start_interactive_mode():
 
 def main():
     """Основная функция запуска"""
-    # 1. СРАЗУ выводим список процессов starter.py
+    # ========== ПЕРВЫЙ ЭТАП: БАЗОВАЯ ИНИЦИАЛИЗАЦИЯ ==========
     print("\n" + "=" * 60)
     print("🚀 ЗАПУСК СТАРТЕРА СЕРВЕРА")
     print("=" * 60)
     print(f"Текущий PID: {os.getpid()}")
-    # print_starter_processes()
-
-    # 2. Анализируем аргументы (только для --new на этом этапе)
-    # Парсим аргументы вручную для --new, чтобы обработать его до создания venv
+    
+    # 1. Устанавливаем script_path ВРУЧНУЮ как самый первый шаг
+    script_path = Path(__file__).parent.absolute()
+    set_global('script_path', script_path)
+    print(f"✅ script_path установлен: {script_path}")
+    
+    # 2. Парсим аргументы (только для --new на этом этапе)
     if '--new' in sys.argv:
         print("🔄 Сброс конфигурации (аргумент --new обнаружен)...")
         if reset_configuration():
             print("🔄 Перезапуск для новой настройки...")
-            # Перезапускаем скрипт без аргумента --new
-            import subprocess
             new_args = [sys.executable] + [arg for arg in sys.argv if arg != '--new']
             subprocess.run(new_args)
             sys.exit(0)
         else:
             print("❌ Не удалось сбросить конфигурацию")
             sys.exit(1)
-
-    # 3. Показываем глобальные переменные SystemModule
+    
+    # ========== ВТОРОЙ ЭТАП: ИНИЦИАЛИЗАЦИЯ SYSTEM MODULE ==========
+    print("\n🔧 ИНИЦИАЛИЗАЦИЯ SYSTEM MODULE")
+    print("="*60)
+    
+    try:
+        # Собираем системную информацию
+        sys_info = SystemModule.collect_basic_system_info()
+        print(f"✅ Системная информация собрана")
+        
+        # Для отладки: покажем ключевые переменные
+        print("\n📋 КЛЮЧЕВЫЕ СИСТЕМНЫЕ ПЕРЕМЕННЫЕ:")
+        print(f"  os: {get_global('os')}")
+        print(f"  os_version: {get_global('os_version')}")
+        print(f"  os_family: {get_global('os_family')}")
+        print(f"  hostname: {get_global('hostname')}")
+        print(f"  running_in_docker: {get_global('running_in_docker')}")
+    except Exception as e:
+        print(f"❌ Ошибка инициализации SystemModule: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # ========== ТРЕТИЙ ЭТАП: ЗАГРУЗКА МОДУЛЕЙ ==========
+    print("\n📦 ЗАГРУЗКА МОДУЛЕЙ")
+    print("="*60)
+    
+    try:
+        from files.core.utils.loader_utils import load_modules, initialize_global_modules
+        modules = load_modules()
+        print(f"✅ Модули загружены: {len(modules)} модулей")
+        
+        initialize_global_modules()
+        print("✅ Глобальные переменные модулей инициализированы")
+    except Exception as e:
+        print(f"⚠️  Ошибка загрузки модулей: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # ========== ЧЕТВЕРТЫЙ ЭТАП: ПОКАЗАТЬ ПЕРЕМЕННЫЕ ДЛЯ ОТЛАДКИ ==========
     print("\n📊 СИСТЕМНАЯ ИНФОРМАЦИЯ")
     print("="*60)
     print_system_module_variables()
-
-    # 4. Показываем отладочную информацию о VENV
+    
+    # ========== ПЯТЫЙ ЭТАП: VENV И ЗАВИСИМОСТИ ==========
     print("\n📦 ИНФОРМАЦИЯ О ВИРТУАЛЬНОМ ОКРУЖЕНИИ")
     print("="*60)
-    VenvRequirementsManager.print_debug_info()
-
-    # 5. Автоматическая настройка venv и установка зависимостей
-    print("\n🔧 АВТОМАТИЧЕСКАЯ НАСТРОЙКА ОКРУЖЕНИЯ")
-    print("="*60)
-    if VenvRequirementsManager.first_run_setup():
-        # Если была выполнена настройка и перезапуск, этот код не выполнится
-        print("⚠️  Перезапуск не произошел. Продолжаем работу...")
-        time.sleep(2)
-
-    # Теперь парсим все остальные аргументы
-    args = parse_args()
-
-    # 6. Проверяем, что мы в виртуальном окружении
-    if not VenvRequirementsManager.in_venv():
-        print("\n" + "!" * 60)
-        print("⚠️  ВНИМАНИЕ: СКРИПТ НЕ ЗАПУЩЕН В ВИРТУАЛЬНОМ ОКРУЖЕНИИ!")
-        print("!" * 60)
-        
-        response = input("\n❓ Продолжить без виртуального окружения? (y/N): ")
-        if response.lower() != 'y':
-            print("\n🔄 Завершение работы...")
-            print("\n💡 РЕКОМЕНДУЕМЫЕ ДЕЙСТВИЯ:")
-            print("1. Запустите скрипт снова - он автоматически создаст venv")
-            print("2. Создайте venv вручную: python -m venv venv")
-            print("3. Активируйте venv:")
-            print("   Windows: venv\\Scripts\\activate")
-            print("   Linux/Mac: source venv/bin/activate")
-            print("4. Запустите скрипт снова")
-            sys.exit(1)
-        else:
-            print("\n⚠️  ПРОДОЛЖАЕМ РАБОТУ БЕЗ VENV. МОГУТ ВОЗНИКНУТЬ ПРОБЛЕМЫ!")
-            time.sleep(3)
-
-    # 7. Проверка критических зависимостей
-    print("\n🔍 ПРОВЕРКА КРИТИЧЕСКИХ ЗАВИСИМОСТЕЙ")
-    print("="*60)
+    
     try:
-        import flask
-        import dotenv
-        import OpenSSL
-        import psutil
-        print("✅ Критические зависимости загружены успешно")
-
-        print("\n📊 АНАЛИЗ ПРОЦЕССОВ")
-        print("="*60)
-        print_starter_processes()  # Используем оригинальную функцию с psutil
-    except ImportError as e:
-        print(f"\n❌ ОТСУТСТВУЮТ КРИТИЧЕСКИЕ ЗАВИСИМОСТИ: {e}")
+        VenvRequirementsManager.print_debug_info()
+    except Exception as e:
+        print(f"⚠️  Ошибка при получении информации о VENV: {e}")
+    
+    # ========== ШЕСТОЙ ЭТАП: АВТОМАТИЧЕСКАЯ НАСТРОЙКА VENV ==========
+    print("\n🔧 АВТОМАТИЧЕСКАЯ НАСТРОЙКА ОКРРУЖЕНИЯ")
+    print("="*60)
+    
+    # Проверяем, нужно ли создавать venv и устанавливать зависимости
+    try:
+        venv_dir = VenvRequirementsManager.get_venv_dir()
+        venv_exists = venv_dir.exists() if venv_dir else False
         
-        # Пробуем установить зависимости в текущем окружении
-        venv_python = VenvRequirementsManager.get_venv_python()
-        if venv_python and VenvRequirementsManager.get_venv_dir().exists():
-            requirements = VenvRequirementsManager.find_requirements()
-            if requirements:
-                print("\n🔄 Попытка автоматической установки зависимостей...")
-                try:
-                    print("Устанавливаем Flask, python-dotenv, pyOpenSSL...")
-                    start_time = time.time()
-                    result = subprocess.run([
-                        str(venv_python), "-m", "pip", "install",
-                        "flask", "python-dotenv", "pyopenssl",
-                        "--no-warn-script-location"
-                    ], capture_output=True, text=True, timeout=300)
-                    
-                    if result.returncode == 0:
-                        print("✅ Зависимости установлены. Перезапуск...")
-                        time.sleep(2)
-                        VenvRequirementsManager.restart_in_venv()
-                    else:
-                        print(f"❌ Ошибка установки: {result.stderr[:500]}")
-                except subprocess.TimeoutExpired:
-                    print("❌ Таймаут установки зависимостей (более 5 минут)")
-                except Exception as install_error:
-                    print(f"❌ Ошибка установки: {install_error}")
+        if not venv_exists:
+            print("📁 Виртуальное окружение не найдено, создаем...")
+            success, message = VenvRequirementsManager.create_venv()
+            if success:
+                print(f"✅ {message}")
+            else:
+                print(f"❌ {message}")
+                print("\n💡 Попробуйте создать venv вручную:")
+                print(f"  python -m venv {venv_dir}")
+        else:
+            print("✅ Виртуальное окружение уже существует")
         
-        print("\n📋 РУЧНАЯ УСТАНОВКА ЗАВИСИМОСТЕЙ:")
-        print("  pip install flask python-dotenv pyopenssl")
-        sys.exit(1)
-
-    # 8. Инициализируем логгер
+        # Проверяем критические зависимости
+        print("\n🔍 ПРОВЕРКА КРИТИЧЕСКИХ ЗАВИСИМОСТЕЙ")
+        print("-"*60)
+        
+        try:
+            import flask
+            import dotenv
+            import OpenSSL
+            print("✅ Критические зависимости уже установлены")
+            
+            try:
+                import psutil
+                print("✅ Дополнительные зависимости установлены")
+            except ImportError:
+                print("⚠️  psutil не установлен (не критично)")
+                
+        except ImportError as e:
+            print(f"❌ Отсутствуют критические зависимости: {e}")
+            
+            # Пытаемся установить автоматически
+            print("\n🔄 Автоматическая установка зависимостей...")
+            success, message = VenvRequirementsManager.install_requirements_with_progress()
+            
+            if success:
+                print(f"✅ {message}")
+                print("\n🔄 Перезапуск после установки зависимостей...")
+                time.sleep(2)
+                VenvRequirementsManager.restart_in_venv()
+            else:
+                print(f"❌ {message}")
+                print("\n💡 Установите зависимости вручную:")
+                venv_python = VenvRequirementsManager.get_venv_python()
+                if venv_python:
+                    print(f"  {venv_python} -m pip install flask python-dotenv pyopenssl psutil")
+                
+    except Exception as e:
+        print(f"❌ Ошибка при настройке окружения: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # ========== СЕДЬМОЙ ЭТАП: ИНИЦИАЛИЗАЦИЯ ЛОГГЕРА ==========
     print("\n📝 НАСТРОЙКА ЛОГГИРОВАНИЯ")
     print("="*60)
-    LogManager.initialize(
-        debug_mode=args.debug,
-        service_mode=args.service
-    )
-    logger = LogManager.get_logger("main")
+    
+    args = parse_args()
+    
+    try:
+        LogManager.initialize(
+            debug_mode=args.debug,
+            service_mode=args.service
+        )
+        logger = LogManager.get_logger("main")
+        
+        # Устанавливаем глобальный обработчик исключений
+        from files.core.utils.exceptionHandler_utils import ExceptionHandler
+        handler = ExceptionHandler()
+        sys.excepthook = handler.handle_unhandled_exception
+        logger.debug("Exception handler initialized")
+        
+        print("✅ Логгер инициализирован")
+    except Exception as e:
+        print(f"❌ Ошибка инициализации логгера: {e}")
+        logger = None
+    
+    # ========== ВОСЬМОЙ ЭТАП: ПЕРВИЧНАЯ НАСТРОЙКА ПРИЛОЖЕНИЯ ==========
+    print("\n🔐 ПЕРВИЧНАЯ НАСТРОЙКА ПРИЛОЖЕНИЯ")
+    print("="*60)
+    
+    try:
+        from files.core.utils.firstSetup_utils import first_run_setup
+        is_first_run, credentials = first_run_setup()
+        if is_first_run and credentials:
+            if logger:
+                logger.info("First run setup completed")
+            print("\n" + "="*50)
+            print("🎉 ПЕРВИЧНАЯ НАСТРОЙКА ЗАВЕРШЕНА")
+            print("="*50)
+            print(f"👤 Логин: {credentials['login']}")
+            print(f"🔑 Пароль: {credentials['password']}")
+            print("💾 Сохраните эти данные!")
+            print("="*50 + "\n")
+        else:
+            print("✅ Настройка уже выполнена ранее")
+    except Exception as e:
+        print(f"❌ Ошибка первичной настройки: {e}")
+    
+    # ========== ДЕВЯТЫЙ ЭТАП: НАСТРОЙКА ФАЕРВОЛА И ПОРТОВ ==========
+    print("\n🔒 НАСТРОЙКА ФАЕРВОЛА И ПОРТОВ")
+    print("="*60)
+    
+    try:
+        from files.core.oss.default.firewall import FirewallModule
+        firewall_info = FirewallModule.collect_firewall_info()
 
-    # Устанавливаем глобальный обработчик исключений
-    from files.core.utils.exceptionHandler_utils import ExceptionHandler
-    handler = ExceptionHandler()
-    sys.excepthook = handler.handle_unhandled_exception
-    logger.debug("Exception handler initialized")
+        if firewall_info['is_available']:
+            print(f"   Активный фаервол: {firewall_info['active_firewall']}")
+        else:
+            print("   ⚠️  Не обнаружен активный фаервол!")
 
-    # 9. Показать переменные если запрошено
-    if args.show_vars:
-        print("\n📋 ЗАПРОШЕНЫ ПЕРЕМЕННЫЕ SYSTEMMODULE")
+        # Разрешенные порты в фаерволе
+        if firewall_info['all_ports_open']:
+            print("\n   ✅ Все порты разрешены")
+            if firewall_info['open_ports']:
+                print(f"   Причина: {firewall_info['open_ports'][0]['service']}")
+        elif firewall_info['open_ports']:
+            print("\n   Разрешенные порты в фаерволе:")
+            for port_info in firewall_info['open_ports']:
+                service_info = f" ({port_info.get('service', '')})" if port_info.get('service') else ""
+                print(f"     - Порт {port_info['port']}/{port_info['protocol']}{service_info}")
+        else:
+            print("\n   Нет явно разрешенных портов в фаерволе")
+
+        # Слушающие порты
+        if firewall_info['listening_ports']:
+            print("\n   Слушающие порты:")
+            for port_info in firewall_info['listening_ports']:
+                print(f"     - Порт {port_info['port']}/{port_info['protocol']} ({port_info.get('state', 'LISTEN')})")
+        else:
+            print("\n   Нет слушающих портов")
+
+        # Автоматическое открытие порта 8000
+        print("\n🔓 АВТОМАТИЧЕСКАЯ НАСТРОЙКА ПОРТА 8000")
+        print("-"*60)
+        FirewallModule.ensure_port_open(8000, 'tcp')
+
+        # Настройка домена, если он указан
+        domain = os.environ.get('DOMAIN', '').strip()
+        if domain:
+            print("\n🌐 НАСТРОЙКА ДОМЕННОГО ДОСТУПА")
+            print("-"*60)
+            FirewallModule.ensure_domain_access(domain, 8000, 'tcp')
+
         print("="*60)
-        print_system_module_variables()
-
-    logger.debug(f"Command line arguments: service={args.service}, debug={args.debug}")
-
-    # 10. Проверка на первоначальную настройку
-    from files.core.utils.firstSetup_utils import first_run_setup
-    is_first_run, credentials = first_run_setup()
-    if is_first_run and credentials:
-        logger.info("First run setup completed")
-        print("\n" + "="*50)
-        print("🎉 ПЕРВИЧНАЯ НАСТРОЙКА ЗАВЕРШЕНА")
-        print("="*50)
-        print(f"👤 Логин: {credentials['login']}")
-        print(f"🔑 Пароль: {credentials['password']}")
-        print("💾 Сохраните эти данные!")
-        print("="*50 + "\n")
-
-    # 11. Собираем информацию о фаерволе и открываем порт 8000
-    print("\n🔒 ПРОВЕРКА ФАЕРВОЛА И ПОРТОВ")
-    print("="*60)
-    from files.core.oss.default.firewall import FirewallModule
-    firewall_info = FirewallModule.collect_firewall_info()
-
-    if firewall_info['is_available']:
-        print(f"   Активный фаервол: {firewall_info['active_firewall']}")
-    else:
-        print("   ⚠️  Не обнаружен активный фаервол!")
-
-    # Разрешенные порты в фаерволе
-    if firewall_info['all_ports_open']:
-        print("\n   ✅ Все порты разрешены")
-        if firewall_info['open_ports']:
-            print(f"   Причина: {firewall_info['open_ports'][0]['service']}")
-    elif firewall_info['open_ports']:
-        print("\n   Разрешенные порты в фаерволе:")
-        for port_info in firewall_info['open_ports']:
-            service_info = f" ({port_info.get('service', '')})" if port_info.get('service') else ""
-            print(f"     - Порт {port_info['port']}/{port_info['protocol']}{service_info}")
-    else:
-        print("\n   Нет явно разрешенных портов в фаерволе")
-
-    # Слушающие порты
-    if firewall_info['listening_ports']:
-        print("\n   Слушающие порты:")
-        for port_info in firewall_info['listening_ports']:
-            print(f"     - Порт {port_info['port']}/{port_info['protocol']} ({port_info.get('state', 'LISTEN')})")
-    else:
-        print("\n   Нет слушающих портов")
-
-    # Автоматическое открытие порта 8000
-    print("\n🔓 АВТОМАТИЧЕСКАЯ НАСТРОЙКА ПОРТА 8000")
-    print("="*60)
-    FirewallModule.ensure_port_open(8000, 'tcp')
-
-    # Настройка домена, если он указан
-    domain = os.environ.get('DOMAIN', '').strip()
-    if domain:
-        print("\n🌐 НАСТРОЙКА ДОМЕННОГО ДОСТУПА")
-        print("="*60)
-        FirewallModule.ensure_domain_access(domain, 8000, 'tcp')
-
-    print("="*60)
-
-    # 12. Сервисный режим
-    if args.service:
-        logger.info("Starting service mode")
-        start_service_mode()
-
-    # 13. Финальный запуск
+    except Exception as e:
+        print(f"❌ Ошибка настройки фаервола: {e}")
+    
+    # ========== ДЕСЯТЫЙ ЭТАП: ПРОЦЕССЫ ПЕРЕД ЗАПУСКОМ ==========
     print("\n" + "=" * 60)
     print("🎯 ГОТОВО К ЗАПУСКУ СЕРВЕРА")
     print("=" * 60)
     
     # Показываем процессы еще раз перед запуском
     print_starter_processes()
-
-    # Запуск интерактивного режима
-    print("🚀 ЗАПУСК СЕРВЕРА...")
-    logger.info("Starting interactive mode")
-    start_interactive_mode()
+    
+    # ========== ЗАПУСК РЕЖИМА ==========
+    if args.service:
+        print("🔧 ЗАПУСК В СЕРВИСНОМ РЕЖИМЕ")
+        print("="*60)
+        start_service_mode()
+    else:
+        print("🚀 ЗАПУСК ИНТЕРАКТИВНОГО РЕЖИМА")
+        print("="*60)
+        if logger:
+            logger.info("Starting interactive mode")
+        start_interactive_mode()
 
 if __name__ == '__main__':
     main()
