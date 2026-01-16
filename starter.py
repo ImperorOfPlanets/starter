@@ -13,64 +13,62 @@ from files.core.oss.default.system import SystemModule
 from files.core.utils.log_utils import LogManager
 
 def print_starter_processes():
-    """Выводит список всех процессов starter.py"""
-    print("\n" + "="*70)
-    print("🚀 ПРОЦЕССЫ STARTER.PY")
-    print("="*70)
+    """Выводит список всех процессов starter.py, фильтруя только те, что запущены из текущей директории."""
+    print("\n" + "="*80)
+    print("🚀 ПРОЦЕССЫ STARTER.PY (ТОЛЬКО ИЗ ТЕКУЩЕЙ ДИРЕКТОРИИ)")
+    print("="*80)
 
     current_pid = os.getpid()
-    script_name = Path(sys.argv[0]).name
-    script_path = Path(sys.argv[0]).resolve()
+    current_script_path = Path(sys.argv[0]).resolve()
 
     try:
         import psutil
         starter_processes = []
-        
-        # Ищем все процессы starter.py
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time', 'username']):
+
+        for proc in psutil.process_iter(['pid', 'cmdline', 'create_time', 'username']):
             try:
                 cmdline = proc.info['cmdline'] or []
                 if not cmdline:
                     continue
-                    
-                # Проверяем, является ли процесс starter.py
+
+                # Ищем процессы, содержащие 'starter.py'
                 for arg in cmdline:
                     if 'starter.py' in arg:
+                        script_path = Path(arg).resolve()
+                        is_own = (script_path == current_script_path)
                         starter_processes.append({
                             'pid': proc.info['pid'],
-                            'username': proc.info.get('username', 'N/A'),
-                            'create_time': proc.info.get('create_time', 0),
                             'cmdline': ' '.join(cmdline),
-                            'is_current': proc.info['pid'] == current_pid
+                            'script_path': str(script_path),
+                            'is_own': is_own,
+                            'is_current': proc.info['pid'] == current_pid,
+                            'create_time': proc.info.get('create_time', 0),
+                            'username': proc.info.get('username', 'N/A')
                         })
                         break
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
-        
+
         if not starter_processes:
             print("   Нет запущенных процессов starter.py")
-            print("="*70 + "\n")
+            print("="*80 + "\n")
             return
-        
-        # Сортируем по времени создания (старые вверху)
-        starter_processes.sort(key=lambda x: x.get('create_time', 0))
-        
-        print(f"   Всего процессов starter.py: {len(starter_processes)}")
-        print(f"   Текущий PID: {current_pid}")
-        print()
-        
-        # Выводим таблицу процессов
-        print(f"{'PID':<8} {'Текущий':<10} {'Время запуска':<25} {'Команда'}")
-        print(f"{'-'*8} {'-'*10} {'-'*25} {'-'*40}")
-        
+
+        # Сортируем: сначала свои, потом чужие
+        starter_processes.sort(key=lambda x: (not x['is_own'], -x['create_time']))
+
+        print(f"   Текущий путь: {current_script_path}")
+        print(f"   Всего найдено подходящих процессов: {len(starter_processes)}\n")
+
         for proc in starter_processes:
-            pid = proc['pid']
+            print(f"PID: {proc['pid']}")
+            print(f"Команда: {proc['cmdline']}")
+            print(f"Путь: {proc['script_path']}")
+            marker = "✅ СВОЙ" if proc['is_own'] else "❌ ЧУЖОЙ"
+            print(f"Статус: {marker}")
             
-            # Форматируем время
+            # Дополнительная информация
             if proc['create_time'] > 0:
-                create_time = time.strftime('%Y-%m-%d %H:%M:%S', 
-                                           time.localtime(proc['create_time']))
-                # Вычисляем время работы
                 uptime = time.time() - proc['create_time']
                 if uptime > 3600:
                     uptime_str = f"{uptime/3600:.1f}ч"
@@ -78,38 +76,23 @@ def print_starter_processes():
                     uptime_str = f"{uptime/60:.1f}м"
                 else:
                     uptime_str = f"{uptime:.0f}с"
-                time_str = f"{create_time} ({uptime_str})"
-            else:
-                time_str = "N/A"
-            
-            # Форматируем команду
-            cmd = proc['cmdline']
-            # Обрезаем слишком длинные команды
-            if len(cmd) > 60:
-                cmd = cmd[:57] + '...'
-            
-            # Определяем метку процесса
-            marker = "▶ ТЕКУЩИЙ" if proc['is_current'] else "  "
-            
-            print(f"{marker:<10} {pid:<8} {time_str:<25} {cmd}")
-        
-        # Статистика
-        current_count = sum(1 for p in starter_processes if p['is_current'])
-        other_count = len(starter_processes) - current_count
-        
-        if other_count > 0:
-            print(f"\n⚠️  ВНИМАНИЕ: Найдено {other_count} других процессов starter.py!")
-            print("   Они могут мешать работе. Вы можете завершить их командой:")
-            for proc in starter_processes:
-                if not proc['is_current']:
-                    print(f"     kill {proc['pid']}")
-            
-    except ImportError:
-        print("   ⚠️  Модуль psutil не установлен, невозможно показать процессы")
-    except Exception as e:
-        print(f"   ❌ Ошибка при получении процессов: {e}")
+                start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(proc['create_time']))
+                print(f"Запущен: {start_time} (работает: {uptime_str})")
+            if proc['username'] != 'N/A':
+                print(f"Пользователь: {proc['username']}")
+            print("-" * 60)
 
-    print("="*70 + "\n")
+        # Подсказка по завершению чужих процессов
+        foreign_pids = [str(p['pid']) for p in starter_processes if not p['is_own']]
+        if foreign_pids:
+            print(f"⚠️  Чтобы завершить ЧУЖИЕ процессы, выполните:\n    kill {' '.join(foreign_pids)}")
+
+    except ImportError:
+        print("   ⚠️  Модуль psutil не установлен — невозможно определить процессы.")
+    except Exception as e:
+        print(f"   ❌ Ошибка при получении списка процессов: {e}")
+
+    print("="*80 + "\n")
 
 def print_system_module_variables():
     """Выводит все переменные SystemModule, которые находятся в памяти"""
