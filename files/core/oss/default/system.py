@@ -195,7 +195,6 @@ class SystemModule(BaseModule):
         else:
             return "unknown", "unknown"
 
-    @staticmethod
     def get_os_family() -> str:
         """
         Определяет семейство операционной системы.
@@ -208,6 +207,8 @@ class SystemModule(BaseModule):
             return 'windows'
         elif system == 'darwin':
             return 'macos'
+        elif system != 'linux':
+            return 'unknown'
         
         # Для Linux определяем дистрибутив
         try:
@@ -215,52 +216,79 @@ class SystemModule(BaseModule):
             with open('/etc/os-release', 'r') as f:
                 content = f.read()
             
-            # Ищем ID_LIKE или ID
-            id_like_match = re.search(r'ID_LIKE="?([^"\n]+)"?', content)
-            id_match = re.search(r'ID="?([^"\n]+)"?', content)
+            # Ищем ID и ID_LIKE
+            os_id = None
+            id_like = None
             
-            if id_like_match:
-                ids = id_like_match.group(1).lower()
-            elif id_match:
-                ids = id_match.group(1).lower()
-            else:
-                return 'unknown'
+            for line in content.split('\n'):
+                if line.startswith('ID='):
+                    os_id = line.split('=')[1].strip().strip('"').lower()
+                elif line.startswith('ID_LIKE='):
+                    id_like = line.split('=')[1].strip().strip('"').lower()
             
-            # Определяем семейство по известным меткам
-            if 'debian' in ids or 'ubuntu' in ids:
-                return 'debian'
-            elif 'rhel' in ids or 'fedora' in ids or 'centos' in ids:
-                return 'rhel'
-            elif 'arch' in ids:
-                return 'arch'
-            elif 'suse' in ids or 'opensuse' in ids:
-                return 'suse'
-            else:
-                return 'unknown'
-                
-        except FileNotFoundError:
-            # Если файла нет, пробуем определить через менеджер пакетов
+            print(f"   [DEBUG] os-release: ID={os_id}, ID_LIKE={id_like}")
+            
+            # Определяем по ID
+            if os_id:
+                if 'debian' in os_id or 'ubuntu' in os_id:
+                    return 'debian'
+                elif 'rhel' in os_id or 'fedora' in os_id or 'centos' in os_id:
+                    return 'rhel'
+                elif 'arch' in os_id:
+                    return 'arch'
+                elif 'suse' in os_id or 'opensuse' in os_id:
+                    return 'suse'
+            
+            # Определяем по ID_LIKE
+            if id_like:
+                if 'debian' in id_like or 'ubuntu' in id_like:
+                    return 'debian'
+                elif 'rhel' in id_like or 'fedora' in id_like or 'centos' in id_like:
+                    return 'rhel'
+                elif 'arch' in id_like:
+                    return 'arch'
+                elif 'suse' in id_like or 'opensuse' in id_like:
+                    return 'suse'
+            
+            # Если не определили по /etc/os-release, пробуем через пакетные менеджеры
+            print("   [DEBUG] Определение через менеджеры пакетов...")
+            
+            # Проверяем apt (Debian/Ubuntu)
             try:
-                # Проверяем apt (Debian/Ubuntu)
                 subprocess.run(['apt', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 return 'debian'
             except:
+                pass
+            
+            # Проверяем yum/dnf (RHEL/CentOS/Fedora)
+            try:
+                subprocess.run(['yum', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                return 'rhel'
+            except:
                 try:
-                    # Проверяем yum/dnf (RHEL/CentOS/Fedora)
-                    subprocess.run(['yum', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    subprocess.run(['dnf', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                     return 'rhel'
                 except:
-                    try:
-                        # Проверяем pacman (Arch)
-                        subprocess.run(['pacman', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                        return 'arch'
-                    except:
-                        try:
-                            # Проверяем zypper (SUSE)
-                            subprocess.run(['zypper', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                            return 'suse'
-                        except:
-                            return 'unknown'
+                    pass
+            
+            # Проверяем pacman (Arch)
+            try:
+                subprocess.run(['pacman', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                return 'arch'
+            except:
+                pass
+            
+            # Проверяем zypper (SUSE)
+            try:
+                subprocess.run(['zypper', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                return 'suse'
+            except:
+                pass
+            
+        except Exception as e:
+            print(f"   [ERROR] Ошибка определения семейства ОС: {e}")
+        
+        return 'unknown'
 
     def get_os_type() -> str:
         """

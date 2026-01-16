@@ -686,41 +686,94 @@ class VenvRequirementsManager:
     
     @staticmethod
     def find_requirements() -> Optional[Path]:
-        """Находит файл requirements.txt с учетом ОС и версии"""
+        """Находит файл requirements.txt с учетом ОС"""
         try:
             # Определяем корень проекта
             script_path = get_global('script_path')
-            
-            # Ищем requirements относительно starter.py
             reqs_dir = script_path / "files" / "requirements"
             
-            # Порядок приоритета файлов
-            possible_paths = [
-                # Специфичные для версии ОС
-                reqs_dir / "windows" / "default.txt",
-                # Общие пути
-                reqs_dir / "default.txt",
-                reqs_dir / "requirements.txt",
-                # Резервные пути
-                script_path / "requirements.txt",
-            ]
+            # Получаем информацию об ОС
+            os_name = get_global('os', '').lower()
+            os_family = get_global('os_family', '').lower()
             
-            for path in possible_paths:
-                if path.exists():
-                    return path
+            print(f"🔍 Поиск зависимостей для ОС:")
+            print(f"   os_name: {os_name}")
+            print(f"   os_family: {os_family}")
+            print(f"   reqs_dir: {reqs_dir}")
+            
+            # Проверяем существование основной папки requirements
+            if not reqs_dir.exists():
+                print(f"❌ Папка requirements не найдена: {reqs_dir}")
+                # Создаем базовый файл зависимостей
+                default_req = script_path / "requirements.txt"
+                default_content = """flask>=2.3.0
+    python-dotenv>=1.0.0
+    pyopenssl>=23.0.0
+    requests>=2.28.0
+    """
+                default_req.write_text(default_content, encoding='utf-8')
+                print(f"📝 Создан базовый файл: {default_req}")
+                return default_req
+            
+            # Список возможных папок для поиска в порядке приоритета
+            possible_folders = []
+            
+            # 1. Папка с именем ОС (например, linux)
+            if os_name and os_name != 'unknown':
+                possible_folders.append(os_name)
+            
+            # 2. Папка с семейством ОС (например, debian)
+            if os_family and os_family != 'unknown':
+                possible_folders.append(os_family)
+            
+            # 3. Специальные случаи
+            if os_family in ['debian', 'ubuntu']:
+                possible_folders.append('linux')
+            elif os_family in ['rhel', 'centos', 'fedora']:
+                possible_folders.append('linux')
+            
+            # Убираем дубликаты
+            possible_folders = list(dict.fromkeys(possible_folders))
+            
+            print(f"   Проверяемые папки: {possible_folders}")
+            
+            # Ищем файл в папках
+            for folder in possible_folders:
+                folder_path = reqs_dir / folder
+                if folder_path.exists():
+                    print(f"   ✅ Папка найдена: {folder}")
+                    
+                    # Проверяем разные имена файлов
+                    possible_files = [
+                        folder_path / "default.txt",
+                        folder_path / "requirements.txt",
+                        folder_path / f"{folder}.txt"
+                    ]
+                    
+                    for req_file in possible_files:
+                        if req_file.exists():
+                            print(f"   📄 Найден файл: {req_file}")
+                            return req_file
+            
+            # Если ничего не нашли в папках, используем общий default.txt
+            general_default = reqs_dir / "default.txt"
+            if general_default.exists():
+                print(f"📄 Используем общий файл: {general_default}")
+                return general_default
             
             # Если ничего не нашли, создаем базовый файл
             default_req = script_path / "requirements.txt"
-            default_content = """# Основные зависимости
-flask>=2.3.0
-python-dotenv>=1.0.0
-pyopenssl>=23.0.0
-requests>=2.28.0
-colorama>=0.4.6
-"""
+            default_content = """flask>=2.3.0
+    python-dotenv>=1.0.0
+    pyopenssl>=23.0.0
+    requests>=2.28.0
+    """
             default_req.write_text(default_content, encoding='utf-8')
+            print(f"📝 Создан базовый файл: {default_req}")
             return default_req
             
         except Exception as e:
-            print(f"Ошибка поиска requirements: {e}")
+            print(f"❌ Ошибка поиска requirements: {e}")
+            import traceback
+            traceback.print_exc()
             return None
