@@ -1,5 +1,5 @@
 # Web Framework
-flask>=2.0
+Flask>=2.0
 Flask-Session>=0.4.0
 Werkzeug>=2.0
 
@@ -21,8 +21,8 @@ python-dateutil>=2.8
 psutil>=5.8
 
 # Security and Cryptography
-cryptography>=36.0
 pyOpenSSL>=20.0
+cryptography>=36.0
 
 # Type Hints and Extensions
 typing-extensions>=3.7.4
@@ -30,3 +30,6 @@ typing-extensions>=3.7.4
 # Python < 3.8 Compatibility
 importlib-metadata>=4.0; python_version < '3.8'
 zipfile38>=0.0.3; python_version < '3.8'
+
+# Unix-specific (optional but recommended)
+distro>=1.5.0
