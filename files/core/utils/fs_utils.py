@@ -4,10 +4,13 @@ import hashlib
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from files.core.utils.log_utils import LogManager
+
+LogManager.register_log_dir('modules', 'modules')
+logger = LogManager.get_logger('modules')
 
 class FSUtils:
     """Утилиты для работы с файловой системой"""
-
     @staticmethod
     def check_folders(folders_to_check: List[str]) -> None:
         """

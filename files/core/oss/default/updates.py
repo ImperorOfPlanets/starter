@@ -12,7 +12,6 @@ from fnmatch import fnmatch
 
 from files.core.utils.globalVars_utils import get_global
 
-
 class UpdatesModule:
     DEFAULT_CONFIG = {
         'BASE_UPDATES_DIR': 'files/update',

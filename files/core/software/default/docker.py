@@ -16,7 +16,6 @@ from files.core.utils.log_utils import LogManager
 
 logger = LogManager.get_logger('docker_module')
 
-
 class DockerModule(BaseModule):
     """Реализация Docker утилит (включая генерацию .env и docker-compose.yml)"""
 

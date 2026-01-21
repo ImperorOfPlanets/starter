@@ -18,8 +18,7 @@ REQUIRED_ENV_VARS = [
     'ADMIN_LOGIN', 
     'ADMIN_PASSWORD_HASH',
     'APP_SECRET_KEY',
-    'TYPE_SERVER',
-    'PORT'
+    'TYPE_SERVER'
 ]
 
 def is_first_run() -> bool:
@@ -115,9 +114,6 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
     if not server_type:
         print("Не удалось определить тип сервера")
         return False, None
-
-    # Устанавливаем порт по умолчанию
-    default_port = 8000
 
     # Запрос доменного имени
     domain_name = None

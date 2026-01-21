@@ -1,16 +1,19 @@
 import argparse
+import json
 import os
 import platform
 import subprocess
 import sys
 import time
-
 from pathlib import Path
 
 from files.core.utils.venv_requirements_manager import VenvRequirementsManager
 from files.core.utils.globalVars_utils import get_global, set_global
 from files.core.oss.default.system import SystemModule
 from files.core.utils.log_utils import LogManager
+
+# Устанавливает глобальные переменные - ОСТАВЛЯЕМ КАК ЕСТЬ!
+SystemModule.collect_basic_system_info()
 
 def print_starter_processes():
     """Выводит список всех процессов starter.py, фильтруя только те, что запущены из текущей директории."""
@@ -224,26 +227,9 @@ def start_interactive_mode():
     print(f"[INFO] Запуск приложения на порту: {port}")
 
     open_browser()
-
-    # Получаем домен из переменных окружения
-    domain = os.environ.get('DOMAIN', '').strip()
-
-    if domain:
-        print(f"🌐 Запуск сервера на домене: {domain}")
-        app.run(
-            host=domain,
-            port=port,
-            ssl_context=ssl_context,
-            debug=True
-        )
-    else:
-        print("🌐 Запуск сервера на всех интерфейсах (0.0.0.0)")
-        app.run(
-            host='0.0.0.0',
-            port=port,
-            ssl_context=ssl_context,
-            debug=True
-        )
+    debug=get_global('DEBUG')
+    # Всегда слушаем все интерфейсы
+    app.run(host='0.0.0.0', port=port, ssl_context=ssl_context, debug=True)
 
 def main():
     """Основная функция запуска"""
@@ -252,12 +238,18 @@ def main():
     print("🚀 ЗАПУСК СТАРТЕРА СЕРВЕРА")
     print("=" * 60)
     print(f"Текущий PID: {os.getpid()}")
+
+    # Инициализация логгера
+    args = parse_args()
+    LogManager.initialize(debug_mode=args.debug, service_mode=args.service)
     
-    # 1. Устанавливаем script_path ВРУЧНУЮ как самый первый шаг
-    script_path = Path(__file__).parent.absolute()
-    set_global('script_path', script_path)
-    print(f"✅ script_path установлен: {script_path}")
+    # Теперь можно создавать логгер
+    logger = LogManager.get_logger("main")
+    logger.info("Запуск приложения...")
     
+    # 1. Выводим путь до стартера
+    print(f"✅ script_path установлен: {get_global('script_path')}")
+
     # 2. Парсим аргументы (только для --new на этом этапе)
     if '--new' in sys.argv:
         print("🔄 Сброс конфигурации (аргумент --new обнаружен)...")
@@ -275,7 +267,7 @@ def main():
     print("="*60)
     
     try:
-        # Собираем системную информацию
+        # Собираем системную информацию (вызываем повторно для актуальности)
         sys_info = SystemModule.collect_basic_system_info()
         print(f"✅ Системная информация собрана")
         
@@ -290,6 +282,23 @@ def main():
         print(f"❌ Ошибка инициализации SystemModule: {e}")
         import traceback
         traceback.print_exc()
+
+    # ========== РАННЯЯ РЕГИСТРАЦИЯ ПРОЕКТА ==========
+    print("\n🔖 РЕГИСТРАЦИЯ ПРОЕКТА В РЕЕСТРЕ")
+    print("="*60)
+    try:
+        from files.core.utils.registry_manager import RegistryManager
+        base_dir = get_global('script_path')
+        print(f"✅ script_path установлен: {base_dir}")
+        print(f"[DEBUG] Тип base_dir: {type(base_dir)}")
+        print(f"[DEBUG] Значение base_dir: {repr(base_dir)}")
+        if base_dir:
+            RegistryManager.register_initializing(base_dir)
+            print(f"✅ Проект зарегистрирован: {base_dir}")
+        else:
+            print("❌ Не удалось получить script_path для регистрации")
+    except Exception as e:
+        print(f"⚠️ Ошибка регистрации проекта: {e}")
     
     # ========== ТРЕТИЙ ЭТАП: ЗАГРУЗКА МОДУЛЕЙ ==========
     print("\n📦 ЗАГРУЗКА МОДУЛЕЙ")
@@ -307,11 +316,14 @@ def main():
         import traceback
         traceback.print_exc()
     
+    print("\n📦 МОДУЛИ ЗАГРУЖЕНЫ ВКЛЮЧАЕМ ВОЗМОЖНОСТЬ С НИМИ ВЗАИМОДЕЙСТВОВАТЬ")
+    print("="*60)
+    
     # ========== ЧЕТВЕРТЫЙ ЭТАП: ПОКАЗАТЬ ПЕРЕМЕННЫЕ ДЛЯ ОТЛАДКИ ==========
     print("\n📊 СИСТЕМНАЯ ИНФОРМАЦИЯ")
     print("="*60)
     print_system_module_variables()
-    
+
     # ========== ПЯТЫЙ ЭТАП: VENV И ЗАВИСИМОСТИ ==========
     print("\n📦 ИНФОРМАЦИЯ О ВИРТУАЛЬНОМ ОКРУЖЕНИИ")
     print("="*60)
@@ -322,7 +334,7 @@ def main():
         print(f"⚠️  Ошибка при получении информации о VENV: {e}")
     
     # ========== ШЕСТОЙ ЭТАП: АВТОМАТИЧЕСКАЯ НАСТРОЙКА VENV ==========
-    print("\n🔧 АВТОМАТИЧЕСКАЯ НАСТРОЙКА ОКРРУЖЕНИЯ")
+    print("\n🔧 АВТОМАТИЧЕСКАЯ НАСТРОЙКА ОКРУЖЕНИЯ")
     print("="*60)
     
     # Проверяем, нужно ли создавать venv и устанавливать зависимости
@@ -351,12 +363,6 @@ def main():
             import dotenv
             import OpenSSL
             print("✅ Критические зависимости уже установлены")
-            
-            try:
-                import psutil
-                print("✅ Дополнительные зависимости установлены")
-            except ImportError:
-                print("⚠️  psutil не установлен (не критично)")
                 
         except ImportError as e:
             print(f"❌ Отсутствуют критические зависимости: {e}")
@@ -405,8 +411,123 @@ def main():
     except Exception as e:
         print(f"❌ Ошибка инициализации логгера: {e}")
         logger = None
-    
-    # ========== ВОСЬМОЙ ЭТАП: ПЕРВИЧНАЯ НАСТРОЙКА ПРИЛОЖЕНИЯ ==========
+
+
+    # ========== ВОСЬМОЙ ЭТАП: ОПРЕДЕЛЕНИЕ ПОДСЕТИ И ПОРТА ==========
+    print("\n🌐 ОПРЕДЕЛЕНИЕ ПОДСЕТИ И ПОРТА")
+    print("="*60)
+
+    try:
+        from files.core.utils.registry_manager import RegistryManager
+        from files.core.utils.loader_utils import get
+
+        # Выводим путь к реестру
+        registry_path = RegistryManager.get_registry_path()
+        print(f"   📁 Путь к реестру: {registry_path}")
+
+        base_dir = get_global('script_path')
+        env_path = base_dir / '.env'
+
+        # 1. Получаем желаемый SUBNET_OCTET
+        preferred_octet = 20  # значение по умолчанию
+        
+        if env_path.exists():
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip().startswith('SUBNET_OCTET='):
+                        try:
+                            preferred_octet = int(line.split('=', 1)[1].strip())
+                            break
+                        except ValueError:
+                            pass
+        
+        print(f"   Желаемый SUBNET_OCTET: {preferred_octet}")
+
+        # 2. Получаем список занятых октетов из реестра
+        base_dir = get_global('script_path')
+        used_octets = set(RegistryManager.get_used_octets(exclude_path=base_dir))
+        print(f"   Занятые октеты в реестре: {sorted(used_octets)}")
+
+        # 3. Ищем свободный октет
+        final_octet = preferred_octet
+        max_octet = 65
+        while final_octet <= max_octet:
+            # Проверка 1: есть ли октет в реестре?
+            if final_octet in used_octets:
+                print(f"   ❌ Октет {final_octet} занят (есть в реестре)")
+                final_octet += 1
+                continue
+            
+            # Проверка 2: свободен ли порт на хосте?
+            base_port = final_octet * 100
+            is_free = get('portmanager', 'is_port_free', base_port)
+            if is_free is None or not is_free:
+                print(f"   ❌ Порт {base_port} занят на хосте")
+                final_octet += 1
+                continue
+            
+            # Найден свободный октет!
+            print(f"   ✅ Октет {final_octet} свободен")
+            break
+        else:
+            raise RuntimeError(f"Не найдено свободного октета в диапазоне {preferred_octet}–{max_octet}")
+
+        # 4. Формируем переменные
+        base_port = final_octet * 100
+        docker_network_prefix = f"172.{final_octet}"
+
+        # 5. Обновляем глобальные переменные
+        set_global('subnet_octet', final_octet)
+        set_global('port', base_port)
+        set_global('docker_network_prefix', docker_network_prefix)
+
+        # 6. Обновляем переменные окружения
+        os.environ["PORT"] = str(base_port)
+        os.environ["SUBNET_OCTET"] = str(final_octet)
+        os.environ["DOCKER_NETWORK_PREFIX"] = docker_network_prefix
+
+        # 7. Обновляем .env файл
+        if env_path.exists():
+            with open(env_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            updated_lines = []
+            for line in lines:
+                if line.startswith('PORT='):
+                    updated_lines.append(f"PORT={base_port}\n")
+                elif line.startswith('SUBNET_OCTET='):
+                    updated_lines.append(f"SUBNET_OCTET={final_octet}\n")
+                elif line.startswith('DOCKER_NETWORK_PREFIX='):
+                    updated_lines.append(f"DOCKER_NETWORK_PREFIX={docker_network_prefix}\n")
+                else:
+                    updated_lines.append(line)
+            
+            # Добавляем отсутствующие переменные
+            existing_keys = {line.split('=')[0] for line in updated_lines if '=' in line}
+            if 'PORT' not in existing_keys:
+                updated_lines.append(f"PORT={base_port}\n")
+            if 'SUBNET_OCTET' not in existing_keys:
+                updated_lines.append(f"SUBNET_OCTET={final_octet}\n")
+            if 'DOCKER_NETWORK_PREFIX' not in existing_keys:
+                updated_lines.append(f"DOCKER_NETWORK_PREFIX={docker_network_prefix}\n")
+            
+            with open(env_path, 'w', encoding='utf-8') as f:
+                f.writelines(updated_lines)
+            print(f"   💾 Файл .env обновлён")
+
+        print(f"   📌 PORT = {base_port}")
+        print(f"   📌 SUBNET_OCTET = {final_octet}")
+        print(f"   📌 DOCKER_NETWORK_PREFIX = {docker_network_prefix}")
+
+    except Exception as e:
+        print(f"❌ Ошибка определения подсети: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+    print("="*60 + "\n")
+
+    # ========== ДЕВЯТЫЙ ЭТАП: ПЕРВИЧНАЯ НАСТРОЙКА ПРИЛОЖЕНИЯ ==========
     print("\n🔐 ПЕРВИЧНАЯ НАСТРОЙКА ПРИЛОЖЕНИЯ")
     print("="*60)
     
@@ -428,7 +549,7 @@ def main():
     except Exception as e:
         print(f"❌ Ошибка первичной настройки: {e}")
     
-    # ========== ДЕВЯТЫЙ ЭТАП: НАСТРОЙКА ФАЕРВОЛА И ПОРТОВ ==========
+    # ========== ДЕСЯТЫЙ ЭТАП: НАСТРОЙКА ФАЕРВОЛА И ПОРТОВ ==========
     print("\n🔒 НАСТРОЙКА ФАЕРВОЛА И ПОРТОВ")
     print("="*60)
     
@@ -467,25 +588,18 @@ def main():
         print("-"*60)
         FirewallModule.ensure_port_open(8000, 'tcp')
 
-        # Настройка домена, если он указан
-        domain = os.environ.get('DOMAIN', '').strip()
-        if domain:
-            print("\n🌐 НАСТРОЙКА ДОМЕННОГО ДОСТУПА")
-            print("-"*60)
-            FirewallModule.ensure_domain_access(domain, 8000, 'tcp')
-
         print("="*60)
     except Exception as e:
         print(f"❌ Ошибка настройки фаервола: {e}")
     
-    # ========== ДЕСЯТЫЙ ЭТАП: ПРОЦЕССЫ ПЕРЕД ЗАПУСКОМ ==========
+    # ========== ОДИННАДЦАТЫЙ ЭТАП: ПРОЦЕССЫ ПЕРЕД ЗАПУСКОМ ==========
     print("\n" + "=" * 60)
     print("🎯 ГОТОВО К ЗАПУСКУ СЕРВЕРА")
     print("=" * 60)
     
     # Показываем процессы еще раз перед запуском
     print_starter_processes()
-    
+
     # ========== ЗАПУСК РЕЖИМА ==========
     if args.service:
         print("🔧 ЗАПУСК В СЕРВИСНОМ РЕЖИМЕ")

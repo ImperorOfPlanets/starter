@@ -23,6 +23,10 @@ class SystemModule(BaseModule):
     def collect_basic_system_info() -> Dict[str, Any]:
         """Собирает базовую информацию о системе (без зависимостей от внешних утилит)"""
 
+        # 1. СРАЗУ УСТАНАВЛИВАЕМ script_path
+        script_path = Path(sys.argv[0]).absolute().parent
+        set_global('script_path', script_path)
+
         # Проверякем где запущен скрипт в докере или нет
         set_global('running_in_docker', SystemModule.running_in_docker())
 
