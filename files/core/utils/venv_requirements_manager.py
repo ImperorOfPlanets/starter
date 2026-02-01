@@ -277,7 +277,7 @@ class VenvRequirementsManager:
     
     @staticmethod
     def get_venv_dir() -> Path:
-        return get_global('script_path') / "venv"
+        return get_global('starter_path') / "venv"
     
     @staticmethod
     def get_venv_python() -> Optional[Path]:
@@ -644,7 +644,7 @@ class VenvRequirementsManager:
         try:
             # Определяем корень проекта
 
-            reqs_dir = get_global('script_path') / "files" / "requirements"
+            reqs_dir = get_global('starter_path') / "files" / "requirements"
             
             # Получаем информацию об ОС
             os_name = get_global('os', '').lower()
