@@ -1030,18 +1030,12 @@ class DockerModule(BaseModule):
             return False
 
     @staticmethod
-    def generate_compose(docker_dir: Union[str, Path], env_vars: Dict[str, str], pull_from_registry: bool = False, log_path: Optional[Path] = None) -> bool:
+    def generate_compose(env_vars: Dict[str, str], pull_from_registry: bool = False, log_path: Optional[Path] = None) -> bool:
         """
         Генерирует docker-compose.yml на основе шаблона и переменных.
         Универсальная версия для всех платформ.
         """
         try:
-            docker_dir = Path(docker_dir)
-            compose_example = docker_dir / "docker-compose.example"
-            if not compose_example.exists():
-                compose_example = docker_dir / "docker-compose.template"
-            compose_output = docker_dir / "docker-compose.yml"
-
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
                     log_file.write(f"[generate_compose] Starting with env_vars: {list(env_vars.keys())}\n")
@@ -1051,18 +1045,18 @@ class DockerModule(BaseModule):
                         else:
                             log_file.write(f"  {k}={v}\n")
 
-            if not compose_example.exists():
+            if not get_global('docker_compose_example_path').exists():
                 if log_path:
                     with open(log_path, 'a', encoding='utf-8') as log_file:
-                        log_file.write(f"[generate_compose] Compose template not found: {compose_example}\n")
-                logger.error(f"[generate_compose] Compose template not found: {compose_example}")
+                        log_file.write(f"[generate_compose] Compose template not found: {get_global('docker_compose_example_path')}\n")
+                logger.error(f"[generate_compose] Compose template not found: {get_global('docker_compose_example_path')}")
                 return False
 
-            content = compose_example.read_text(encoding='utf-8')
+            content = get_global('docker_compose_example_path').read_text(encoding='utf-8')
             
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write(f"[generate_compose] Read compose template ({compose_example}): {len(content)} chars\n")
+                    log_file.write(f"[generate_compose] Read compose template ({get_global('docker_compose_example_path')}): {len(content)} chars\n")
 
             if pull_from_registry:
                 content = get('docker','remove_build_sections',content)
@@ -1078,10 +1072,10 @@ class DockerModule(BaseModule):
                     log_file.write("[generate_compose] After env substitution\n")
 
             # Убедимся, что папка существует
-            compose_output.parent.mkdir(parents=True, exist_ok=True)
+            get_global('docker_compose_path').parent.mkdir(parents=True, exist_ok=True)
 
             # Сохраняем файл
-            compose_output.write_text(content, encoding='utf-8')
+            get_global('docker_compose_path').write_text(content, encoding='utf-8')
             
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
@@ -1129,9 +1123,7 @@ class DockerModule(BaseModule):
         return variables, lines
 
     @staticmethod
-    def generate_env_content(vars_dict: Dict[str, str],
-                            template_lines: List[Union[str, Tuple[str, str]]],
-                            log_path: Optional[Path] = None) -> str:
+    def generate_env_content(vars_dict: Dict[str, str], template_lines: List[Union[str, Tuple[str, str]]],log_path: Optional[Path] = None) -> str:
         """
         Генерирует содержимое .env файла на основе шаблона и переменных.
         Добавлено логирование для отслеживания изменений переменных.
@@ -1178,20 +1170,17 @@ class DockerModule(BaseModule):
         return '\n'.join(result)
 
     @staticmethod
-    def ensure_docker_env(project_path: Path, log_path: Optional[Path] = None) -> Dict[str, str]:
+    def ensure_docker_env(log_path: Optional[Path] = None) -> Dict[str, str]:
         """
         Создаёт/обновляет .env в project_path на основе .env.example.
         Возвращает итоговый словарь переменных.
         Добавлено логирование для отслеживания изменений переменных.
         """
-        env_example_path = project_path / '.env.example'
-        env_path = project_path / '.env'
-
         if log_path:
             with open(log_path, 'a', encoding='utf-8') as log_file:
-                log_file.write(f"[ensure_docker_env] Starting with project_path: {project_path}\n")
+                log_file.write(f"[ensure_docker_env] Starting with project_path: {get_global('docker_path')}\n")
 
-        if not env_example_path.exists():
+        if not get_global('docker_env_example_path').exists():
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
                     log_file.write("[ensure_docker_env] .env.example not found\n")
@@ -1203,8 +1192,8 @@ class DockerModule(BaseModule):
             with open(log_path, 'a', encoding='utf-8') as log_file:
                 log_file.write(f"[ensure_docker_env] Example variables: {list(example_vars.keys())}\n")
 
-        if env_path.exists():
-            current_vars, _ = get('docker','parse_env_content',env_path.read_text(encoding='utf-8'))
+        if get_global('docker_env_path').exists():
+            current_vars, _ = get('docker','parse_env_content',get_global('docker_env_path').read_text(encoding='utf-8'))
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
                     log_file.write(f"[ensure_docker_env] Current variables: {list(current_vars.keys())}\n")
@@ -1229,7 +1218,7 @@ class DockerModule(BaseModule):
                     log_file.write(f"  {k}={v}\n")
 
         content = get('docker','generate_env_content',merged_vars, example_lines, log_path)
-        env_path.write_text(content, encoding='utf-8')
+        get_global('docker_env_path').write_text(content, encoding='utf-8')
         
         if log_path:
             with open(log_path, 'a', encoding='utf-8') as log_file:
@@ -1238,30 +1227,11 @@ class DockerModule(BaseModule):
         return merged_vars
 
     @staticmethod
-    def read_docker_env(project_path: Path) -> Dict[str, str]:
-        env_path = project_path / '.env'
-        if not env_path.exists():
+    def read_docker_env() -> Dict[str, str]:
+        if not get_global('starter_env_path').exists():
             return {}
-        vars_dict, _ = get('docker','parse_env_content',env_path.read_text(encoding='utf-8'))
+        vars_dict, _ = get('docker','parse_env_content',get_global('starter_env_path').read_text(encoding='utf-8'))
         return vars_dict
-
-    @staticmethod
-    def write_docker_env(project_path: Path, vars_dict: Dict[str, str]):
-        """
-        Перезаписывает .env используя порядок из .env.example если он есть,
-        иначе создаёт .env по порядку vars_dict.
-        """
-        env_example_path = project_path / '.env.example'
-        env_path = project_path / '.env'
-
-        if env_example_path.exists():
-            _, template_lines = get('docker','parse_env_content',env_example_path.read_text(encoding='utf-8'))
-        else:
-            # Создаём шаблонные строки на основе переданного словаря (сохранится порядок vars_dict)
-            template_lines = [(k, f"{k}={v}") for k, v in vars_dict.items()]
-
-        content = get('docker','generate_env_content',vars_dict, template_lines)
-        env_path.write_text(content, encoding='utf-8')
 
     @staticmethod
     def process_port_plus_variables(base_port: int):
@@ -1486,7 +1456,7 @@ class DockerModule(BaseModule):
             'base_port': final_base_port,
             'network_prefix': network_prefix
         }
-    
+
     @staticmethod
     def get_used_subnets() -> List[str]:
         """
