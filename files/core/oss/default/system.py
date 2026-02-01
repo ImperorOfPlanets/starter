@@ -27,6 +27,22 @@ class SystemModule(BaseModule):
         script_path = Path(sys.argv[0]).absolute().parent
         set_global('script_path', script_path)
 
+        docker_path = script_path.parent / 'docker'
+        set_global('docker_path', docker_path)
+
+        code_path = script_path.parent / 'code'
+        set_global('code_path', code_path)
+        
+        set_global('docker_env_path', docker_path / '.env')
+        set_global('docker_env_example_path', docker_path / '.env.example')
+        
+        set_global('docker_compose_path', docker_path / 'docker-compose.yml')
+        set_global('docker_compose_example_path', docker_path / 'docker-compose.example')
+        
+        set_global('starter_env_path', script_path / '.env')
+        set_global('starter_env_example_path', script_path / '.env.example')
+        
+
         # Проверякем где запущен скрипт в докере или нет
         set_global('running_in_docker', SystemModule.running_in_docker())
 

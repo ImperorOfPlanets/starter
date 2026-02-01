@@ -13,12 +13,12 @@ from typing import Dict, List, Optional, Any, Tuple, Union
 from files.core.utils.loader_utils import get
 from files.core.utils.globalVars_utils import get_global, set_global
 from files.core.utils.log_utils import LogManager
+from files.core.utils.registry_manager import RegistryManager
 
 logger = LogManager.get_logger('docker_module')
 
 class DockerModule(BaseModule):
     """Реализация Docker утилит (включая генерацию .env и docker-compose.yml)"""
-
     # ---------------------------
     # Проверки установки Docker
     # ---------------------------
@@ -77,9 +77,9 @@ class DockerModule(BaseModule):
                         return result
 
                 time.sleep(2)
-                docker_installed = DockerModule.check_docker_installed()
+                docker_installed = get('docker','check_docker_installed')
                 set_global('docker_installed', docker_installed)
-                docker_compose_installed = DockerModule.check_docker_compose_installed()
+                docker_compose_installed = get('docker','check_docker_compose_installed')
                 set_global('docker_compose_installed', docker_compose_installed)
 
                 if docker_installed:
@@ -136,7 +136,7 @@ class DockerModule(BaseModule):
                         return result
 
                 time.sleep(2)
-                docker_compose_installed = DockerModule.check_docker_compose_installed()
+                docker_compose_installed = get('docker','check_docker_compose_installed')
                 set_global('docker_compose_installed', docker_compose_installed)
                 if docker_compose_installed:
                     log("Docker Compose installed successfully!")
@@ -250,16 +250,12 @@ class DockerModule(BaseModule):
     def get_images() -> List[Dict]:
         images = []
         try:
-            result = subprocess.run(['docker', 'images', '--format', '{{.ID}}|{{.Repository}}|{{.Tag}}|{{.CreatedSince}}|{{.CreatedAt}}|{{.Size}}'],
-                                    capture_output=True, text=True)
+            result = subprocess.run(['docker', 'images', '--format', '{{.ID}}|{{.Repository}}|{{.Tag}}|{{.CreatedSince}}|{{.CreatedAt}}|{{.Size}}'], capture_output=True, text=True)
             if result.returncode == 0:
                 for line in result.stdout.splitlines():
                     parts = line.split('|')
                     if len(parts) >= 6:
-                        images.append({
-                            'id': parts[0], 'repository': parts[1], 'tag': parts[2],
-                            'created_since': parts[3], 'created_at': parts[4], 'size': parts[5]
-                        })
+                        images.append({ 'id': parts[0], 'repository': parts[1], 'tag': parts[2],'created_since': parts[3], 'created_at': parts[4], 'size': parts[5]})
         except Exception as e:
             logger.error(f"Error getting images: {str(e)}")
         return images
@@ -267,8 +263,7 @@ class DockerModule(BaseModule):
     @staticmethod
     def get_logs(container_id: str, tail: int = 100) -> str:
         try:
-            result = subprocess.run(['docker', 'logs', '--tail', str(tail), container_id],
-                                    capture_output=True, text=True)
+            result = subprocess.run(['docker', 'logs', '--tail', str(tail), container_id], capture_output=True, text=True)
             if result.returncode == 0:
                 return result.stdout
         except Exception as e:
@@ -282,16 +277,12 @@ class DockerModule(BaseModule):
     def get_networks() -> List[Dict]:
         networks = []
         try:
-            result = subprocess.run(['docker', 'network', 'ls', '--format', '{{.ID}}|{{.Name}}|{{.Driver}}|{{.Scope}}|{{.IPv6}}|{{.Internal}}|{{.Created}}'],
-                                    capture_output=True, text=True)
+            result = subprocess.run(['docker', 'network', 'ls', '--format', '{{.ID}}|{{.Name}}|{{.Driver}}|{{.Scope}}|{{.IPv6}}|{{.Internal}}|{{.Created}}'],capture_output=True, text=True)
             if result.returncode == 0:
                 for line in result.stdout.splitlines():
                     parts = line.split('|')
                     if len(parts) >= 7:
-                        networks.append({
-                            'id': parts[0], 'name': parts[1], 'driver': parts[2],
-                            'scope': parts[3], 'ipv6': parts[4], 'internal': parts[5], 'created': parts[6]
-                        })
+                        networks.append({'id': parts[0], 'name': parts[1], 'driver': parts[2],'scope': parts[3], 'ipv6': parts[4], 'internal': parts[5], 'created': parts[6]})
         except Exception as e:
             logger.error(f"Error getting networks: {str(e)}")
         return networks
@@ -382,8 +373,8 @@ class DockerModule(BaseModule):
     # ---------------------------
     @staticmethod
     def set_globals():
-        docker_installed = DockerModule.check_docker_installed()
-        docker_compose_installed = DockerModule.check_docker_compose_installed()
+        docker_installed = get('docker','check_docker_installed')
+        docker_compose_installed = get('docker','check_docker_compose_installed')
         set_global('docker_installed', docker_installed)
         set_global('docker_compose_installed', docker_compose_installed)
 
@@ -460,7 +451,7 @@ class DockerModule(BaseModule):
                     from datetime import datetime, timedelta
 
                     # Определяем домен
-                    domain = "mentoria.local"
+                    domain = "client.local"
                     env_path = docker_path / ".env"
                     if env_path.exists():
                         with open(env_path, 'r', encoding='utf-8') as f:
@@ -537,11 +528,11 @@ class DockerModule(BaseModule):
 
             # Получаем env_vars из текущего .env файла
             logger.info("[run_compose] Loading environment variables from .env...")
-            env_vars = DockerModule.ensure_docker_env(docker_path, log_file_path)
+            env_vars = get('docker','ensure_docker_env',docker_path, log_file_path)
             
             # Генерация compose файла
             logger.info("[run_compose] Generating docker-compose.yml from .env...")
-            if not DockerModule.generate_docker_compose(env_vars, log_file_path):
+            if not get('docker','generate_docker_compose',env_vars, log_file_path):
                 logger.error("[run_compose] Failed to generate docker-compose.yml")
                 return False
 
@@ -1022,12 +1013,12 @@ class DockerModule(BaseModule):
             docker_path.mkdir(parents=True, exist_ok=True)
 
             if env_vars is None:
-                env_vars = DockerModule.ensure_docker_env(docker_path, log_path)
+                env_vars = get('docker','ensure_docker_env',docker_path, log_path)
 
             # Получаем PULL_FROM_REGISTRY из env_vars
             pull_from_registry = env_vars.get("PULL_FROM_REGISTRY", "false").lower() == "true"
 
-            if not DockerModule.generate_compose(docker_path, env_vars, pull_from_registry=pull_from_registry, log_path=log_path):
+            if not get('docker','generate_compose',docker_path, env_vars, pull_from_registry=pull_from_registry, log_path=log_path):
                 return False
 
             return True
@@ -1074,13 +1065,13 @@ class DockerModule(BaseModule):
                     log_file.write(f"[generate_compose] Read compose template ({compose_example}): {len(content)} chars\n")
 
             if pull_from_registry:
-                content = DockerModule.remove_build_sections(content)
+                content = get('docker','remove_build_sections',content)
                 if log_path:
                     with open(log_path, 'a', encoding='utf-8') as log_file:
                         log_file.write("[generate_compose] Removed build sections (pull_from_registry=True)\n")
 
             # Заменяем переменные окружения вне блоков
-            content = DockerModule.replace_env_variables(content, env_vars)
+            content = get('docker','replace_env_variables',content, env_vars)
             
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
@@ -1206,14 +1197,14 @@ class DockerModule(BaseModule):
                     log_file.write("[ensure_docker_env] .env.example not found\n")
             return {}
 
-        example_vars, example_lines = DockerModule.parse_env_content(env_example_path.read_text(encoding='utf-8'))
+        example_vars, example_lines = get('docker','parse_env_content',env_example_path.read_text(encoding='utf-8'))
         
         if log_path:
             with open(log_path, 'a', encoding='utf-8') as log_file:
                 log_file.write(f"[ensure_docker_env] Example variables: {list(example_vars.keys())}\n")
 
         if env_path.exists():
-            current_vars, _ = DockerModule.parse_env_content(env_path.read_text(encoding='utf-8'))
+            current_vars, _ = get('docker','parse_env_content',env_path.read_text(encoding='utf-8'))
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
                     log_file.write(f"[ensure_docker_env] Current variables: {list(current_vars.keys())}\n")
@@ -1237,7 +1228,7 @@ class DockerModule(BaseModule):
                 for k, v in merged_vars.items():
                     log_file.write(f"  {k}={v}\n")
 
-        content = DockerModule.generate_env_content(merged_vars, example_lines, log_path)
+        content = get('docker','generate_env_content',merged_vars, example_lines, log_path)
         env_path.write_text(content, encoding='utf-8')
         
         if log_path:
@@ -1251,7 +1242,7 @@ class DockerModule(BaseModule):
         env_path = project_path / '.env'
         if not env_path.exists():
             return {}
-        vars_dict, _ = DockerModule.parse_env_content(env_path.read_text(encoding='utf-8'))
+        vars_dict, _ = get('docker','parse_env_content',env_path.read_text(encoding='utf-8'))
         return vars_dict
 
     @staticmethod
@@ -1264,12 +1255,12 @@ class DockerModule(BaseModule):
         env_path = project_path / '.env'
 
         if env_example_path.exists():
-            _, template_lines = DockerModule.parse_env_content(env_example_path.read_text(encoding='utf-8'))
+            _, template_lines = get('docker','parse_env_content',env_example_path.read_text(encoding='utf-8'))
         else:
             # Создаём шаблонные строки на основе переданного словаря (сохранится порядок vars_dict)
             template_lines = [(k, f"{k}={v}") for k, v in vars_dict.items()]
 
-        content = DockerModule.generate_env_content(vars_dict, template_lines)
+        content = get('docker','generate_env_content',vars_dict, template_lines)
         env_path.write_text(content, encoding='utf-8')
 
     @staticmethod
@@ -1370,23 +1361,10 @@ class DockerModule(BaseModule):
             'used_ports': List[int]
         }
         """
-        from files.core.utils.loader_utils import get
-        from files.core.utils.globalVars_utils import get_global, set_global
-        from files.core.utils.registry_manager import RegistryManager
-        import os
-
-        logger = LogManager.get_logger('docker_module')
-
-        # --- 1. Определяем пути ---
-        base_dir = Path(get_global('script_path'))
-        root_env_path = base_dir / '.env'
-        docker_dir = base_dir / 'docker'
-        docker_env_path = docker_dir / '.env'
-
-        # --- 2. Читаем желаемый SUBNET_OCTET из корневого .env ---
+        # --- 1. Читаем желаемый SUBNET_OCTET из корневого .env ---
         preferred_octet = 20
-        if root_env_path.exists():
-            with open(root_env_path, 'r', encoding='utf-8') as f:
+        if get_global('starter_env_path').exists():
+            with open(get_global('starter_env_path'), 'r', encoding='utf-8') as f:
                 for line in f:
                     if line.strip().startswith('SUBNET_OCTET='):
                         try:
@@ -1398,7 +1376,7 @@ class DockerModule(BaseModule):
         logger.info(f"Желаемый SUBNET_OCTET: {preferred_octet}")
 
         # --- 3. Получаем занятые октеты из реестра ---
-        used_octets_registry = set(RegistryManager.get_used_octets(exclude_path=base_dir))
+        used_octets_registry = set(RegistryManager.get_used_octets(exclude_path=Path(get_global('script_path'))))
         logger.info(f"Занятые октеты в реестре: {sorted(used_octets_registry)}")
 
         # --- 4. Поиск свободного октета ---
@@ -1419,16 +1397,16 @@ class DockerModule(BaseModule):
             temp_base_port = base_port
             try:
                 # Создаём временный .env в docker/ на основе .env.example
-                if (docker_dir / '.env.example').exists():
-                    DockerModule.ensure_docker_env(docker_dir)
+                if (get_global('docker_env_example_path')).exists():
+                    get('docker','ensure_docker_env',get_global('docker_path'))
                     # Применяем PORT_*_PLUS логику
-                    DockerModule.process_port_plus_variables(temp_base_port)
+                    get('docker','process_port_plus_variables',temp_base_port)
 
                     # Теперь читаем все PORT_* из docker/.env
-                    docker_vars = DockerModule.read_docker_env(docker_dir)
+                    docker_vars = get('docker','read_docker_env',get_global('docker_path'))
                     ports_to_check = []
                     for key, val in docker_vars.items():
-                        if key.startswith('PORT_') and key != 'PORT_BROWSER_PLUS':  # исключаем _PLUS
+                        if key.startswith('PORT_'):
                             try:
                                 port_num = int(val)
                                 ports_to_check.append(port_num)
@@ -1473,8 +1451,8 @@ class DockerModule(BaseModule):
         updated_lines = []
         existing_keys = set()
 
-        if root_env_path.exists():
-            with open(root_env_path, 'r', encoding='utf-8') as f:
+        if get_global('docker_env_path').exists():
+            with open(get_global('docker_env_path'), 'r', encoding='utf-8') as f:
                 lines = f.readlines()
             for line in lines:
                 if '=' in line and not line.strip().startswith('#'):
@@ -1499,19 +1477,15 @@ class DockerModule(BaseModule):
         ensure_line("SUBNET_OCTET", str(final_octet))
         ensure_line("DOCKER_NETWORK_PREFIX", network_prefix)
 
-        with open(root_env_path, 'w', encoding='utf-8') as f:
+        with open(get_global('docker_env_path'), 'w', encoding='utf-8') as f:
             f.writelines(updated_lines)
 
         logger.info(f"✅ Выделена подсеть: octet={final_octet}, base_port={final_base_port}")
         return {
             'octet': final_octet,
             'base_port': final_base_port,
-            'network_prefix': network_prefix,
-            'docker_dir': docker_dir
+            'network_prefix': network_prefix
         }
-    # ----------------------------------------------------
-    # НОВЫЕ ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ ПОДСЕТЯМИ
-    # ----------------------------------------------------
     
     @staticmethod
     def get_used_subnets() -> List[str]:
@@ -1639,7 +1613,7 @@ class DockerModule(BaseModule):
         """
         try:
             # Получаем все подсети
-            all_subnets = DockerModule.get_used_subnets()
+            all_subnets = get('docker','get_used_subnets')
             
             # Фильтруем только 172.XX.0.0/16
             filtered = []
@@ -1663,7 +1637,7 @@ class DockerModule(BaseModule):
         Returns:
             Список занятых октетов, отсортированный по возрастанию
         """
-        used_subnets = DockerModule.get_used_subnets_simple()
+        used_subnets = get('docker','get_used_subnets_simple')
         octets = []
         
         for subnet in used_subnets:
@@ -1711,7 +1685,7 @@ class DockerModule(BaseModule):
                 return False, f"Октет должен быть числом: {octet_str}"
             
             # Проверяем занятость
-            used_octets = DockerModule.get_used_octets()
+            used_octets = get('docker','get_used_octets')
             
             if octet in used_octets:
                 return False, f"Подсеть {subnet} уже используется"
@@ -1736,7 +1710,7 @@ class DockerModule(BaseModule):
         Raises:
             ValueError: Если не найдено свободных подсетей
         """
-        used_octets = DockerModule.get_used_octets()
+        used_octets = get('docker','get_used_octets')
         
         # Ищем свободный октет
         for attempt in range(max_attempts):
@@ -1795,7 +1769,7 @@ class DockerModule(BaseModule):
             new_subnet = f"172.{new_octet}.0.0/16"
             
             # Проверяем, свободна ли новая подсеть
-            used_octets = DockerModule.get_used_octets()
+            used_octets = get('docker','get_used_octets')
             attempts = 0
             
             while new_octet in used_octets and attempts < 50:
@@ -1829,7 +1803,7 @@ class DockerModule(BaseModule):
         """
         try:
             # Проверяем запрошенную подсеть
-            available, message = DockerModule.is_subnet_available(requested_subnet)
+            available, message = get('docker','is_subnet_available',requested_subnet)
             
             if available:
                 logger.info(f"Requested subnet {requested_subnet} is available")
@@ -1839,7 +1813,7 @@ class DockerModule(BaseModule):
                 
                 # Пробуем увеличить
                 try:
-                    new_subnet = DockerModule.increment_subnet(requested_subnet)
+                    new_subnet = get('docker','increment_subnet',requested_subnet)
                     logger.info(f"Using incremented subnet: {new_subnet}")
                     return new_subnet, True
                 except ValueError as e:
@@ -1848,13 +1822,13 @@ class DockerModule(BaseModule):
                     # Ищем любую свободную
                     try:
                         start_octet = int(requested_subnet.split('.')[1])
-                        new_subnet = DockerModule.find_available_subnet(start_octet)
+                        new_subnet = get('docker','find_available_subnet',start_octet)
                         logger.info(f"Found alternative subnet: {new_subnet}")
                         return new_subnet, True
                     except ValueError as e2:
                         # Последняя попытка - найти любую свободную с начала
                         try:
-                            new_subnet = DockerModule.find_available_subnet(20)
+                            new_subnet = get('docker','find_available_subnet',20)
                             logger.info(f"Found free subnet from beginning: {new_subnet}")
                             return new_subnet, True
                         except ValueError:
@@ -1890,9 +1864,7 @@ class DockerModule(BaseModule):
             requested_subnet = f"172.{start_octet}.0.0/16"
             
             # Получаем доступную подсеть
-            final_subnet, was_incremented = DockerModule.get_available_subnet_or_increment(
-                requested_subnet
-            )
+            final_subnet, was_incremented = get('docker','get_available_subnet_or_increment',requested_subnet)
             
             # Извлекаем октет
             final_octet = int(final_subnet.split('.')[1])
@@ -1915,22 +1887,3 @@ class DockerModule(BaseModule):
         except Exception as e:
             logger.error(f"Error generating subnet for {project_name}: {e}")
             raise
-
-    # ----------------------------------------------------
-    # АЛИАСЫ ДЛЯ ПРОСТОГО ИСПОЛЬЗОВАНИЯ
-    # ----------------------------------------------------
-
-    @staticmethod
-    def get_used_networks() -> List[str]:
-        """Алиас для DockerModule.get_used_subnets_simple()"""
-        return DockerModule.get_used_subnets_simple()
-
-    @staticmethod
-    def check_and_increment_subnet(subnet: str) -> str:
-        """Алиас: проверяет подсеть, если занята - увеличивает"""
-        return DockerModule.get_available_subnet_or_increment(subnet)[0]
-
-    @staticmethod
-    def get_free_network() -> str:
-        """Алиас: находит любую свободную подсеть"""
-        return DockerModule.find_available_subnet()

@@ -12,7 +12,6 @@ class PortmanagerModule(BaseModule):
     def is_port_free(port: int, host: str = "127.0.0.1") -> bool:
         """Проверяет, свободен ли TCP-порт на Windows"""
         print ('Сработала WINDOWS')
-
         try:
             # Метод 1: Быстрая проверка через подключение
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
