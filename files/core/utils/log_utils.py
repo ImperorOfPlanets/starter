@@ -13,9 +13,8 @@ class LogManager:
     def initialize(cls, debug_mode=False, service_mode=False):
         if cls._initialized:
             return
-            
-        base_dir = get_global('script_path')
-        log_dir = base_dir / "files" / "logs"
+
+        log_dir = get_global('starter_path') / "files" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         
         # Основной логгер приложения
@@ -50,8 +49,7 @@ class LogManager:
     @classmethod
     def register_log_dir(cls, logger_name, subdirectory):
         """Регистрирует специальную директорию для логгера"""
-        base_dir = get_global('script_path')
-        log_dir = base_dir / "files" / "logs" / subdirectory
+        log_dir = get_global('starter_path') / "files" / "logs" / subdirectory
         log_dir.mkdir(parents=True, exist_ok=True)
         cls._log_dirs[logger_name] = log_dir
     
