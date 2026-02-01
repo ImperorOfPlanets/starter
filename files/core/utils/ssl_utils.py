@@ -11,8 +11,7 @@ def setup_ssl_folder():
     """Создает папку для SSL если ее нет"""
     try:
         # Получаем абсолютный путь к директории скрипта
-        script_dir = get_global('script_path')
-        ssl_dir = script_dir / "files" / "web" / "ssl"
+        ssl_dir = get_global('starter_path') / "files" / "web" / "ssl"
         
         # Создаем папку (если не существует)
         ssl_dir.mkdir(parents=True, exist_ok=True)

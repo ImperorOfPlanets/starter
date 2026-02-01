@@ -22,14 +22,13 @@ def load_modules(refresh: bool = False):
     if _modules_cache and not refresh:
         return _modules_cache
 
-    script_path = Path(get_global("script_path"))
     os_name = get_global("os")
     os_version = get_global("os_version")
     logger.info(f"Текущая ОС: {os_name} {os_version}")
 
     base_categories = [
-        ("oss", script_path / "files" / "core" / "oss"),
-        ("software", script_path / "files" / "core" / "software")
+        ("oss", get_global("starter_path") / "files" / "core" / "oss"),
+        ("software", get_global("starter_path") / "files" / "core" / "software")
     ]
 
     # Словарь для сбора всех реализаций
@@ -273,8 +272,7 @@ def _get_oss_tree() -> List[Tuple[Path, str, Optional[str], int]]:
     Возвращает все файлы реализации в дереве OSS с их метаданными.
     Формат: (путь_к_файлу, os_name, os_version, уровень)
     """
-    script_path = Path(get_global('script_path'))
-    base_dir = script_path / 'files' / 'core' / 'oss'
+    base_dir = get_global('starter_path') / 'files' / 'core' / 'oss'
     items = []
     
     # Глобальные реализации по умолчанию
@@ -306,14 +304,14 @@ def collect_modules_info(refresh: bool = False) -> List[Dict[str, Any]]:
     """
     Собирает полную информацию о всех модулях для всех ОС и реализаций.
     """
-    script_path = str(Path(get_global('script_path'))).lower()
+
     cache = get_global('modules_info_cache') or {}
     files = _get_oss_tree()
     
     # Подпись кеша: хеш всех путей + mtime
     files_state = {str(p): p.stat().st_mtime for p, _, _, _ in files}
     sig = {
-        "script_path": script_path,
+        "starter_path": get_global('starter_path'),
         "files_hash": hash(tuple(sorted(files_state.keys()))),
         "files_count": len(files_state)
     }

@@ -76,7 +76,7 @@ class OSSModuleManager:
             return OSSModuleManager._modules_cache[os_name]
 
         modules = {}
-        base_path = Path(get_global('script_path')) / 'files' / 'core' / 'oss'
+        base_path = Path(get_global('starter_path')) / 'files' / 'core' / 'oss'
 
         # Пути поиска модулей в порядке приоритета
         search_paths = [

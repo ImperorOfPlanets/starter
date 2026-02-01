@@ -81,24 +81,16 @@ def write_env_file(env_path: Path,
 
 def ensure_env_variables():
     """Обновляет .env файл в соответствии с .env.example"""
-    script_path = get_global('script_pat')
-
-    env_path = script_path / 'script_pat'
-    logger.info('.env')
-    
-    env_example_path = script_path / '.env.example'
-    logger.info(env_example_path)
-    
-    if not env_example_path.exists():
+    if not  get_global('starter_env_example_path').exists():
         return
     
-    current_vars = read_env_file(env_path)
-    with open(env_example_path, 'r', encoding='utf-8') as f:
+    current_vars = read_env_file(get_global('starter_env_path'))
+    with open( get_global('starter_env_example_path'), 'r', encoding='utf-8') as f:
         example_content = f.read()
     example_vars, example_lines = parse_env_content(example_content)
     
     merged_vars = {**example_vars, **current_vars}
     content = generate_env_content(merged_vars, example_lines)
     
-    with open(env_path, 'w', encoding='utf-8') as f:
+    with open(get_global('starter_env_path'), 'w', encoding='utf-8') as f:
         f.write(content)

@@ -20,8 +20,7 @@ class ExceptionHandler:
         
         :param app_root: Корневая директория приложения
         """
-        self.app_root = get_global('script_path')
-        self.exceptions_dir = self.app_root / "files" / "logs" / "exceptions"
+        self.exceptions_dir = get_global('starter_path') / "files" / "logs" / "exceptions"
         self.exceptions_dir.mkdir(parents=True, exist_ok=True)
 
     def handle_unhandled_exception(self, exc_type: type, exc_value: BaseException, exc_traceback: Optional[TracebackType]) -> None:

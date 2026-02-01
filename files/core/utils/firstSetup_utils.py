@@ -23,14 +23,11 @@ REQUIRED_ENV_VARS = [
 
 def is_first_run() -> bool:
     """Проверяет, является ли этот запуск первым"""
-    base_dir = get_global('script_path')
-    env_path = base_dir / '.env'
+    logger.info(f"[DEBUG] Проверка .env файла: {get_global('starter_env_path').resolve()}")
 
-    logger.info(f"[DEBUG] Проверка .env файла: {env_path.resolve()}")
-
-    if not env_path.exists():
+    if not get_global('starter_env_path').exists():
         return True
-    current_vars = read_env_file(env_path)
+    current_vars = read_env_file(get_global('starter_env_path'))
     return not all(var in current_vars for var in REQUIRED_ENV_VARS)
 
 def generate_credentials() -> Dict[str, str]:
@@ -57,29 +54,25 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
     if not is_first_run():
         return False, None
 
-    logger.info(f"[DEBUG] script_path глобальная переменная: {get_global('script_path')}")
-    # Получаем путь относительно запускаемого скрипта
-    base_dir = get_global('script_path')
-    env_path = base_dir / '.env'
-    env_example_path = base_dir / '.env.example'
-    logger.info(f"[DEBUG] Путь для .env: {env_path}")
-    logger.info(f"[DEBUG] Путь для .env.example: {env_example_path}")
+    logger.info(f"[DEBUG] starter_path глобальная переменная: {get_global('starter_path')}")
+    logger.info(f"[DEBUG] Путь для .env: {get_global('starter_env_path')}")
+    logger.info(f"[DEBUG] Путь для .env.example: {get_global('starter_env_example_path')}")
 
     # Выводим информацию о создании файла
     print(f"\n{'='*50}")
     print("ВЫПОЛНЕНИЕ ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ")
-    print(f"Создаем файл конфигурации: {env_path}")
-    print(f"Используем шаблон: {env_example_path}")
+    print(f"Создаем файл конфигурации: {get_global('starter_env_path')}")
+    print(f"Используем шаблон: {get_global('starter_env_example_path')}")
     print(f"{'='*50}\n")
 
-    if not env_example_path.exists():
-        print(f"Файл шаблона .env.example не найден в {base_dir}")
+    if not get_global('starter_env_example_path').exists():
+        print(f"Файл шаблона .env.example не найден в {get_global('starter_path')}")
         return False, None
 
     # Выводим информацию о создании файла
-    print(f"\nСоздаем файл конфигурации: {env_path}")
+    print(f"\nСоздаем файл конфигурации: {get_global('starter_env_path')}")
 
-    with open(env_example_path, 'r', encoding='utf-8') as f:
+    with open(get_global('starter_env_example_path'), 'r', encoding='utf-8') as f:
         example_content = f.read()
     
     example_vars, example_lines = parse_env_content(example_content)
@@ -131,16 +124,14 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
         'ADMIN_PASSWORD_HASH': credentials['password_hash'],
         'APP_SECRET_KEY': credentials['app_secret_key'],
         'TYPE_SERVER': server_type,
-        'PORT': str(default_port),
         'DOMAIN': domain_name if domain_name else '',
     })
 
     # УСТАНАВЛИВАЕМ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ - ДОБАВЛЕНО
-    set_global('port', default_port)
     set_global('server_type', server_type)
     set_global('language', lang_code)
 
-    with open(env_path, 'w', encoding='utf-8') as f:
+    with open(get_global('starter_env_path'), 'w', encoding='utf-8') as f:
         f.write(generate_env_content(example_vars, example_lines))
 
     if interactive:
@@ -150,7 +141,6 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
         print("\n=== Настройка завершена ===")
         print(f"Язык интерфейса: {credentials['language']}")
         print(f"Тип сервера: {server_name}")
-        print(f"Порт: {default_port}")
         print(f"Логин: {credentials['login']}")
         print(f"Пароль: {credentials['password']} (сохраните этот пароль!)")
         print("="*40)
@@ -161,9 +151,8 @@ def first_run_setup(interactive: bool = True) -> Tuple[bool, Optional[Dict[str, 
         'password': credentials['password'],
         'language': credentials['language'],
         'app_secret_key': credentials['app_secret_key'],
-        'server_type': server_type,  # ДОБАВЛЕНО
-        'port': default_port,         # ДОБАВЛЕНО
-        'domain': domain_name if domain_name else ''  # ДОБАВЛЕНО
+        'server_type': server_type,
+        'domain': domain_name if domain_name else ''
     }
 
 def get_available_server_types():
@@ -224,9 +213,9 @@ def get_server_url() -> list:
 
     urls = []
     if domain:
-        urls.append(f"https://{domain}:{docker_port}")
+        urls.append(f"https://{domain}:{get_global('PORT')}")
     if ips:
-        urls.extend([f"https://{ip}:{docker_port}" for ip in ips])
+        urls.extend([f"https://{ip}:{get_global('PORT')}" for ip in ips])
 
     return urls
 

@@ -20,9 +20,8 @@ def configure_app() -> Flask:
         Flask: настроенное Flask приложение
     """
     # Получаем абсолютный путь к директории с шаблонами
-    base_dir = get_global('script_path')
-    templates_path = str(base_dir / 'files' / 'web' / 'templates')
-    static_path = str(base_dir / 'files' / 'web' / 'public')
+    templates_path = str(get_global('starter_path') / 'files' / 'web' / 'templates')
+    static_path = str(get_global('starter_path') / 'files' / 'web' / 'public')
 
     app = Flask(
         __name__,
@@ -33,7 +32,7 @@ def configure_app() -> Flask:
     logger = LogManager.get_logger('flask_app')
 
     # Считываем секретный ключ
-    env_vars = read_env_file(get_global('script_path') / '.env')
+    env_vars = read_env_file(get_global('starter_env_path'))
     app.secret_key = env_vars.get('APP_SECRET_KEY', secrets.token_hex(32))
     logger.info("Устанавливаемый ключ")
     logger.info(app.secret_key)

@@ -276,7 +276,7 @@ def start_project(data, session):
     try:
         # Записываем результат в файл
         log_file_name = f"start_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-        sp = get_global('script_path')
+        sp = get_global('starter_path')
         starts_log_dir = sp / 'files' / 'logs' / 'starts'
         log_file = starts_log_dir / log_file_name
         
@@ -320,7 +320,7 @@ def get_project_logs(data, session):
             'success': False
         })
 
-    sp = get_global('script_path')
+    sp = get_global('starter_path')
     starts_log_dir = sp / 'files' / 'logs' / 'starts'
     log_file = starts_log_dir / log_file_name
     
@@ -363,7 +363,7 @@ def download_project_logs(data, session):
     if not log_file_name:
         return "Log file name required", 400
     
-    sp = get_global('script_path')
+    sp = get_global('starter_path')
     starts_log_dir = sp / 'files' / 'logs' / 'starts'
     log_file = starts_log_dir / log_file_name
     
@@ -384,7 +384,7 @@ def download_project_logs(data, session):
 def get_launch_history(data, session):
     """Получение истории запусков"""
     try:
-        sp = get_global('script_path')
+        sp = get_global('starter_path')
         starts_log_dir = sp / 'files' / 'logs' / 'starts'
         
         if not starts_log_dir.exists():
@@ -427,7 +427,7 @@ def delete_log_file(data, session):
         if not log_file_name:
             return jsonify({'status': 'error', 'message': 'Log file name required'})
         
-        sp = get_global('script_path')
+        sp = get_global('starter_path')
         starts_log_dir = sp / 'files' / 'logs' / 'starts'
         log_file = starts_log_dir / log_file_name
         

@@ -5,12 +5,18 @@ import requests
 import hashlib
 import sys
 import logging
+
+from flask import jsonify
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from fnmatch import fnmatch
 
+from files.core.utils.loader_utils import get
 from files.core.utils.globalVars_utils import get_global
+from files.core.utils.log_utils import LogManager
+
+logger = LogManager.get_logger()
 
 class UpdatesModule:
     DEFAULT_CONFIG = {
@@ -27,9 +33,9 @@ class UpdatesModule:
     @staticmethod
     def get_updates_config() -> Dict[str, Any]:
         config = UpdatesModule.DEFAULT_CONFIG.copy()
-        script_path = Path(get_global('script_path'))
-        base_updates_dir = script_path / 'files' / 'update'
-        logs_dir = script_path / 'files' / 'logs' / 'update'
+        starter_path = Path(get_global('starter_path'))
+        base_updates_dir = starter_path / 'files' / 'update'
+        logs_dir = starter_path / 'files' / 'logs' / 'update'
         base_updates_dir.mkdir(parents=True, exist_ok=True)
         logs_dir.mkdir(parents=True, exist_ok=True)
         config['BASE_UPDATES_DIR'] = str(base_updates_dir)

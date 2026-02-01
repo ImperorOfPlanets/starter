@@ -21,7 +21,7 @@ def get_modules_index(refresh: bool = False) -> List[Dict[str, Any]]:
 def get_current_sections_in_panel():
     sections_in_control_panel = []
     
-    path = get_global('script_path')
+    path = get_global('starter_path')
     sections_dir = path / 'files' / 'web' / 'sections'
     
     # Добавим отладочную информацию

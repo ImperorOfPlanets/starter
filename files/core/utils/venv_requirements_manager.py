@@ -510,7 +510,7 @@ class VenvRequirementsManager:
                 return False
 
             # Формируем команду для запуска
-            cmd_parts = [str(venv_python), str(get_global('starter_path'))]
+            cmd_parts = [str(venv_python), str(get_global('script_path'))]
             
             # Добавляем остальные аргументы (кроме --new)
             for arg in sys.argv[1:]:

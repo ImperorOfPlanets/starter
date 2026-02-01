@@ -281,11 +281,8 @@ class DockerConfigValidator:
             errors.append("docker-compose не найден в PATH")
 
         # Ищем и валидируем docker-compose файлы
-        script_path = Path(get_global('script_path'))
-        docker_dir = script_path / 'docker'
-
-        if docker_dir.exists():
-            compose_files = list(docker_dir.glob('docker-compose*.yml')) + list(docker_dir.glob('docker-compose*.yaml'))
+        if get_global('docker_path').exists():
+            compose_files = list(get_global('docker_path').glob('docker-compose*.yml')) + list(get_global('docker_path').glob('docker-compose*.yaml'))
 
             if not compose_files:
                 errors.append("Не найдены файлы docker-compose.yml в директории docker")
@@ -299,7 +296,7 @@ class DockerConfigValidator:
 
             # Ищем и валидируем Dockerfiles
             dockerfiles = []
-            for root, dirs, files in os.walk(docker_dir):
+            for root, dirs, files in os.walk(get_global('docker_path')):
                 for file in files:
                     if file.lower() == 'dockerfile':
                         dockerfiles.append(Path(root) / file)
@@ -324,5 +321,5 @@ class DockerConfigValidator:
             'valid': is_valid,
             'errors': errors,
             'timestamp': datetime.datetime.now().isoformat(),
-            'docker_dir': str(Path(get_global('script_path')) / 'docker')
+            'docker_dir': str(get_global('docker_path'))
         }

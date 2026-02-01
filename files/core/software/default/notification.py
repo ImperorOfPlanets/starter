@@ -15,8 +15,7 @@ class NotificationModule:
 
     @staticmethod
     def _get_env_path() -> Path:
-        script_path = Path(get_global("script_path")) if 'get_global' in globals() else Path('.')
-        return script_path / ".env"
+        return get_global("starter_path") / ".env"
 
     @staticmethod
     def read_env_file(env_path: Path) -> dict:

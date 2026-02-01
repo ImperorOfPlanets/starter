@@ -139,19 +139,19 @@ class ServiceModule(BaseModule):
                 log("Starting starter-service installation...")
 
                 # Используем глобальные переменные для определения путей
-                script_path = get_global('script_path')
+                starter_path = get_global('starter_path')
                 python_path = get_global('python_path', sys.executable)
                 venv_path = get_global('venv_path')
                 
-                log(f"Script path: {script_path}")
+                log(f"Script path: {starter_path}")
                 log(f"Python path: {python_path}")
                 log(f"Venv path: {venv_path}")
 
                 # Проверяем существование путей
-                if not os.path.exists(script_path / 'starter.py'):
-                    log(f"ERROR: starter.py not found at {script_path}/starter.py")
+                if not os.path.exists(starter_path / 'starter.py'):
+                    log(f"ERROR: starter.py not found at {starter_path}/starter.py")
                     result['status'] = 'error'
-                    result['message'] = f"starter.py not found at {script_path}"
+                    result['message'] = f"starter.py not found at {starter_path}"
                     return result
                 
                 if not os.path.exists(python_path):
@@ -168,9 +168,9 @@ class ServiceModule(BaseModule):
     [Service]
     Type=simple
     User=root
-    WorkingDirectory={script_path}
+    WorkingDirectory={starter_path}
     Environment=PATH={venv_path}/bin:{os.environ.get('PATH', '')}
-    ExecStart={python_path} {script_path}/starter.py --service
+    ExecStart={python_path} {starter_path}/starter.py --service
     Restart=always
     RestartSec=5
     StandardOutput=journal
@@ -339,12 +339,12 @@ class ServiceModule(BaseModule):
                 result['service_permissions'] = oct(os.stat(service_path).st_mode)[-3:]
             
             # Проверяем пути
-            script_path = get_global('script_path')
+            starter_path = get_global('starter_path')
             python_path = get_global('python_path', sys.executable)
             result['paths'] = {
-                'script_path': str(script_path),
+                'starter_path': str(starter_path),
                 'python_path': python_path,
-                'py_exists': os.path.exists(script_path / 'starter.py'),
+                'py_exists': os.path.exists(starter_path / 'starter.py'),
                 'python_executable': os.path.exists(python_path)
             }
         

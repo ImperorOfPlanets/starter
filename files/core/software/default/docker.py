@@ -401,12 +401,7 @@ class DockerModule(BaseModule):
         orig_handlers = []
         orig_level = logger.level
         try:
-            docker_path = Path(get_global("docker_path"))
-            compose_file = docker_path / "docker-compose.yml"
-
-            sp = get_global('script_path')
-            script_path = Path(sp) if sp else Path.cwd()
-            starts_log_dir = script_path / 'files' / 'logs' / 'starts'
+            starts_log_dir = get_global('starter_path') / 'files' / 'logs' / 'starts'
             starts_log_dir.mkdir(parents=True, exist_ok=True)
 
             # если передан log_path – используем его, иначе создаём новый по дате
@@ -433,7 +428,7 @@ class DockerModule(BaseModule):
             logger.info(f"[run_compose] ===== START DOCKER COMPOSE =====")
             # ==================== АВТОГЕНЕРАЦИЯ SSL СЕРТИФИКАТОВ (ЧИСТЫЙ PYTHON) ====================
             logger.info("[run_compose] Проверка и автогенерация SSL сертификатов (на Python)...")
-            certs_dir = docker_path / "configs" / "nginx" / "certs"
+            certs_dir = get_global('docker_path') / "configs" / "nginx" / "certs"
             fullchain_path = certs_dir / "fullchain.pem"
             privkey_path = certs_dir / "privkey.pem"
 
@@ -452,9 +447,8 @@ class DockerModule(BaseModule):
 
                     # Определяем домен
                     domain = "client.local"
-                    env_path = docker_path / ".env"
-                    if env_path.exists():
-                        with open(env_path, 'r', encoding='utf-8') as f:
+                    if get_global('docker_env_path').exists():
+                        with open(get_global('docker_env_path'), 'r', encoding='utf-8') as f:
                             for line in f:
                                 if line.startswith("NGINX_DOMAIN="):
                                     val = line.split("=", 1)[1].strip().strip('"\'')
@@ -522,13 +516,13 @@ class DockerModule(BaseModule):
             else:
                 logger.info("[run_compose] Сертификаты уже существуют — используем их")
             # =========================================================================
-            logger.info(f"[run_compose] Docker path: {docker_path}")
-            logger.info(f"[run_compose] Absolute path: {docker_path.absolute()}")
-            logger.info(f"[run_compose] Compose file exists: {compose_file.exists()}")
+            logger.info(f"[run_compose] Docker path: {get_global('docker_path')}")
+            logger.info(f"[run_compose] Absolute path: {get_global('docker_path').absolute()}")
+            logger.info(f"[run_compose] Compose file exists: {get_global('docker_compose_path').exists()}")
 
             # Получаем env_vars из текущего .env файла
             logger.info("[run_compose] Loading environment variables from .env...")
-            env_vars = get('docker','ensure_docker_env',docker_path, log_file_path)
+            env_vars = get('docker','ensure_docker_env',get_global('docker_path'), log_file_path)
             
             # Генерация compose файла
             logger.info("[run_compose] Generating docker-compose.yml from .env...")
@@ -537,13 +531,13 @@ class DockerModule(BaseModule):
                 return False
 
             # Проверяем что compose файл создался
-            if compose_file.exists():
-                compose_size = compose_file.stat().st_size
+            if get_global('docker_compose_path').exists():
+                compose_size = get_global('docker_compose_path').stat().st_size
                 logger.info(f"[run_compose] Compose file generated: {compose_size} bytes")
                 
                 # Выводим первые несколько строк для отладки
                 try:
-                    with open(compose_file, 'r', encoding='utf-8') as f:
+                    with open(get_global('docker_compose_path'), 'r', encoding='utf-8') as f:
                         lines = f.readlines()
                         logger.info(f"[run_compose] First 20 lines of docker-compose.yml:")
                         for i, line in enumerate(lines[:20], 1):
@@ -569,20 +563,14 @@ class DockerModule(BaseModule):
             # Проверяем доступность Docker
             logger.info("[run_compose] Checking Docker availability...")
             try:
-                docker_info = subprocess.run(["docker", "info"], 
-                                            capture_output=True, 
-                                            text=True, 
-                                            check=False)
+                docker_info = subprocess.run(["docker", "info"], capture_output=True, text=True, check=False)
                 if docker_info.returncode != 0:
                     logger.error(f"[run_compose] Docker is not available: {docker_info.stderr}")
                     
                     # Пробуем запустить Docker
                     logger.info("[run_compose] Trying to start Docker...")
                     if platform.system() == 'Windows':
-                        start_result = subprocess.run(['net', 'start', 'docker'], 
-                                                    capture_output=True, 
-                                                    text=True,
-                                                    check=False)
+                        start_result = subprocess.run(['net', 'start', 'docker'], capture_output=True, text=True,check=False)
                         if start_result.returncode != 0:
                             logger.error(f"[run_compose] Failed to start Docker: {start_result.stderr}")
                             return False
@@ -607,14 +595,14 @@ class DockerModule(BaseModule):
             # 1. Очищаем старые контейнеры и сети
             # -------------------------------
             logger.info("[run_compose] Cleaning up old containers...")
-            down_cmd = compose_cmd + ["-f", str(compose_file), "down", "--remove-orphans"]
+            down_cmd = compose_cmd + ["-f", str(get_global('docker_compose_path')), "down", "--remove-orphans"]
             logger.info(f"[run_compose] Running: {' '.join(down_cmd)}")
-            logger.info(f"[run_compose] Working directory: {docker_path}")
+            logger.info(f"[run_compose] Working directory: {get_global('docker_path')}")
             
             try:
                 down_process = subprocess.run(
                     down_cmd, 
-                    cwd=str(docker_path), 
+                    cwd=str(get_global('docker_path')), 
                     capture_output=True,
                     text=True,
                     check=False
@@ -654,8 +642,8 @@ class DockerModule(BaseModule):
             try:
                 logger.info("[run_compose] Checking existing images...")
                 images_result = subprocess.run(
-                    compose_cmd + ["-f", str(compose_file), "images", "-q"],
-                    cwd=str(docker_path), 
+                    compose_cmd + ["-f", str(get_global('docker_compose_path')), "images", "-q"],
+                    cwd=str(get_global('docker_path')), 
                     capture_output=True, 
                     text=True, 
                     check=False
@@ -679,14 +667,14 @@ class DockerModule(BaseModule):
             # 3. Запуск docker-compose с билдом
             # -------------------------------
             logger.info("[run_compose] Building Docker images...")
-            #build_cmd = compose_cmd + ["-f", str(compose_file), "build", "--no-cache", "--pull"]
-            build_cmd = compose_cmd + ["-f", str(compose_file), "build"]
+            #build_cmd = compose_cmd + ["-f", str(get_global('docker_compose_path')), "build", "--no-cache", "--pull"]
+            build_cmd = compose_cmd + ["-f", str(get_global('docker_compose_path')), "build"]
             logger.info(f"[run_compose] Build command: {' '.join(build_cmd)}")
             
             try:
                 build_process = subprocess.Popen(
                     build_cmd,
-                    cwd=str(docker_path),
+                    cwd=str(get_global('docker_path')),
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     bufsize=1,
@@ -716,13 +704,13 @@ class DockerModule(BaseModule):
             # 4. Запуск docker-compose в detached mode
             # -------------------------------
             logger.info("[run_compose] Starting docker-compose services...")
-            up_cmd = compose_cmd + ["-f", str(compose_file), "up", "-d", "--force-recreate"]
+            up_cmd = compose_cmd + ["-f", str(get_global('docker_compose_path')), "up", "-d", "--force-recreate"]
             logger.info(f"[run_compose] Up command: {' '.join(up_cmd)}")
             
             try:
                 up_process = subprocess.Popen(
                     up_cmd,
-                    cwd=str(docker_path),
+                    cwd=str(get_global('docker_path')),
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     bufsize=1,
@@ -744,10 +732,10 @@ class DockerModule(BaseModule):
                     # Показываем логи контейнеров при ошибке
                     try:
                         logger.info("[run_compose] Checking container logs for errors...")
-                        ps_cmd = compose_cmd + ["-f", str(compose_file), "ps", "-q"]
+                        ps_cmd = compose_cmd + ["-f", str(get_global('docker_compose_path')), "ps", "-q"]
                         ps_result = subprocess.run(
                             ps_cmd, 
-                            cwd=str(docker_path), 
+                            cwd=str(get_global('docker_path')), 
                             capture_output=True, 
                             text=True, 
                             check=False
@@ -784,10 +772,10 @@ class DockerModule(BaseModule):
             time.sleep(2)
             
             try:
-                ps_cmd = compose_cmd + ["-f", str(compose_file), "ps", "--all"]
+                ps_cmd = compose_cmd + ["-f", str(get_global('docker_compose_path')), "ps", "--all"]
                 ps_result = subprocess.run(
                     ps_cmd, 
-                    cwd=str(docker_path), 
+                    cwd=str(get_global('docker_path')), 
                     capture_output=True, 
                     text=True, 
                     check=False
@@ -808,10 +796,10 @@ class DockerModule(BaseModule):
             # -------------------------------
             logger.info("[run_compose] Showing startup logs (last 20 lines)...")
             try:
-                logs_cmd = compose_cmd + ["-f", str(compose_file), "logs", "--tail", "20"]
+                logs_cmd = compose_cmd + ["-f", str(get_global('docker_compose_path')), "logs", "--tail", "20"]
                 logs_process = subprocess.Popen(
                     logs_cmd,
-                    cwd=str(docker_path),
+                    cwd=str(get_global('docker_path')),
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     bufsize=1,
@@ -1079,7 +1067,7 @@ class DockerModule(BaseModule):
             
             if log_path:
                 with open(log_path, 'a', encoding='utf-8') as log_file:
-                    log_file.write(f"[generate_compose] docker-compose.yml generated at {compose_output}\n")
+                    log_file.write(f"[generate_compose] docker-compose.yml generated at {get_global('docker_compose_path')}\n")
                     # Логируем первые несколько строк для проверки
                     lines = content.split('\n')[:10]
                     log_file.write(f"[generate_compose] First 10 lines:\n")
@@ -1186,7 +1174,7 @@ class DockerModule(BaseModule):
                     log_file.write("[ensure_docker_env] .env.example not found\n")
             return {}
 
-        example_vars, example_lines = get('docker','parse_env_content',env_example_path.read_text(encoding='utf-8'))
+        example_vars, example_lines = get('docker','parse_env_content',get_global('docker_compose_example_path').read_text(encoding='utf-8'))
         
         if log_path:
             with open(log_path, 'a', encoding='utf-8') as log_file:
@@ -1470,22 +1458,12 @@ class DockerModule(BaseModule):
         try:
             # 1. Проверяем существующие сети Docker
             try:
-                result = subprocess.run(
-                    ['docker', 'network', 'ls', '-q'],
-                    capture_output=True,
-                    text=True,
-                    check=True
-                )
+                result = subprocess.run(['docker', 'network', 'ls', '-q'],capture_output=True,text=True,check=True)
                 
                 network_ids = result.stdout.strip().split()
                 for net_id in network_ids:
                     try:
-                        inspect_result = subprocess.run(
-                            ['docker', 'network', 'inspect', net_id],
-                            capture_output=True,
-                            text=True,
-                            check=True
-                        )
+                        inspect_result = subprocess.run(['docker', 'network', 'inspect', net_id],capture_output=True,text=True,check=True)
                         if inspect_result.returncode == 0:
                             networks = json.loads(inspect_result.stdout)
                             for network in networks:
@@ -1503,22 +1481,12 @@ class DockerModule(BaseModule):
             
             # 2. Проверяем запущенные контейнеры
             try:
-                result = subprocess.run(
-                    ['docker', 'ps', '-a', '--format', '{{.ID}}'],
-                    capture_output=True,
-                    text=True,
-                    check=True
-                )
+                result = subprocess.run(['docker', 'ps', '-a', '--format', '{{.ID}}'],capture_output=True,text=True,check=True)
                 
                 container_ids = result.stdout.strip().split()
                 for container_id in container_ids:
                     try:
-                        inspect_result = subprocess.run(
-                            ['docker', 'inspect', container_id],
-                            capture_output=True,
-                            text=True,
-                            check=True
-                        )
+                        inspect_result = subprocess.run(['docker', 'inspect', container_id],capture_output=True,text=True,check=True)
                         if inspect_result.returncode == 0:
                             container = json.loads(inspect_result.stdout)[0]
                             if 'NetworkSettings' in container and container['NetworkSettings']['Networks']:
@@ -1536,39 +1504,21 @@ class DockerModule(BaseModule):
             except Exception as e:
                 logger.warning(f"Error checking containers: {e}")
             
-            # 3. Ищем в docker-compose файлах в текущей директории и родительских
-            try:
-                current_dir = Path.cwd()
-                search_dirs = [
-                    current_dir,
-                    current_dir.parent,
-                    current_dir.parent.parent if current_dir.parent.parent else None
-                ]
-                
-                for search_dir in filter(None, search_dirs):
-                    for compose_file in search_dir.rglob("docker-compose*.yml"):
-                        try:
-                            content = compose_file.read_text(encoding='utf-8', errors='ignore')
-                            # Ищем подсети 172.XX.0.0/16
-                            pattern = r'172\.(\d{1,3})\.0\.0/16'
-                            matches = re.findall(pattern, content)
-                            for octet in matches:
-                                if octet.isdigit() and 0 <= int(octet) <= 255:
-                                    subnet = f"172.{octet}.0.0/16"
-                                    used_subnets.add(subnet)
-                        except Exception:
-                            continue
-            except Exception as e:
-                logger.warning(f"Error scanning compose files: {e}")
+
+            content = get_global('docker_compose_path').read_text(encoding='utf-8', errors='ignore')
+            # Ищем подсети 172.XX.0.0/16
+            pattern = r'172\.(\d{1,3})\.0\.0/16'
+            matches = re.findall(pattern, content)
+            for octet in matches:
+                if octet.isdigit() and 0 <= int(octet) <= 255:
+                    subnet = f"172.{octet}.0.0/16"
+                    used_subnets.add(subnet)
             
         except Exception as e:
             logger.error(f"Unexpected error in get_used_subnets: {e}")
         
         # Сортируем по второму октету
-        sorted_subnets = sorted(
-            list(used_subnets),
-            key=lambda x: int(x.split('.')[1]) if len(x.split('.')) > 1 else 0
-        )
+        sorted_subnets = sorted(list(used_subnets),key=lambda x: int(x.split('.')[1]) if len(x.split('.')) > 1 else 0)
         
         logger.debug(f"Found {len(sorted_subnets)} used subnets: {sorted_subnets}")
         return sorted_subnets
