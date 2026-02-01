@@ -1,26 +1,27 @@
 """
 Управление виртуальным окружением и зависимостями
 """
-import os
-import sys
-import subprocess
-import platform
-import venv
-import time
-from pathlib import Path
-import shutil
-from typing import Optional, Tuple, List, Dict
-import tempfile
 import argparse
 import datetime
+import os
+import platform
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import venv
+
+
+from pathlib import Path
+from typing import Optional, Tuple, Dict
 
 from files.core.utils.globalVars_utils import get_global, set_global
 from files.core.utils.log_utils import LogManager
 
 class VenvRequirementsManager:
     """Менеджер виртуального окружения и зависимостей"""
-    
-    DEFAULT_PORT = 8000
+
     _is_installation_process = False  # Флаг, что мы в процессе установки
     
     @staticmethod
@@ -259,22 +260,12 @@ class VenvRequirementsManager:
     def parse_args():
         """Парсит аргументы командной строки"""
         parser = argparse.ArgumentParser(add_help=False)
-        parser.add_argument('--port', type=int, default=VenvRequirementsManager.DEFAULT_PORT)
         parser.add_argument('--update', action='store_true')
         
         # Парсим только известные аргументы, чтобы не конфликтовать с другими парсерами
         args, _ = parser.parse_known_args()
         return args
-    
-    @staticmethod
-    def get_port() -> int:
-        """Получает порт из аргументов или использует дефолтный"""
-        try:
-            args = VenvRequirementsManager.parse_args()
-            return args.port
-        except:
-            return VenvRequirementsManager.DEFAULT_PORT
-    
+
     @staticmethod
     def in_venv() -> bool:
         """Проверяет, находится ли скрипт в виртуальном окружении"""
@@ -286,8 +277,7 @@ class VenvRequirementsManager:
     
     @staticmethod
     def get_venv_dir() -> Path:
-        script_path = get_global('script_path')
-        return script_path / "venv"
+        return get_global('script_path') / "venv"
     
     @staticmethod
     def get_venv_python() -> Optional[Path]:
@@ -314,18 +304,11 @@ class VenvRequirementsManager:
     def create_venv() -> Tuple[bool, str]:
         """Создает виртуальное окружение с учетом порта"""
         try:
-            script_path = get_global('script_path')
             venv_dir = VenvRequirementsManager.get_venv_dir()
-            port = VenvRequirementsManager.get_port()
             
             print("\n" + "═" * 60)
             print("🔧 ЭТАП 1: СОЗДАНИЕ ВИРТУАЛЬНОГО ОКРУЖЕНИЯ")
             print("═" * 60)
-            
-            # Показываем информацию о порте
-            if port != VenvRequirementsManager.DEFAULT_PORT:
-                print(f"📡 Используется порт: {port}")
-                print(f"📁 Папка venv: {venv_dir.name}")
             
             # Удаляем старый venv если он есть
             if venv_dir.exists():
@@ -363,11 +346,7 @@ class VenvRequirementsManager:
             venv_python = VenvRequirementsManager.get_venv_python()
             if venv_python:
                 print(f"🐍 Python в venv: {venv_python}")
-            
-            # Сохраняем информацию о порте в файл для будущих запусков
-            port_file = venv_dir / ".port"
-            port_file.write_text(str(port))
-            
+
             return True, "Venv создан успешно"
             
         except Exception as e:
@@ -387,8 +366,7 @@ class VenvRequirementsManager:
             requirements_path = VenvRequirementsManager.find_requirements()
             if not requirements_path:
                 return False, "❌ Не найден файл requirements.txt"
-            
-            port = VenvRequirementsManager.get_port()
+
             print("\n" + "═" * 60)
             print(f"📦 ЭТАП 2: УСТАНОВКА ЗАВИСИМОСТЕЙ В VENV")
             print("═" * 60)
@@ -523,11 +501,6 @@ class VenvRequirementsManager:
             return False, f"Критическая ошибка: {str(e)}"
     
     @staticmethod
-    def install_requirements() -> Tuple[bool, str]:
-        """Устанавливает зависимости в виртуальном окружении"""
-        return VenvRequirementsManager.install_requirements_with_progress()
-    
-    @staticmethod
     def restart_in_venv():
         """Показывает команду для запуска в venv и завершает работу"""
         try:
@@ -535,17 +508,9 @@ class VenvRequirementsManager:
             if not venv_python:
                 print("❌ Не найден Python в venv")
                 return False
-            
-            # Получаем аргументы
-            script_path = Path(sys.argv[0]).resolve()
-            port = VenvRequirementsManager.get_port()
-            
+
             # Формируем команду для запуска
-            cmd_parts = [str(venv_python), str(script_path)]
-            
-            # Добавляем порт если не стандартный
-            if port != VenvRequirementsManager.DEFAULT_PORT:
-                cmd_parts.append(f"--port={port}")
+            cmd_parts = [str(venv_python), str(get_global('starter_path'))]
             
             # Добавляем остальные аргументы (кроме --new)
             for arg in sys.argv[1:]:
@@ -568,11 +533,11 @@ class VenvRequirementsManager:
                 print("\n📋 АЛЬТЕРНАТИВНЫЕ СПОСОБЫ ЗАПУСКА:")
                 print("  1. Активировать venv и запустить:")
                 print(f"     {venv_python.parent}\\activate")
-                print(f"     python {script_path.name}")
+                print(f"     python {get_global('script_path').name}")
                 
                 print("\n  2. Использовать activate.bat:")
                 print(f"     call {venv_python.parent}\\activate.bat")
-                print(f"     python {script_path.name}")
+                print(f"     python {get_global('script_path').name}")
                 
             else:
                 print("\n📋 КОМАНДА ДЛЯ ЗАПУСКА В VENV (Linux/Mac):")
@@ -581,10 +546,10 @@ class VenvRequirementsManager:
                 print("\n📋 АЛЬТЕРНАТИВНЫЕ СПОСОБЫ ЗАПУСКА:")
                 print("  1. Активировать venv и запустить:")
                 print(f"     source {venv_python.parent}/activate")
-                print(f"     python {script_path.name}")
+                print(f"     python {get_global('script_path').name}")
                 
                 print("\n  2. Прямой запуск:")
-                print(f"     {venv_python} {script_path.name}")
+                print(f"     {venv_python} {get_global('script_path').name}")
             
             print("\n" + "═" * 70)
             print("🔄 ЗАВЕРШАЕМ РАБОТУ. ЗАПУСТИТЕ КОМАНДУ ВЫШЕ ДЛЯ ПРОДОЛЖЕНИЯ.")
@@ -612,16 +577,10 @@ class VenvRequirementsManager:
         if VenvRequirementsManager.in_venv():
             print("✅ Уже в виртуальном окружении, пропускаем автоматическую настройку")
             return False
-        
-        port = VenvRequirementsManager.get_port()
-        venv_name = f"venv{port}" if port != VenvRequirementsManager.DEFAULT_PORT else "venv"
-        
+
         print("\n" + "═" * 60)
         print("🎯 ОБНАРУЖЕН ПЕРВЫЙ ЗАПУСК - АВТОМАТИЧЕСКАЯ НАСТРОЙКА")
         print("═" * 60)
-        if port != VenvRequirementsManager.DEFAULT_PORT:
-            print(f"📡 Порт: {port}")
-            print(f"📁 Папка venv: {venv_name}")
         print(f"🐍 Текущий Python: {Path(sys.executable).name}")
         
         # Проверяем, существует ли уже venv
@@ -632,12 +591,9 @@ class VenvRequirementsManager:
                 print(f"\n⚠️  Виртуальное окружение уже существует: {venv_dir}")
                 print(f"🐍 Python в venv: {venv_python}")
                 print("\n📋 ДЛЯ ЗАПУСКА В VENV ИСПОЛЬЗУЙТЕ КОМАНДУ:")
-                
-                script_path = Path(sys.argv[0]).resolve()
-                cmd = f"{venv_python} {script_path}"
-                if port != VenvRequirementsManager.DEFAULT_PORT:
-                    cmd += f" --port={port}"
-                
+
+                cmd = f"{venv_python} {get_global('script_path')}"
+
                 print(f"  {cmd}")
                 print("\n🔄 Завершаем работу...")
                 sys.exit(0)
@@ -648,7 +604,7 @@ class VenvRequirementsManager:
         if not success:
             print(f"\n❌ Ошибка: {message}")
             print("\n💡 Попробуйте создать виртуальное окружение вручную:")
-            print(f"  python -m venv {venv_name}")
+            print(f"  python -m venv venv")
             return False
         
         # 2. Устанавливаем зависимости В VENV
@@ -657,7 +613,7 @@ class VenvRequirementsManager:
         
         # Показываем прогресс
         start_time = time.time()
-        success, message = VenvRequirementsManager.install_requirements()
+        success, message = VenvRequirementsManager.install_requirements_with_progress()
         elapsed_time = time.time() - start_time
         
         if not success:
@@ -675,9 +631,7 @@ class VenvRequirementsManager:
         print("\n" + "═" * 60)
         print("✅ АВТОМАТИЧЕСКАЯ НАСТРОЙКА УСПЕШНО ЗАВЕРШЕНА")
         print("═" * 60)
-        print(f"📡 Будет использоваться порт: {port}")
         print(f"⏱️  Общее время настройки: {elapsed_time:.1f} секунд")
-        print(f"📁 Создан venv: {venv_name}")
         print(f"🐍 Python в venv: {VenvRequirementsManager.get_venv_python()}")
         print("═" * 60 + "\n")
         
@@ -689,8 +643,8 @@ class VenvRequirementsManager:
         """Находит файл requirements.txt с учетом ОС"""
         try:
             # Определяем корень проекта
-            script_path = get_global('script_path')
-            reqs_dir = script_path / "files" / "requirements"
+
+            reqs_dir = get_global('script_path') / "files" / "requirements"
             
             # Получаем информацию об ОС
             os_name = get_global('os', '').lower()
@@ -700,20 +654,6 @@ class VenvRequirementsManager:
             print(f"   os_name: {os_name}")
             print(f"   os_family: {os_family}")
             print(f"   reqs_dir: {reqs_dir}")
-            
-            # Проверяем существование основной папки requirements
-            if not reqs_dir.exists():
-                print(f"❌ Папка requirements не найдена: {reqs_dir}")
-                # Создаем базовый файл зависимостей
-                default_req = script_path / "requirements.txt"
-                default_content = """flask>=2.3.0
-    python-dotenv>=1.0.0
-    pyopenssl>=23.0.0
-    requests>=2.28.0
-    """
-                default_req.write_text(default_content, encoding='utf-8')
-                print(f"📝 Создан базовый файл: {default_req}")
-                return default_req
             
             # Список возможных папок для поиска в порядке приоритета
             possible_folders = []
@@ -760,17 +700,6 @@ class VenvRequirementsManager:
             if general_default.exists():
                 print(f"📄 Используем общий файл: {general_default}")
                 return general_default
-            
-            # Если ничего не нашли, создаем базовый файл
-            default_req = script_path / "requirements.txt"
-            default_content = """flask>=2.3.0
-    python-dotenv>=1.0.0
-    pyopenssl>=23.0.0
-    requests>=2.28.0
-    """
-            default_req.write_text(default_content, encoding='utf-8')
-            print(f"📝 Создан базовый файл: {default_req}")
-            return default_req
             
         except Exception as e:
             print(f"❌ Ошибка поиска requirements: {e}")

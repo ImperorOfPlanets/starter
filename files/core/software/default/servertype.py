@@ -1,14 +1,14 @@
-import os
+from files.core.base_module import BaseModule
 import requests
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from files.configs.server_types import SERVER_TYPES, REPO_STRUCTURE
+from files.configs.server_types import SERVER_TYPES
 from files.core.utils.globalVars_utils import get_global
 from files.core.utils.log_utils import LogManager
 
 logger = LogManager.get_logger('server_type')
 
-class ServerTypeManager:
+class ServertypeModule(BaseModule):
     """Менеджер для работы с типами серверов и их репозиториями"""
     
     @staticmethod
@@ -91,10 +91,10 @@ class ServerTypeManager:
     @staticmethod
     def get_best_available_repository(server_type: str) -> Optional[Dict]:
         """Возвращает первый доступный репозиторий для типа сервера"""
-        repositories = ServerTypeManager.get_available_repositories(server_type)
+        repositories = ServertypeModule.get_available_repositories(server_type)
         
         for repo in repositories:
-            is_accessible, message = ServerTypeManager.test_repository_access(repo['url'])
+            is_accessible, message = ServertypeModule.test_repository_access(repo['url'])
             if is_accessible:
                 logger.info(f"Repository {repo['name']} is accessible: {message}")
                 return repo
@@ -107,7 +107,7 @@ class ServerTypeManager:
     def get_server_paths() -> Dict[str, Path]:
         """Возвращает пути для папок code и docker текущего сервера"""
         script_path = get_global('script_path')
-        server_type = ServerTypeManager.get_current_server_type()
+        server_type = ServertypeModule.get_current_server_type()
         
         if not server_type:
             return {}
@@ -121,7 +121,7 @@ class ServerTypeManager:
     @staticmethod
     def get_server_info() -> Dict:
         """Возвращает полную информацию о текущем сервере"""
-        server_type = ServerTypeManager.get_current_server_type()
+        server_type = ServertypeModule.get_current_server_type()
         
         if not server_type or server_type not in SERVER_TYPES:
             return {
@@ -134,12 +134,12 @@ class ServerTypeManager:
         info = SERVER_TYPES[server_type].copy()
         info['type'] = server_type
         info['configured'] = True
-        info['paths'] = ServerTypeManager.get_server_paths()
+        info['paths'] = ServertypeModule.get_server_paths()
         
         # Проверяем доступность репозиториев
         info['repositories_status'] = []
         for repo in info['repositories']:
-            accessible, message = ServerTypeManager.test_repository_access(repo['url'])
+            accessible, message = ServertypeModule.test_repository_access(repo['url'])
             info['repositories_status'].append({
                 'name': repo['name'],
                 'url': repo['url'],

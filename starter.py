@@ -8,10 +8,12 @@ import time
 from pathlib import Path
 
 from files.core.utils.venv_requirements_manager import VenvRequirementsManager
-from files.core.utils.globalVars_utils import get_global, set_global
+from files.core.utils.globalVars_utils import get_global
 from files.core.oss.default.system import SystemModule
 from files.core.utils.log_utils import LogManager
 
+print("\n🔧 ИНИЦИАЛИЗАЦИЯ SYSTEM MODULE БАЗОВЫХ ПЕРЕМЕННЫХ")
+print("="*60)
 # Устанавливает глобальные переменные - ОСТАВЛЯЕМ КАК ЕСТЬ!
 SystemModule.collect_basic_system_info()
 
@@ -22,7 +24,10 @@ def print_starter_processes():
     print("="*80)
 
     current_pid = os.getpid()
-    current_script_path = Path(sys.argv[0]).resolve()
+    current_script_path = get_global('script_path')
+
+    if current_script_path is None:
+        current_script_path = Path(sys.argv[0]).resolve()
 
     try:
         import psutil
@@ -37,12 +42,14 @@ def print_starter_processes():
                 # Ищем процессы, содержащие 'starter.py'
                 for arg in cmdline:
                     if 'starter.py' in arg:
-                        script_path = Path(arg).resolve()
-                        is_own = (script_path == current_script_path)
+                        # Получаем starter_path из глобальных переменных
+                        starter_path = get_global('starter_path')
+                        # Сравниваем с текущим путем
+                        is_own = (starter_path == current_script_path)
                         starter_processes.append({
                             'pid': proc.info['pid'],
                             'cmdline': ' '.join(cmdline),
-                            'script_path': str(script_path),
+                            'starter_path': str(starter_path),
                             'is_own': is_own,
                             'is_current': proc.info['pid'] == current_pid,
                             'create_time': proc.info.get('create_time', 0),
@@ -66,7 +73,8 @@ def print_starter_processes():
         for proc in starter_processes:
             print(f"PID: {proc['pid']}")
             print(f"Команда: {proc['cmdline']}")
-            print(f"Путь: {proc['script_path']}")
+            # ИСПРАВЛЕНО: используем 'starter_path' вместо 'script_path'
+            print(f"Путь: {proc['starter_path']}")
             marker = "✅ СВОЙ" if proc['is_own'] else "❌ ЧУЖОЙ"
             print(f"Статус: {marker}")
             
@@ -97,72 +105,11 @@ def print_starter_processes():
 
     print("="*80 + "\n")
 
-def print_system_module_variables():
-    """Выводит все переменные SystemModule, которые находятся в памяти"""
-    print("\n" + "="*60)
-    print("🔧 ПЕРЕМЕННЫЕ SYSTEMMODULE")
-    print("="*60)
-
-    try:
-        # Получаем все атрибуты SystemModule
-        all_attributes = dir(SystemModule)
-        
-        # Фильтруем только публичные атрибуты (не начинающиеся с _)
-        public_attributes = [attr for attr in all_attributes if not attr.startswith('_')]
-        
-        print("📋 Доступные атрибуты SystemModule:")
-        for attr in sorted(public_attributes):
-            try:
-                value = getattr(SystemModule, attr)
-                # Форматируем вывод в зависимости от типа данных
-                if callable(value):
-                    print(f"   🔷 {attr}: <method>")
-                elif isinstance(value, (dict, list, tuple)) and len(str(value)) > 100:
-                    print(f"   📦 {attr}: {type(value).__name__} (размер: {len(str(value))} chars)")
-                else:
-                    print(f"   ✅ {attr}: {value}")
-            except Exception as e:
-                print(f"   ❌ {attr}: <error: {str(e)}>")
-                
-        # Дополнительно выводим содержимое глобальных переменных
-        print("\n📋 Глобальные переменные (globalVars):")
-        global_vars = [
-            'os', 'os_version', 'os_family', 'hostname', 
-            'username', 'script_path', 'python_info',
-            'is_service', 'running_in_docker'
-        ]
-        
-        for var_name in global_vars:
-            try:
-                value = get_global(var_name)
-                if value is not None:
-                    if isinstance(value, (dict, list)) and len(str(value)) > 50:
-                        print(f"   📦 {var_name}: {type(value).__name__} (размер: {len(str(value))} chars)")
-                    else:
-                        print(f"   ✅ {var_name}: {value}")
-                else:
-                    print(f"   ⚠️  {var_name}: <not set>")
-            except Exception as e:
-                print(f"   ❌ {var_name}: <error: {str(e)}>")
-                
-    except Exception as e:
-        print(f"   💥 Ошибка при получении переменных SystemModule: {str(e)}")
-        import traceback
-        traceback.print_exc()
-
-    print("="*60 + "\n")
-
 def reset_configuration():
     """Удаляет файл конфигурации и сбрасывает настройки"""
-    base_dir = get_global('script_path')
-    if base_dir is None:
-        base_dir = Path(__file__).parent.absolute()
-    
-    env_file = base_dir / '.env'
-
-    if env_file.exists():
+    if get_global('starter_env_path').exists():
         try:
-            env_file.unlink()
+            get_global('starter_env_path').unlink()
             print("✅ Файл конфигурации .env удален")
             return True
         except Exception as e:
@@ -194,15 +141,12 @@ def start_interactive_mode():
     from files.core.utils.ssl_utils import get_ssl_context
     from files.core.utils.firstSetup_utils import open_browser
     from dotenv import load_dotenv
-
-    base_dir = get_global('script_path')
-    env_file = base_dir / '.env'
     
-    if env_file.exists():
-        load_dotenv(env_file)
-        print(f"[DEBUG] Переменные окружения загружены из {env_file}")
+    if get_global('starter_env_path').exists():
+        load_dotenv(get_global('starter_env_path'))
+        print(f"[DEBUG] Переменные окружения загружены из {get_global('starter_env_path')}")
     else:
-        print(f"[WARNING] Файл .env не найден: {env_file}")
+        print(f"[WARNING] Файл .env не найден: {get_global('starter_env_path')}")
 
     # Для отладки: проверка переменных окружения
     env_vars = ["APP_SECRET_KEY", "ADMIN_LOGIN", "ADMIN_PASSWORD_HASH", "PORT", "TYPE_SERVER"]
@@ -213,23 +157,10 @@ def start_interactive_mode():
     app = configure_app()
     ssl_context = get_ssl_context()
 
-    # ПОЛУЧАЕМ ПОРТ ИЗ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ
-    port = get_global('port')
-    if port is None:
-        # Если порт не установлен в глобальных переменных, пробуем получить из env
-        port_from_env = os.environ.get('PORT', '8000')
-        try:
-            port = int(port_from_env)
-        except ValueError:
-            port = 8000
-        print(f"[WARNING] Порт не найден в глобальных переменных, используем из env: {port}")
-
-    print(f"[INFO] Запуск приложения на порту: {port}")
-
     open_browser()
     debug=get_global('DEBUG')
     # Всегда слушаем все интерфейсы
-    app.run(host='0.0.0.0', port=port, ssl_context=ssl_context, debug=True)
+    app.run(host='0.0.0.0', port=get_global('PORT'), ssl_context=ssl_context, debug=True)
 
 def main():
     """Основная функция запуска"""
@@ -248,7 +179,7 @@ def main():
     logger.info("Запуск приложения...")
     
     # 1. Выводим путь до стартера
-    print(f"✅ script_path установлен: {get_global('script_path')}")
+    print(f"✅ starter_path установлен: {get_global('starter_path')}")
 
     # 2. Парсим аргументы (только для --new на этом этапе)
     if '--new' in sys.argv:
@@ -262,22 +193,13 @@ def main():
             print("❌ Не удалось сбросить конфигурацию")
             sys.exit(1)
     
-    # ========== ВТОРОЙ ЭТАП: ИНИЦИАЛИЗАЦИЯ SYSTEM MODULE ==========
-    print("\n🔧 ИНИЦИАЛИЗАЦИЯ SYSTEM MODULE")
-    print("="*60)
-    
     try:
-        # Собираем системную информацию (вызываем повторно для актуальности)
-        sys_info = SystemModule.collect_basic_system_info()
-        print(f"✅ Системная информация собрана")
-        
         # Для отладки: покажем ключевые переменные
         print("\n📋 КЛЮЧЕВЫЕ СИСТЕМНЫЕ ПЕРЕМЕННЫЕ:")
-        print(f"  os: {get_global('os')}")
-        print(f"  os_version: {get_global('os_version')}")
-        print(f"  os_family: {get_global('os_family')}")
-        print(f"  hostname: {get_global('hostname')}")
-        print(f"  running_in_docker: {get_global('running_in_docker')}")
+        keys_to_show = ['os', 'os_version', 'os_family', 'hostname', 'running_in_docker']
+        for key in keys_to_show:
+            value = get_global(key)
+            print(f"  {key}: {value}")
     except Exception as e:
         print(f"❌ Ошибка инициализации SystemModule: {e}")
         import traceback
@@ -288,15 +210,14 @@ def main():
     print("="*60)
     try:
         from files.core.utils.registry_manager import RegistryManager
-        base_dir = get_global('script_path')
-        print(f"✅ script_path установлен: {base_dir}")
-        print(f"[DEBUG] Тип base_dir: {type(base_dir)}")
-        print(f"[DEBUG] Значение base_dir: {repr(base_dir)}")
-        if base_dir:
-            RegistryManager.register_initializing(base_dir)
-            print(f"✅ Проект зарегистрирован: {base_dir}")
+
+        print(f"[DEBUG] Тип base_dir: {type(get_global('project_path'))}")
+        print(f"[DEBUG] Значение base_dir: {repr(get_global('project_path'))}")
+        if get_global('project_path'):
+            RegistryManager.register_initializing(get_global('project_path'))
+            print(f"✅ Проект зарегистрирован: {get_global('project_path')}")
         else:
-            print("❌ Не удалось получить script_path для регистрации")
+            print("❌ Не удалось получить project_path для регистрации")
     except Exception as e:
         print(f"⚠️ Ошибка регистрации проекта: {e}")
     
@@ -318,11 +239,6 @@ def main():
     
     print("\n📦 МОДУЛИ ЗАГРУЖЕНЫ ВКЛЮЧАЕМ ВОЗМОЖНОСТЬ С НИМИ ВЗАИМОДЕЙСТВОВАТЬ")
     print("="*60)
-    
-    # ========== ЧЕТВЕРТЫЙ ЭТАП: ПОКАЗАТЬ ПЕРЕМЕННЫЕ ДЛЯ ОТЛАДКИ ==========
-    print("\n📊 СИСТЕМНАЯ ИНФОРМАЦИЯ")
-    print("="*60)
-    print_system_module_variables()
 
     # ========== ПЯТЫЙ ЭТАП: VENV И ЗАВИСИМОСТИ ==========
     print("\n📦 ИНФОРМАЦИЯ О ВИРТУАЛЬНОМ ОКРУЖЕНИИ")
@@ -486,10 +402,10 @@ def main():
         else:
             print("\n   Нет слушающих портов")
 
-        # Автоматическое открытие порта 8000
-        print("\n🔓 АВТОМАТИЧЕСКАЯ НАСТРОЙКА ПОРТА 8000")
+        # Автоматическое открытие порта
+        print("\n🔓 АВТОМАТИЧЕСКАЯ НАСТРОЙКА ПОРТА")
         print("-"*60)
-        FirewallModule.ensure_port_open(8000, 'tcp')
+        FirewallModule.ensure_port_open(get_global('PORT'), 'tcp')
 
         print("="*60)
     except Exception as e:

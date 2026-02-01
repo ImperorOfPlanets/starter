@@ -2,6 +2,7 @@
 МОДУЛЬ ОБНОВЛЕНИЯ СЕРВЕРНЫХ ПРОЕКТОВ
 Отвечает за обновление серверов на основе их типа с использованием targets.json
 """
+from files.core.base_module import BaseModule
 import os
 import json
 import logging
@@ -15,7 +16,7 @@ from files.core.utils.log_utils import LogManager
 
 logger = LogManager.get_logger(__name__)
 
-class ServerUpdates:
+class ServerupdatesModule(BaseModule):
     """Класс для управления обновлениями серверных проектов"""
     
     @staticmethod
@@ -27,7 +28,7 @@ class ServerUpdates:
         server_info = SERVER_TYPES[server_type]
         
         # Получаем доступный репозиторий
-        repo = ServerUpdates._get_available_repository(server_type)
+        repo = ServerupdatesModule._get_available_repository(server_type)
         
         if not repo:
             raise ValueError(f"No available repository for server type: {server_type}")
@@ -41,7 +42,7 @@ class ServerUpdates:
         }
         
         # Загружаем конфигурацию целей из targets.json
-        targets_config = ServerUpdates._load_targets_config(config['TARGETS_CONFIG'])
+        targets_config = ServerupdatesModule._load_targets_config(config['TARGETS_CONFIG'])
         config.update(targets_config)
         
         return config
@@ -74,7 +75,7 @@ class ServerUpdates:
     def check_server_updates(server_type: str = None) -> Dict[str, Any]:
         """Проверяет обновления для сервера"""
         if not server_type:
-            server_type = ServerUpdates.get_current_server_type()
+            server_type = ServerupdatesModule.get_current_server_type()
             if not server_type:
                 return {'error': 'Server type not configured'}
         
@@ -107,12 +108,12 @@ class ServerUpdates:
     def update_server(server_type: str = None) -> Dict[str, Any]:
         """Выполняет обновление сервера"""
         if not server_type:
-            server_type = ServerUpdates.get_current_server_type()
+            server_type = ServerupdatesModule.get_current_server_type()
             if not server_type:
                 return {'status': 'error', 'message': 'Server type not configured'}
         
         try:
-            server_config = ServerUpdates.get_server_config(server_type)
+            server_config = ServerupdatesModule.get_server_config(server_type)
             project_name = f"server_{server_type}"
             
             result = UpdatesModule.update_project(project_name, server_config)
@@ -137,7 +138,7 @@ class ServerUpdates:
         status_list = []
         
         for server_type in SERVER_TYPES.keys():
-            status = ServerUpdates.check_server_updates(server_type)
+            status = ServerupdatesModule.check_server_updates(server_type)
             server_info = SERVER_TYPES[server_type]
             
             if status.get('last_update'):
@@ -162,7 +163,7 @@ class ServerUpdates:
                 'color': color,
                 'last_update': status.get('last_update'),
                 'has_update': status.get('has_update', False),
-                'is_current': server_type == ServerUpdates.get_current_server_type()
+                'is_current': server_type == ServerupdatesModule.get_current_server_type()
             })
         
         return status_list

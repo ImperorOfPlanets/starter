@@ -214,7 +214,7 @@ def select_server_type(interactive: bool = True):
 
 def get_server_url() -> list:
     """Возвращает список всех URL сервера с учетом порта и домена"""
-    docker_port = os.environ.get('dockerPort', '8000')
+    docker_port = os.environ.get('dockerPort',get_global('PORT'))
     ips = get('network','get_all_local_ips')
     domain = os.environ.get('DOMAIN', '').strip()
 
@@ -236,7 +236,6 @@ def open_browser() -> None:
     В Docker-контейнере выводит специальный URL для доступа с хоста.
     """
     is_docker = get_global('running_in_docker')
-    docker_port = os.environ.get('dockerPort', '8000')
     urls = get_server_url()
 
     logger.info("\nСервер запущен. Доступен по адресам:")
@@ -246,7 +245,7 @@ def open_browser() -> None:
 
     if is_docker:
         # В Docker - показываем специальный URL для доступа с хоста
-        docker_url = f"https://localhost:{docker_port}"
+        docker_url = f"https://localhost:{get_global('PORT')}"
         logger.info(docker_url)
         logger.info("(Это Docker-контейнер. Используйте этот URL на хост-машине)")
         if logger:

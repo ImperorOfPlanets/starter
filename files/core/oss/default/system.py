@@ -23,15 +23,29 @@ class SystemModule(BaseModule):
     def collect_basic_system_info() -> Dict[str, Any]:
         """Собирает базовую информацию о системе (без зависимостей от внешних утилит)"""
 
-        # 1. СРАЗУ УСТАНАВЛИВАЕМ script_path
-        script_path = Path(sys.argv[0]).absolute().parent
+        script_path = Path(sys.argv[0]).resolve()
+        print(f"📄 Путь к скрипту (script_path): {script_path}")
         set_global('script_path', script_path)
 
-        docker_path = script_path.parent / 'docker'
+        starter_path = script_path.parent
+        print(f"📁 Путь к папке (starter_path): {starter_path}")
+        set_global('starter_path', starter_path)
+
+        project_path = starter_path.parent
+        print(f"📁 Путь к папке (project_path): {project_path}")
+        set_global('project_path', project_path)
+
+        docker_path = starter_path.parent / 'docker'
+        print(f"📁 Путь к папке (docker_path): {docker_path}")
         set_global('docker_path', docker_path)
 
-        code_path = script_path.parent / 'code'
+        code_path = starter_path.parent / 'code'
+        print(f"📁 Путь к папке (code_path): {code_path}")
         set_global('code_path', code_path)
+
+        storage_path = starter_path.parent / 'storage'
+        print(f"📁 Путь к папке (storage_path): {storage_path}")
+        set_global('storage_path', storage_path)
         
         set_global('docker_env_path', docker_path / '.env')
         set_global('docker_env_example_path', docker_path / '.env.example')
@@ -39,8 +53,8 @@ class SystemModule(BaseModule):
         set_global('docker_compose_path', docker_path / 'docker-compose.yml')
         set_global('docker_compose_example_path', docker_path / 'docker-compose.example')
         
-        set_global('starter_env_path', script_path / '.env')
-        set_global('starter_env_example_path', script_path / '.env.example')
+        set_global('starter_env_path', starter_path / '.env')
+        set_global('starter_env_example_path', starter_path / '.env.example')
         
 
         # Проверякем где запущен скрипт в докере или нет
@@ -104,7 +118,6 @@ class SystemModule(BaseModule):
                 'LANG': os.getenv('LANG'),
                 'HOME': os.getenv('HOME')
             },
-            'script_path': Path(sys.argv[0]).absolute().parent,
             'path': Path(sys.argv[0]).absolute().parent,
             'privilege_info': privilege_info,
             'uptime': SystemModule.get_system_uptime(),
@@ -648,16 +661,16 @@ class SystemModule(BaseModule):
             return sys.prefix
         
         # 3. Проверяем стандартные пути
-        script_path = get_global('script_path')
+        starter_path = get_global('starter_path')
         
         # ДОБАВЬТЕ ЭТУ ПРОВЕРКУ:
-        if script_path is None:
-            # Если script_path не установлен, используем текущую директорию
-            script_path = os.path.dirname(os.path.abspath(__file__))
+        if starter_path is None:
+            # Если starter_path не установлен, используем текущую директорию
+            starter_path = os.path.dirname(os.path.abspath(__file__))
         
         possible_paths = [
-            os.path.join(script_path, 'venv'),
-            os.path.join(script_path, '.venv'),
+            os.path.join(starter_path, 'venv'),
+            os.path.join(starter_path, '.venv'),
             '/app/starter/venv',
             os.path.join(os.path.expanduser('~'), 'venv'),
             '/venv',
@@ -686,10 +699,10 @@ class SystemModule(BaseModule):
                     continue
         
         # 4. Возвращаем путь по умолчанию
-        return os.path.join(script_path, 'venv')
+        return os.path.join(starter_path, 'venv')
 
     @staticmethod
     def set_globals():
         """Возвращает время работы системы"""
-        set_global("path_log_install",get_global('script_path') / 'files' / 'logs' / 'install')
-        set_global("path_log_web",get_global('script_path') / 'files' / 'logs' / 'web')
+        set_global("path_log_install",get_global('starter_path') / 'files' / 'logs' / 'install')
+        set_global("path_log_web",get_global('starter_path') / 'files' / 'logs' / 'web')

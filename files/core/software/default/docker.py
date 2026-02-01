@@ -1373,7 +1373,7 @@ class DockerModule(BaseModule):
                     get('docker','process_port_plus_variables',temp_base_port)
 
                     # Теперь читаем все PORT_* из docker/.env
-                    docker_vars = get('docker','read_docker_env',get_global('docker_path'))
+                    docker_vars = get('docker','read_docker_env')
                     ports_to_check = []
                     for key, val in docker_vars.items():
                         if key.startswith('PORT_'):

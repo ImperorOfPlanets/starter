@@ -2,9 +2,6 @@ from files.core.base_module import BaseModule
 
 import socket
 import platform
-import os
-import fcntl
-import struct
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 from dataclasses import dataclass
