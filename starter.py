@@ -416,111 +416,14 @@ def main():
     # ========== ВОСЬМОЙ ЭТАП: ОПРЕДЕЛЕНИЕ ПОДСЕТИ И ПОРТА ==========
     print("\n🌐 ОПРЕДЕЛЕНИЕ ПОДСЕТИ И ПОРТА")
     print("="*60)
-
     try:
-        from files.core.utils.registry_manager import RegistryManager
         from files.core.utils.loader_utils import get
-
-        # Выводим путь к реестру
-        registry_path = RegistryManager.get_registry_path()
-        print(f"   📁 Путь к реестру: {registry_path}")
-
-        base_dir = get_global('script_path')
-        env_path = base_dir / '.env'
-
-        # 1. Получаем желаемый SUBNET_OCTET
-        preferred_octet = 20  # значение по умолчанию
-        
-        if env_path.exists():
-            with open(env_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    if line.strip().startswith('SUBNET_OCTET='):
-                        try:
-                            preferred_octet = int(line.split('=', 1)[1].strip())
-                            break
-                        except ValueError:
-                            pass
-        
-        print(f"   Желаемый SUBNET_OCTET: {preferred_octet}")
-
-        # 2. Получаем список занятых октетов из реестра
-        base_dir = get_global('script_path')
-        used_octets = set(RegistryManager.get_used_octets(exclude_path=base_dir))
-        print(f"   Занятые октеты в реестре: {sorted(used_octets)}")
-
-        # 3. Ищем свободный октет
-        final_octet = preferred_octet
-        max_octet = 65
-        while final_octet <= max_octet:
-            # Проверка 1: есть ли октет в реестре?
-            if final_octet in used_octets:
-                print(f"   ❌ Октет {final_octet} занят (есть в реестре)")
-                final_octet += 1
-                continue
-            
-            # Проверка 2: свободен ли порт на хосте?
-            base_port = final_octet * 100
-            is_free = get('portmanager', 'is_port_free', base_port)
-            if is_free is None or not is_free:
-                print(f"   ❌ Порт {base_port} занят на хосте")
-                final_octet += 1
-                continue
-            
-            # Найден свободный октет!
-            print(f"   ✅ Октет {final_octet} свободен")
-            break
-        else:
-            raise RuntimeError(f"Не найдено свободного октета в диапазоне {preferred_octet}–{max_octet}")
-
-        # 4. Формируем переменные
-        base_port = final_octet * 100
-        docker_network_prefix = f"172.{final_octet}"
-
-        # 5. Обновляем глобальные переменные
-        set_global('subnet_octet', final_octet)
-        set_global('port', base_port)
-        set_global('docker_network_prefix', docker_network_prefix)
-
-        # 6. Обновляем переменные окружения
-        os.environ["PORT"] = str(base_port)
-        os.environ["SUBNET_OCTET"] = str(final_octet)
-        os.environ["DOCKER_NETWORK_PREFIX"] = docker_network_prefix
-
-        # 7. Обновляем .env файл
-        if env_path.exists():
-            with open(env_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-            
-            updated_lines = []
-            for line in lines:
-                if line.startswith('PORT='):
-                    updated_lines.append(f"PORT={base_port}\n")
-                elif line.startswith('SUBNET_OCTET='):
-                    updated_lines.append(f"SUBNET_OCTET={final_octet}\n")
-                elif line.startswith('DOCKER_NETWORK_PREFIX='):
-                    updated_lines.append(f"DOCKER_NETWORK_PREFIX={docker_network_prefix}\n")
-                else:
-                    updated_lines.append(line)
-            
-            # Добавляем отсутствующие переменные
-            existing_keys = {line.split('=')[0] for line in updated_lines if '=' in line}
-            if 'PORT' not in existing_keys:
-                updated_lines.append(f"PORT={base_port}\n")
-            if 'SUBNET_OCTET' not in existing_keys:
-                updated_lines.append(f"SUBNET_OCTET={final_octet}\n")
-            if 'DOCKER_NETWORK_PREFIX' not in existing_keys:
-                updated_lines.append(f"DOCKER_NETWORK_PREFIX={docker_network_prefix}\n")
-            
-            with open(env_path, 'w', encoding='utf-8') as f:
-                f.writelines(updated_lines)
-            print(f"   💾 Файл .env обновлён")
-
-        print(f"   📌 PORT = {base_port}")
-        print(f"   📌 SUBNET_OCTET = {final_octet}")
-        print(f"   📌 DOCKER_NETWORK_PREFIX = {docker_network_prefix}")
-
+        result = get('docker','allocate_network_and_ports')
+        print(f"   📌 OCTET      = {result['octet']}")
+        print(f"   📌 BASE_PORT  = {result['base_port']}")
+        print(f"   📌 PREFIX     = {result['network_prefix']}")
     except Exception as e:
-        print(f"❌ Ошибка определения подсети: {e}")
+        print(f"❌ Ошибка выделения сети: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

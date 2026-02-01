@@ -1272,6 +1272,243 @@ class DockerModule(BaseModule):
         content = DockerModule.generate_env_content(vars_dict, template_lines)
         env_path.write_text(content, encoding='utf-8')
 
+    @staticmethod
+    def process_port_plus_variables(base_port: int):
+        """
+        Автоматически обрабатывает PORT_*_PLUS переменные из ./docker/.env.example
+        и обновляет ./docker/.env, используя заданный base_port (например, 2000).
+        
+        Работает независимо от starter.py — подходит для вызова из любого сервиса.
+        """
+        # Определяем путь к папке docker относительно корня проекта
+        script_path = get_global("script_path")
+        if not script_path:
+            raise RuntimeError("Global 'script_path' not set. Ensure core is initialized.")
+
+        docker_dir = Path(script_path) / "docker"
+        env_example_path = docker_dir / ".env.example"
+        env_output_path = docker_dir / ".env"
+
+        if not env_example_path.exists():
+            return  # Нечего обрабатывать — выходим тихо
+
+        # Чтение текущего .env (если существует)
+        current_vars = {}
+        if env_output_path.exists():
+            with open(env_output_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    stripped = line.strip()
+                    if '=' in stripped and not stripped.startswith('#'):
+                        key, val = stripped.split('=', 1)
+                        current_vars[key.strip()] = val.strip()
+
+        # Чтение .env.example
+        with open(env_example_path, 'r', encoding='utf-8') as f:
+            example_lines = f.readlines()
+
+        # Сбор PORT_*_PLUS → вычисление PORT_*
+        new_port_vars = {}
+        for line in example_lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if '=' in stripped:
+                key, raw_val = stripped.split('=', 1)
+                key = key.strip()
+                if key.startswith('PORT_') and key.endswith('_PLUS'):
+                    try:
+                        plus_value = int(raw_val.strip())
+                        base_name = key[:-5]  # удаляем '_PLUS'
+                        computed_port = base_port + plus_value
+                        new_port_vars[base_name] = str(computed_port)
+                    except ValueError:
+                        continue  # Игнорируем некорректные значения
+
+        # Объединяем переменные
+        final_vars = {**current_vars, **new_port_vars}
+
+        # Сохраняем с сохранением структуры .env.example
+        output_lines = []
+        used_keys = set()
+
+        for line in example_lines:
+            original_line = line
+            stripped = line.strip()
+            if stripped.startswith('#') or not stripped:
+                output_lines.append(original_line)
+            elif '=' in stripped:
+                key = stripped.split('=', 1)[0].strip()
+                if key in final_vars:
+                    output_lines.append(f"{key}={final_vars[key]}\n")
+                    used_keys.add(key)
+                else:
+                    output_lines.append(original_line)
+
+        # Добавляем "внешние" переменные, если они есть
+        for key, val in final_vars.items():
+            if key not in used_keys:
+                output_lines.append(f"{key}={val}\n")
+
+        # Запись результата
+        with open(env_output_path, 'w', encoding='utf-8') as f:
+            f.writelines(output_lines)
+
+    @staticmethod
+    def allocate_network_and_ports() -> Dict[str, Any]:
+        """
+        Полностью автономная функция для:
+        - чтения желаемого SUBNET_OCTET из .env (корень проекта),
+        - поиска свободного октета (с учётом реестра и занятых портов),
+        - проверки всех портов, которые будут использоваться (включая PORT_* из docker/.env),
+        - обновления глобальных переменных и .env.
+
+        Возвращает словарь:
+        {
+            'octet': int,
+            'base_port': int,
+            'network_prefix': str,
+            'used_ports': List[int]
+        }
+        """
+        from files.core.utils.loader_utils import get
+        from files.core.utils.globalVars_utils import get_global, set_global
+        from files.core.utils.registry_manager import RegistryManager
+        import os
+
+        logger = LogManager.get_logger('docker_module')
+
+        # --- 1. Определяем пути ---
+        base_dir = Path(get_global('script_path'))
+        root_env_path = base_dir / '.env'
+        docker_dir = base_dir / 'docker'
+        docker_env_path = docker_dir / '.env'
+
+        # --- 2. Читаем желаемый SUBNET_OCTET из корневого .env ---
+        preferred_octet = 20
+        if root_env_path.exists():
+            with open(root_env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip().startswith('SUBNET_OCTET='):
+                        try:
+                            preferred_octet = int(line.split('=', 1)[1].strip())
+                            break
+                        except ValueError:
+                            pass
+
+        logger.info(f"Желаемый SUBNET_OCTET: {preferred_octet}")
+
+        # --- 3. Получаем занятые октеты из реестра ---
+        used_octets_registry = set(RegistryManager.get_used_octets(exclude_path=base_dir))
+        logger.info(f"Занятые октеты в реестре: {sorted(used_octets_registry)}")
+
+        # --- 4. Поиск свободного октета ---
+        final_octet = None
+        max_octet = 65
+        for octet in range(preferred_octet, max_octet + 1):
+            if octet in used_octets_registry:
+                logger.info(f"Октет {octet} занят (реестр)")
+                continue
+
+            base_port = octet * 100
+            if not get('portmanager', 'is_port_free', base_port):
+                logger.info(f"Базовый порт {base_port} занят")
+                continue
+
+            # --- 5. Предварительно сгенерируем docker/.env с этим octet'ом ---
+            # Это нужно, чтобы узнать, какие именно порты будут использоваться
+            temp_base_port = base_port
+            try:
+                # Создаём временный .env в docker/ на основе .env.example
+                if (docker_dir / '.env.example').exists():
+                    DockerModule.ensure_docker_env(docker_dir)
+                    # Применяем PORT_*_PLUS логику
+                    DockerModule.process_port_plus_variables(temp_base_port)
+
+                    # Теперь читаем все PORT_* из docker/.env
+                    docker_vars = DockerModule.read_docker_env(docker_dir)
+                    ports_to_check = []
+                    for key, val in docker_vars.items():
+                        if key.startswith('PORT_') and key != 'PORT_BROWSER_PLUS':  # исключаем _PLUS
+                            try:
+                                port_num = int(val)
+                                ports_to_check.append(port_num)
+                            except ValueError:
+                                continue
+
+                    # Проверяем каждый порт
+                    all_ports_free = True
+                    for p in ports_to_check:
+                        if not get('portmanager', 'is_port_free', p):
+                            logger.info(f"Порт {p} (из docker/.env) занят при octet={octet}")
+                            all_ports_free = False
+                            break
+
+                    if not all_ports_free:
+                        continue  # пробуем следующий октет
+
+                # Если дошли сюда — октет подходит
+                final_octet = octet
+                final_base_port = base_port
+                break
+
+            except Exception as e:
+                logger.warning(f"Ошибка при проверке портов для octet={octet}: {e}")
+                continue
+
+        if final_octet is None:
+            raise RuntimeError(f"Не найдено свободного октета в диапазоне {preferred_octet}–{max_octet}")
+
+        network_prefix = f"172.{final_octet}"
+
+        # --- 6. Обновляем глобальные переменные ---
+        set_global('subnet_octet', final_octet)
+        set_global('port', final_base_port)
+        set_global('docker_network_prefix', network_prefix)
+
+        os.environ["PORT"] = str(final_base_port)
+        os.environ["SUBNET_OCTET"] = str(final_octet)
+        os.environ["DOCKER_NETWORK_PREFIX"] = network_prefix
+
+        # --- 7. Обновляем КОРНЕВОЙ .env ---
+        updated_lines = []
+        existing_keys = set()
+
+        if root_env_path.exists():
+            with open(root_env_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            for line in lines:
+                if '=' in line and not line.strip().startswith('#'):
+                    key = line.split('=', 1)[0]
+                    existing_keys.add(key)
+                updated_lines.append(line)
+        else:
+            lines = []
+
+        # Обновляем или добавляем нужные переменные
+        def ensure_line(key: str, value: str):
+            found = False
+            for i, line in enumerate(updated_lines):
+                if line.strip().startswith(f"{key}="):
+                    updated_lines[i] = f"{key}={value}\n"
+                    found = True
+                    break
+            if not found:
+                updated_lines.append(f"{key}={value}\n")
+
+        ensure_line("PORT", str(final_base_port))
+        ensure_line("SUBNET_OCTET", str(final_octet))
+        ensure_line("DOCKER_NETWORK_PREFIX", network_prefix)
+
+        with open(root_env_path, 'w', encoding='utf-8') as f:
+            f.writelines(updated_lines)
+
+        logger.info(f"✅ Выделена подсеть: octet={final_octet}, base_port={final_base_port}")
+        return {
+            'octet': final_octet,
+            'base_port': final_base_port,
+            'network_prefix': network_prefix,
+            'docker_dir': docker_dir
+        }
     # ----------------------------------------------------
     # НОВЫЕ ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ ПОДСЕТЯМИ
     # ----------------------------------------------------
