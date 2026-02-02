@@ -522,7 +522,7 @@ class DockerModule(BaseModule):
 
             # Получаем env_vars из текущего .env файла
             logger.info("[run_compose] Loading environment variables from .env...")
-            env_vars = get('docker','ensure_docker_env',get_global('docker_path'), log_file_path)
+            env_vars = get('docker','ensure_docker_env',log_file_path)
             
             # Генерация compose файла
             logger.info("[run_compose] Generating docker-compose.yml from .env...")
@@ -1001,12 +1001,12 @@ class DockerModule(BaseModule):
             docker_path.mkdir(parents=True, exist_ok=True)
 
             if env_vars is None:
-                env_vars = get('docker','ensure_docker_env',docker_path, log_path)
+                env_vars = get('docker','ensure_docker_env',log_path)
 
             # Получаем PULL_FROM_REGISTRY из env_vars
             pull_from_registry = env_vars.get("PULL_FROM_REGISTRY", "false").lower() == "true"
 
-            if not get('docker','generate_compose',docker_path, env_vars, pull_from_registry=pull_from_registry, log_path=log_path):
+            if not get('docker','generate_compose',env_vars, pull_from_registry=pull_from_registry, log_path=log_path):
                 return False
 
             return True
@@ -1174,7 +1174,7 @@ class DockerModule(BaseModule):
                     log_file.write("[ensure_docker_env] .env.example not found\n")
             return {}
 
-        example_vars, example_lines = get('docker','parse_env_content',get_global('docker_compose_example_path').read_text(encoding='utf-8'))
+        example_vars, example_lines = get('docker','parse_env_content',get_global('docker_env_example_path').read_text(encoding='utf-8'))
         
         if log_path:
             with open(log_path, 'a', encoding='utf-8') as log_file:
