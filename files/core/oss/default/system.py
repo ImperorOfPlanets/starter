@@ -55,7 +55,28 @@ class SystemModule(BaseModule):
         
         set_global('starter_env_path', starter_path / '.env')
         set_global('starter_env_example_path', starter_path / '.env.example')
-        
+
+        # Получаекм информацию о DEBUG
+        debug_value = 'FALSE'
+        env_path = get_global('starter_env_path')
+        if env_path and env_path.exists():
+            try:
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        stripped = line.strip()
+                        # Пропускаем комментарии и пустые строки
+                        if not stripped or stripped.startswith('#'):
+                            continue
+                        if stripped.startswith('DEBUG='):
+                            debug_value = stripped.split('=', 1)[1].strip().upper()
+                            break
+            except Exception:
+                pass  # Игнорируем ошибки чтения
+
+        # Устанавливаем глобальную переменную как булево значение
+        set_global('DEBUG', debug_value in ('TRUE', '1', 'YES', 'ON'))
+        print(f"🔧 Режим отладки: {'ВКЛЮЧЕН' if get_global('DEBUG') else 'ВЫКЛЮЧЕН'}")
+
         # Проверякем где запущен скрипт в докере или нет
         WERKZEUG =  os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
         set_global('WERKZEUG', WERKZEUG)
