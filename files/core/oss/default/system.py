@@ -56,6 +56,10 @@ class SystemModule(BaseModule):
         set_global('starter_env_path', starter_path / '.env')
         set_global('starter_env_example_path', starter_path / '.env.example')
         
+        # Проверякем где запущен скрипт в докере или нет
+        WERKZEUG =  os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+        set_global('WERKZEUG', WERKZEUG)
+        print(f"WERKZEUG: {WERKZEUG}")
 
         # Проверякем где запущен скрипт в докере или нет
         set_global('running_in_docker', SystemModule.running_in_docker())

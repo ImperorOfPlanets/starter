@@ -38,7 +38,6 @@ class VenvRequirementsManager:
             'venv_created_time': None,
             'venv_size': 0,
             'venv_python_path': None,
-            'port': VenvRequirementsManager.get_port(),
             'process_info': {},
             'dependencies_status': {},
             'performance_metrics': {},
@@ -506,8 +505,9 @@ class VenvRequirementsManager:
         try:
             venv_python = VenvRequirementsManager.get_venv_python()
             if not venv_python:
-                print("❌ Не найден Python в venv")
-                return False
+                print("\n❌ КРИТИЧЕСКАЯ ОШИБКА: Не найден Python в venv")
+                print("   Путь к ожидаемому venv: {}".format(VenvRequirementsManager.get_venv_dir()))
+                sys.exit(1)
 
             # Формируем команду для запуска
             cmd_parts = [str(venv_python), str(get_global('script_path'))]
@@ -559,8 +559,10 @@ class VenvRequirementsManager:
             sys.exit(0)
             
         except Exception as e:
-            print(f"❌ Ошибка: {e}")
-            return False
+                print(f"\n❌ ФАТАЛЬНАЯ ОШИБКА в restart_in_venv: {e}")
+                import traceback
+                traceback.print_exc()
+                sys.exit(1)
     
     @staticmethod
     def first_run_setup() -> bool:

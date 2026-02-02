@@ -38,7 +38,7 @@ def configure_app() -> Flask:
     logger.info(app.secret_key)
 
     # Настройка папки сессий
-    session_dir = base_dir / "files" / "web" / "sessions"
+    session_dir = get_global('starter_path') / "files" / "web" / "sessions"
     logger.info("Пака сессий")
     logger.info(session_dir)
     
