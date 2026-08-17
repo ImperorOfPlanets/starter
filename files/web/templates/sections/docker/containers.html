@@ -1,0 +1,147 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('containers') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="btn-group me-2">
+                <button class="btn btn-sm btn-outline-secondary" id="refreshContainersBtn">
+                    <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                </button>
+                <div class="form-check form-switch ms-3">
+                    <input class="form-check-input" type="checkbox" id="showAllContainers" {% if show_all %}checked{% endif %} {% if not docker_installed %}disabled{% endif %}>
+                    <label class="form-check-label" for="showAllContainers">{{ t('show_all') }}</label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not docker_installed %}
+    <div class="alert alert-danger" role="alert">
+        <h4 class="alert-heading">{{ t('docker_not_installed') }}</h4>
+        <p>{{ t('docker_required_for_containers') }}</p>
+        <hr>
+        <p class="mb-0">
+            <a href="https://docs.docker.com/get-docker/" target="_blank" class="alert-link">
+                {{ t('install_docker_guide') }}
+            </a>
+        </p>
+    </div>
+    {% else %}
+    <div class="table-responsive">
+        <table class="table table-striped table-sm">
+            <thead>
+                <tr>
+                    <th>{{ t('name') }}</th>
+                    <th>{{ t('image') }}</th>
+                    <th>{{ t('status') }}</th>
+                    <th>{{ t('ports') }}</th>
+                    <th>{{ t('running_for') }}</th>
+                    <th>{{ t('size') }}</th>
+                    <th>{{ t('actions') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for container in containers %}
+                <tr>
+                    <td>{{ container.name }}</td>
+                    <td>{{ container.image }}</td>
+                    <td>
+                        <span class="badge bg-{% if container.status and container.status.startswith('Up') %}success{% else %}danger{% endif %}">
+                            {{ container.status | default('Unknown') }}
+                        </span>
+                    </td>
+                    <td>{{ container.ports | default('N/A') }}</td>
+                    <td>{{ container.running_for | default('N/A') }}</td>
+                    <td>{{ container.size | default('N/A') }}</td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            {% if container.status and container.status.startswith('Up') %}
+                                <button class="btn btn-outline-secondary stop-container" data-id="{{ container.id }}" title="{{ t('stop') }}">
+                                    <i class="bi bi-stop-fill"></i>
+                                </button>
+                                <button class="btn btn-outline-secondary restart-container" data-id="{{ container.id }}" title="{{ t('restart') }}">
+                                    <i class="bi bi-arrow-repeat"></i>
+                                </button>
+                            {% else %}
+                                <button class="btn btn-outline-success start-container" data-id="{{ container.id }}" title="{{ t('start') }}">
+                                    <i class="bi bi-play-fill"></i>
+                                </button>
+                            {% endif %}
+                            <button class="btn btn-outline-danger remove-container" data-id="{{ container.id }}" title="{{ t('remove') }}">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            <a href="#" class="btn btn-outline-info view-logs" data-id="{{ container.id }}" title="{{ t('view_logs') }}">
+                                <i class="bi bi-journal-text"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-center">{{ t('no_containers_found') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+$(document).ready(function() {
+    // Обновление списка контейнеров
+    $('#refreshContainersBtn').click(function() {
+        loadDockerContent('containers');
+    });
+
+    // Переключение между всеми/только работающими контейнерами
+    $('#showAllContainers').change(function() {
+        loadDockerContent('containers', {show_all: $(this).is(':checked')});
+    });
+
+    // Обработчики действий с контейнерами
+    $('.start-container').click(function() {
+        const containerId = $(this).data('id');
+        performContainerAction('start', containerId);
+    });
+
+    $('.stop-container').click(function() {
+        const containerId = $(this).data('id');
+        performContainerAction('stop', containerId);
+    });
+
+    $('.restart-container').click(function() {
+        const containerId = $(this).data('id');
+        performContainerAction('restart', containerId);
+    });
+
+    $('.remove-container').click(function() {
+        if(confirm('{{ t("confirm_remove_container") }}')) {
+            const containerId = $(this).data('id');
+            performContainerAction('remove', containerId);
+        }
+    });
+
+    $('.view-logs').click(function() {
+        const containerId = $(this).data('id');
+        loadDockerContent('logs', {container_id: containerId});
+    });
+
+    function performContainerAction(action, containerId) {
+        $.post('/', {
+            section: 'docker',
+            action: 'container_action',
+            container_id: containerId,
+            action_type: action
+        }, function(response) {
+            if(response.status === 'success') {
+                toastr.success(response.message);
+            } else {
+                toastr.error(response.message);
+            }
+            loadDockerContent('containers');
+        }).fail(function() {
+            toastr.error('{{ t("request_failed") }}');
+        });
+    }
+});
+</script>

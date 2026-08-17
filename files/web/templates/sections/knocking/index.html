@@ -1,0 +1,315 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">
+            <i class="bi bi-shield-lock me-2"></i> Port Knocking
+            {% if status.is_windows %}
+                <small class="text-muted">(Windows Firewall)</small>
+            {% endif %}
+        </h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="btn-group me-2">
+                <button class="btn btn-sm btn-outline-secondary" onclick="location.reload()">
+                    <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Status Card -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-info-circle me-2"></i> Status</span>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr>
+                                <td><strong>Mode:</strong></td>
+                                <td>
+                                    {% if status.is_windows %}
+                                        <span class="badge bg-primary">Windows Firewall Rules</span>
+                                    {% else %}
+                                        <span class="badge bg-info">knockd (Linux)</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Status:</strong></td>
+                                <td>
+                                    {% if status.enabled %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Knock Ports:</strong></td>
+                                <td><code>{{ status.ports|join(', ') if status.ports else 'Not configured' }}</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Target Port:</strong></td>
+                                <td><code>{{ status.target_port }}</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Timeout:</strong></td>
+                                <td>{{ status.timeout }}s</td>
+                            </tr>
+                            {% if status.is_windows %}
+                            <tr>
+                                <td><strong>Auto-close:</strong></td>
+                                <td>{{ status.auto_close_seconds }}s</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% if status.is_windows and status.open_ports %}
+            <!-- Open Ports (Windows) -->
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-unlock me-2"></i> Open Knock Ports</span>
+                    <button class="btn btn-sm btn-danger" data-action="closeAllPorts">
+                        <i class="bi bi-x-circle"></i> Close All
+                    </button>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr><th>Rule</th><th>Port</th><th>Action</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for rule in status.open_ports %}
+                            <tr>
+                                <td>{{ rule.Name }}</td>
+                                <td><code>{{ rule.Port }}</code></td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger" data-action="closePort"
+                                            data-data='{"port": {{ rule.Port }}}'>
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Actions Card -->
+        <div class="col-md-6">
+            <!-- Knock Test -->
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-lightning me-2"></i> Knock Test
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Send knock sequence to open target port temporarily.</p>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text">Host</span>
+                        <input type="text" class="form-control" id="knockHost" value="127.0.0.1" placeholder="127.0.0.1">
+                    </div>
+                    <button class="btn btn-warning w-100" data-action="knockTest" id="knockTestBtn">
+                        <i class="bi bi-lightning me-1"></i> Send Knock
+                    </button>
+                    <div id="knockResult" class="mt-3" style="display: none;"></div>
+                </div>
+            </div>
+
+            <!-- Manual Port Control (Windows) -->
+            {% if status.is_windows %}
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-plug me-2"></i> Manual Port Control
+                </div>
+                <div class="card-body">
+                    <div class="input-group mb-3">
+                        <span class="input-group-text">Port</span>
+                        <input type="number" class="form-control" id="manualPort" min="1" max="65535" value="22">
+                        <button class="btn btn-success" data-action="openPortManual">
+                            <i class="bi bi-unlock"></i> Open
+                        </button>
+                        <button class="btn btn-danger" data-action="closePortManual">
+                            <i class="bi bi-lock"></i> Close
+                        </button>
+                    </div>
+                    <div id="portActionResult" class="mt-2" style="display: none;"></div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Settings -->
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-gear me-2"></i> Settings
+                </div>
+                <div class="card-body">
+                    <form id="knockingSettingsForm">
+                        <div class="mb-3">
+                            <label class="form-label">Knock Ports (comma-separated)</label>
+                            <input type="text" class="form-control" name="ports"
+                                   value="{{ status.ports|join(', ') if status.ports else '7000, 8000, 9000' }}"
+                                   placeholder="7000, 8000, 9000">
+                            <small class="text-muted">Min 2 ports. Sequence to send.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Target Port</label>
+                            <input type="number" class="form-control" name="target_port"
+                                   value="{{ status.target_port if status.target_port else 22 }}" min="1" max="65535">
+                            <small class="text-muted">Port to open after successful knock.</small>
+                        </div>
+                        <div class="row">
+                            <div class="col-6 mb-3">
+                                <label class="form-label">Timeout (s)</label>
+                                <input type="number" class="form-control" name="timeout"
+                                       value="{{ status.timeout if status.timeout else 5 }}" min="1" max="30">
+                            </div>
+                            {% if status.is_windows %}
+                            <div class="col-6 mb-3">
+                                <label class="form-label">Auto-close (s)</label>
+                                <input type="number" class="form-control" name="auto_close_seconds"
+                                       value="{{ status.auto_close_seconds if status.auto_close_seconds else 30 }}" min="0" max="300">
+                                <small class="text-muted">0 = never</small>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-check-circle me-1"></i> Save Settings
+                        </button>
+                    </form>
+                    <div id="settingsResult" class="mt-3" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Knock test
+    $(document).on('click', '[data-action="knockTest"]', function() {
+        const host = $('#knockHost').val() || '127.0.0.1';
+        const $btn = $(this).prop('disabled', true);
+        const $result = $('#knockResult').show().removeClass('alert-success alert-danger alert-info')
+                        .addClass('alert-info').text('Sending knock sequence...');
+
+        fetch('/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: new URLSearchParams({ 'section': 'knocking', 'action': 'knock_test', 'host': host })
+        })
+        .then(r => r.json())
+        .then(resp => {
+            $btn.prop('disabled', false);
+            if (resp.status === 'success') {
+                $result.removeClass('alert-info').addClass('alert-success').text(resp.message);
+            } else {
+                $result.removeClass('alert-info').addClass('alert-danger').text(resp.message || 'Failed');
+            }
+        })
+        .catch(err => {
+            $btn.prop('disabled', false);
+            $result.removeClass('alert-info').addClass('alert-danger').text('Request failed: ' + err);
+        });
+    });
+
+    // Open port manual
+    $(document).on('click', '[data-action="openPortManual"]', function() {
+        const port = $('#manualPort').val();
+        const $result = $('#portActionResult').show().removeClass('alert-success alert-danger alert-info')
+                        .addClass('alert-info').text('Opening port...');
+
+        fetch('/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: new URLSearchParams({ 'section': 'knocking', 'action': 'open_port_manual', 'port': port })
+        })
+        .then(r => r.json())
+        .then(resp => {
+            if (resp.status === 'success') {
+                $result.removeClass('alert-info').addClass('alert-success').text(resp.message);
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                $result.removeClass('alert-info').addClass('alert-danger').text(resp.message);
+            }
+        });
+    });
+
+    // Close port manual
+    $(document).on('click', '[data-action="closePortManual"]', function() {
+        const port = $('#manualPort').val();
+        const $result = $('#portActionResult').show().removeClass('alert-success alert-danger alert-info')
+                        .addClass('alert-info').text('Closing port...');
+
+        fetch('/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: new URLSearchParams({ 'section': 'knocking', 'action': 'close_port_manual', 'port': port })
+        })
+        .then(r => r.json())
+        .then(resp => {
+            if (resp.status === 'success') {
+                $result.removeClass('alert-info').addClass('alert-success').text(resp.message);
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                $result.removeClass('alert-info').addClass('alert-danger').text(resp.message);
+            }
+        });
+    });
+
+    // Close single port from list
+    $(document).on('click', '[data-action="closePort"]', function() {
+        const port = $(this).data('data').port;
+
+        fetch('/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: new URLSearchParams({ 'section': 'knocking', 'action': 'close_port_manual', 'port': port })
+        })
+        .then(r => r.json())
+        .then(() => location.reload());
+    });
+
+    // Close all ports
+    $(document).on('click', '[data-action="closeAllPorts"]', function() {
+        if (!confirm('Close all knock-opened ports?')) return;
+
+        fetch('/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: new URLSearchParams({ 'section': 'knocking', 'action': 'close_all_ports' })
+        })
+        .then(r => r.json())
+        .then(() => location.reload());
+    });
+
+    // Save settings
+    $('#knockingSettingsForm').on('submit', function(e) {
+        e.preventDefault();
+        const formData = $(this).serialize();
+        const $result = $('#settingsResult').show().removeClass('alert-success alert-danger alert-info')
+                        .addClass('alert-info').text('Saving...');
+
+        fetch('/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: new URLSearchParams(formData + '&section=knocking&action=update_settings')
+        })
+        .then(r => r.json())
+        .then(resp => {
+            if (resp.status === 'success') {
+                $result.removeClass('alert-info').addClass('alert-success').text(resp.message);
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                $result.removeClass('alert-info').addClass('alert-danger').text(resp.message);
+            }
+        });
+    });
+});
+</script>

@@ -1,0 +1,295 @@
+{# files/web/templates/sections/reverse_proxy/index.html #}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-diagram-3 me-2"></i> {{ t('reverse_proxy_title') }}</h1>
+        <button class="btn btn-outline-secondary" id="refreshStatus">
+            <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+        </button>
+    </div>
+
+    <!-- Настройки для текущего проекта -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-folder me-2"></i> {{ t('current_project_settings') }}</h5>
+        </div>
+        <div class="card-body">
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="useReverseProxy">
+                <label class="form-check-label fw-bold" for="useReverseProxy">
+                    <i class="bi bi-diagram-3 me-1"></i> {{ t('enable_reverse_proxy_for_project') }}
+                </label>
+                <div class="form-text text-muted">
+                    {{ t('reverse_proxy_description') }}
+                </div>
+            </div>
+
+            <div id="reverseProxySettings" style="display: none;">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="domainName" class="form-label">{{ t('domain_name') }}</label>
+                            <input type="text" class="form-control" id="domainName" 
+                                   placeholder="example.com">
+                            <div class="form-text">{{ t('domain_help') }}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>{{ t('what_will_happen') }}</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>{{ t('reverse_proxy_step1') }}</li>
+                        <li>{{ t('reverse_proxy_step2') }}</li>
+                        <li>{{ t('reverse_proxy_step3') }}</li>
+                    </ul>
+                </div>
+
+                <button class="btn btn-success" id="saveReverseProxy">
+                    <i class="bi bi-check-circle me-1"></i> {{ t('enable') }}
+                </button>
+                <button class="btn btn-danger" id="disableReverseProxy" style="display: none;">
+                    <i class="bi bi-x-circle me-1"></i> {{ t('disable') }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Статус reverse-proxy -->
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0"><i class="bi bi-server me-2"></i> {{ t('reverse_proxy_status') }}</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 text-center">
+                    <div class="display-4">
+                        <i id="proxyRunningIcon" class="bi bi-question-circle"></i>
+                    </div>
+                    <h6>{{ t('proxy_status') }}</h6>
+                    <span id="proxyRunning" class="badge bg-secondary">{{ t('checking') }}</span>
+                </div>
+                <div class="col-md-4 text-center">
+                    <div class="display-4" id="projectsCount">0</div>
+                    <h6>{{ t('active_projects') }}</h6>
+                </div>
+                <div class="col-md-4 text-center">
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-outline-primary" id="startProxyBtn" style="display: none;">
+                            <i class="bi bi-play-fill"></i> {{ t('start_proxy') }}
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" id="stopProxyBtn" style="display: none;">
+                            <i class="bi bi-stop-fill"></i> {{ t('stop_proxy') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Список проектов -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-diagram-3 me-2"></i> {{ t('projects_in_proxy') }}</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>{{ t('project') }}</th>
+                            <th>{{ t('domain') }}</th>
+                            <th>{{ t('status') }}</th>
+                            <th>{{ t('actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="projectsList">
+                        <tr><td colspan="4" class="text-center">{{ t('loading') }}...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    loadCurrentProjectConfig();
+    loadReverseProxyStatus();
+    
+    $('#useReverseProxy').change(function() {
+        if($(this).is(':checked')) {
+            $('#reverseProxySettings').slideDown();
+        } else {
+            $('#reverseProxySettings').slideUp();
+        }
+    });
+    
+    $('#saveReverseProxy').click(function() {
+        const domain = $('#domainName').val().trim();
+        if(!domain) {
+            toastr.warning('{{ t("domain_required") }}');
+            return;
+        }
+        
+        const $btn = $(this);
+        $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
+        
+        $.post('/', {
+            section: 'reverse_proxy',
+            action: 'enable_for_current_project',
+            domain: domain
+        }, function(response) {
+            if(response.status === 'success') {
+                toastr.success(response.message);
+                if(response.url) {
+                    toastr.info('{{ t("project_available_at") }}: ' + response.url);
+                }
+                loadCurrentProjectConfig();
+                loadReverseProxyStatus();
+            } else {
+                toastr.error(response.message);
+            }
+        }).always(function() {
+            $btn.prop('disabled', false).html('<i class="bi bi-check-circle me-1"></i> {{ t("enable") }}');
+        });
+    });
+    
+    $('#disableReverseProxy').click(function() {
+        if(confirm('{{ t("confirm_disable_reverse_proxy") }}')) {
+            const $btn = $(this);
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
+            
+            $.post('/', {
+                section: 'reverse_proxy',
+                action: 'disable_for_current_project'
+            }, function(response) {
+                if(response.status === 'success') {
+                    toastr.success(response.message);
+                    loadCurrentProjectConfig();
+                    loadReverseProxyStatus();
+                } else {
+                    toastr.error(response.message);
+                }
+            }).always(function() {
+                $btn.prop('disabled', false).html('<i class="bi bi-x-circle me-1"></i> {{ t("disable") }}');
+            });
+        }
+    });
+    
+    $('#startProxyBtn').click(function() {
+        $.post('/', {section: 'reverse_proxy', action: 'start_proxy'}, function(response) {
+            if(response.status === 'success') {
+                toastr.success(response.message);
+                loadReverseProxyStatus();
+            } else {
+                toastr.error(response.message);
+            }
+        });
+    });
+    
+    $('#stopProxyBtn').click(function() {
+        $.post('/', {section: 'reverse_proxy', action: 'stop_proxy'}, function(response) {
+            if(response.status === 'success') {
+                toastr.success(response.message);
+                loadReverseProxyStatus();
+            } else {
+                toastr.error(response.message);
+            }
+        });
+    });
+    
+    $('#refreshStatus').click(function() {
+        loadReverseProxyStatus();
+    });
+});
+
+function loadCurrentProjectConfig() {
+    $.post('/', {
+        section: 'reverse_proxy',
+        action: 'get_current_project_config'
+    }, function(response) {
+        if(response.status === 'success') {
+            const useProxy = response.data.use_reverse_proxy;
+            $('#useReverseProxy').prop('checked', useProxy);
+            
+            if(useProxy) {
+                $('#reverseProxySettings').show();
+                $('#domainName').val(response.data.domain);
+                $('#saveReverseProxy').hide();
+                $('#disableReverseProxy').show();
+            } else {
+                $('#reverseProxySettings').hide();
+                $('#saveReverseProxy').show();
+                $('#disableReverseProxy').hide();
+                $('#domainName').val('');
+            }
+        }
+    });
+}
+
+function loadReverseProxyStatus() {
+    $.post('/', {
+        section: 'reverse_proxy',
+        action: 'get_status'
+    }, function(response) {
+        if(response.status === 'success') {
+            if(response.running) {
+                $('#proxyRunningIcon').removeClass('bi-question-circle').addClass('bi-check-circle-fill text-success');
+                $('#proxyRunning').removeClass('bg-secondary').addClass('bg-success').text('{{ t("running") }}');
+                $('#startProxyBtn').hide();
+                $('#stopProxyBtn').show();
+            } else {
+                $('#proxyRunningIcon').removeClass('bi-question-circle').addClass('bi-x-circle-fill text-danger');
+                $('#proxyRunning').removeClass('bg-secondary').addClass('bg-danger').text('{{ t("stopped") }}');
+                $('#startProxyBtn').show();
+                $('#stopProxyBtn').hide();
+            }
+            
+            $('#projectsCount').text(response.projects_count);
+            
+            const tbody = $('#projectsList');
+            tbody.empty();
+            
+            if(response.projects.length === 0) {
+                tbody.html('<tr><td colspan="4" class="text-center text-muted">{{ t("no_projects") }}</td></tr>');
+            } else {
+                response.projects.forEach(proj => {
+                    const domain = proj.proxy_config?.domain || 'Not set';
+                    tbody.append(`
+                        <tr>
+                            <td><code>${proj.name}</code></td>
+                            <td><strong>${domain}</strong></td>
+                            <td><span class="badge bg-success">${proj.status}</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-danger" onclick="removeProject('${proj.path}')">
+                                    <i class="bi bi-x-circle"></i> {{ t("remove") }}
+                                </button>
+                            </td>
+                        </tr>
+                    `);
+                });
+            }
+        }
+    });
+}
+
+function removeProject(projectPath) {
+    if(confirm('{{ t("confirm_remove_project") }}')) {
+        $.post('/', {
+            section: 'reverse_proxy',
+            action: 'remove_project',
+            project_path: projectPath
+        }, function(response) {
+            if(response.status === 'success') {
+                toastr.success(response.message);
+                loadReverseProxyStatus();
+                loadCurrentProjectConfig();
+            } else {
+                toastr.error(response.message);
+            }
+        });
+    }
+}
+</script>

@@ -1,0 +1,688 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('docker_info') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button class="btn btn-sm btn-outline-secondary" id="refreshDockerBtn">
+                <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+            </button>
+        </div>
+    </div>
+
+    <!-- Сообщение, если Docker не установлен -->
+    {% if not docker_info.installed %}
+    <div class="alert alert-danger" role="alert">
+        <h4 class="alert-heading">{{ t('docker_not_installed') }}</h4>
+        <p>{{ t('docker_installation_required') }}</p>
+        <hr>
+        <p class="mb-0">
+            {{ t('install_docker_from_dashboard') }}
+            <a href="/?section=dashboard" class="alert-link">{{ t('go_to_dashboard') }}</a>
+        </p>
+    </div>
+    {% endif %}
+
+    <!-- Карточки с общей информацией -->
+    <div class="row mb-4">
+        <!-- Docker Version -->
+        <div class="col-md-3 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-box me-2"></i> {{ t('docker_version') }}
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ docker_info.version }}</h5>
+                    <p class="card-text">
+                        <span class="badge bg-{% if docker_info.installed %}success{% else %}danger{% endif %}" id="dockerStatusBadge">
+                            {% if docker_info.installed %}
+                                {{ t('installed') }}
+                            {% else %}
+                                {{ t('not_installed') }}
+                            {% endif %}
+                        </span>
+                    </p>
+                    <p class="card-text"><small class="text-muted">{{ t('last_updated') }}: {{ current_time }}</small></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Containers -->
+        <div class="col-md-3 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <i class="bi bi-collection me-2"></i> {{ t('containers') }}
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ docker_info.containers.total }}</h5>
+                    <p class="card-text">
+                        <span class="badge bg-success">{{ docker_info.containers.running }} {{ t('running') }}</span>
+                        <span class="badge bg-secondary">{{ docker_info.containers.stopped }} {{ t('stopped') }}</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Images -->
+        <div class="col-md-3 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <i class="bi bi-images me-2"></i> {{ t('images') }}
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ docker_info.images }}</h5>
+                    <p class="card-text">{{ docker_info.system.disk_usage }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Resources -->
+        <div class="col-md-3 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <i class="bi bi-cpu me-2"></i> {{ t('resources') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text mb-1"><strong>{{ t('cpu_usage') }}:</strong> {{ docker_info.system.cpu_usage }}</p>
+                    <p class="card-text mb-0"><strong>{{ t('memory_usage') }}:</strong> {{ docker_info.system.memory_usage }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Подробная информация -->
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <i class="bi bi-stack me-2"></i> {{ t('docker_compose') }}
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td><strong>{{ t('installed') }}</strong></td>
+                                    <td>
+                                        <span class="badge bg-{% if docker_info.compose_installed %}success{% else %}danger{% endif %}" id="composeStatusBadge">
+                                            {% if docker_info.compose_installed %}
+                                                {{ t('installed') }}
+                                            {% else %}
+                                                {{ t('not_installed') }}
+                                            {% endif %}
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('projects') }}</strong></td>
+                                    <td>{{ docker_info.compose.projects }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('services') }}</strong></td>
+                                    <td>{{ docker_info.compose.services }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <i class="bi bi-gear me-2"></i> {{ t('quick_actions') }}
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <!-- Кнопка перезапуска Docker -->
+                        <button class="btn btn-outline-primary" id="restartDockerBtn" {% if not docker_info.installed %}disabled{% endif %}>
+                            <i class="bi bi-arrow-clockwise me-2"></i> {{ t('restart_docker') }}
+                        </button>
+                        
+                        <!-- Кнопка очистки системы -->
+                        <button class="btn btn-outline-secondary" id="pruneSystemBtn" {% if not docker_info.installed %}disabled{% endif %}>
+                            <i class="bi bi-trash me-2"></i> {{ t('prune_system') }}
+                        </button>
+                    </div>
+                    
+                    {% if not docker_info.installed %}
+                    <div class="alert alert-info mt-3 mb-0" role="alert">
+                        <small>
+                            {{ t('docker_required_for_actions') }}
+                            <a href="/?section=dashboard" class="alert-link">{{ t('install_from_dashboard') }}</a>
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- КНОПКА ЗАПУСКА ПРОЕКТА И МОДАЛЬНОЕ ОКНОВЫ ВОДА ЛОГОВ -->
+<hr />
+{% if not project_running %}
+<div class="d-grid gap-2 mt-3">
+    <button class="btn btn-success" id="startProjectBtn">
+        <i class="bi bi-play-circle me-2"></i> {{ t('start_project') }}
+    </button>
+</div>
+{% endif %}
+
+<!-- Модальное окно для логов запуска проекта -->
+<div class="modal fade" id="projectLogsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="projectLogsModalTitle">{{ t('project_start_logs') }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="{{ t('close') }}"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-center mb-3">
+                    <div class="spinner-border text-primary" role="status" id="projectLogsSpinner">
+                        <span class="visually-hidden">{{ t('loading') }}...</span>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info" id="projectLogsStatus">
+                    {{ t('starting_project') }}
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        {{ t('startup_logs') }}
+                        <button class="btn btn-sm btn-outline-secondary float-end" id="refreshProjectLogsBtn">
+                            <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                        </button>
+                    </div>
+                    <div class="card-body bg-dark text-white" style="height: 50vh; overflow-y: auto;">
+                        <pre id="projectLogsContent" class="mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeProjectLogsBtn">
+                    {{ t('close') }}
+                </button>
+                <button type="button" class="btn btn-success" id="finishProjectBtn" style="display: none;">
+                    <i class="bi bi-check-circle me-1"></i> {{ t('finish') }}
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="downloadProjectLogsBtn" style="display: none;">
+                    <i class="bi bi-download me-1"></i> {{ t('download_logs') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Обработчик кнопки запуска проекта с модальным окном
+    $('#startProjectBtn').on('click', function() {
+        const $btn = $(this);
+        $btn.prop('disabled', true);
+        
+        // Показать модальное окно
+        const projectModal = new bootstrap.Modal('#projectLogsModal');
+        projectModal.show();
+        
+        // Сбросить состояние модального окна
+        $('#projectLogsContent').text('');
+        $('#projectLogsStatus').removeClass('alert-success alert-danger alert-warning')
+                            .addClass('alert-info')
+                            .text('{{ t("starting_project") }}');
+        $('#projectLogsSpinner').show();
+        $('#finishProjectBtn').hide();
+        $('#downloadProjectLogsBtn').hide();
+        
+        // Начать запуск проекта
+        $.post('/', {
+            section: 'docker',
+            action: 'start_project'
+        }, function(response) {
+            if (response.status === 'started') {
+                const logFileName = response.log_file;  // ← получаем имя файла
+                
+                // Сохраняем имя файла лога
+                $('#projectLogsModal').data('log-file', logFileName);
+                
+                // Функция обновления логов
+                function updateProjectLogs() {
+                    $.post('/', {
+                        section: 'docker',
+                        action: 'get_project_logs',
+                        log_file: logFileName  // ← отправляем log_file вместо start_id
+                    }, function(logResponse) {
+                        if (logResponse.status === 'success') {
+                            $('#projectLogsContent').text(logResponse.logs);
+                            
+                            // Автоскролл к последней записи
+                            const logContainer = $('#projectLogsContent').parent();
+                            logContainer.scrollTop(logContainer[0].scrollHeight);
+                            
+                            // Проверяем завершение запуска
+                            if (logResponse.completed) {
+                                clearInterval(logInterval);
+                                $('#projectLogsSpinner').hide();
+                                $('#finishProjectBtn').show();
+                                $('#downloadProjectLogsBtn').show();
+                                
+                                if (logResponse.success) {
+                                    $('#projectLogsStatus').removeClass('alert-info')
+                                                        .addClass('alert-success')
+                                                        .text('{{ t("project_start_completed") }}');
+                                } else {
+                                    $('#projectLogsStatus').removeClass('alert-info')
+                                                        .addClass('alert-danger')
+                                                        .text('{{ t("project_start_failed") }}');
+                                }
+                            }
+                        } else {
+                            $('#projectLogsStatus').append('<br>' + logResponse.message);
+                        }
+                    }).fail(function() {
+                        $('#projectLogsStatus').append('<br>{{ t("log_request_failed") }}');
+                    });
+                }
+                
+                // Первое обновление
+                updateProjectLogs();
+                
+                // Обновляем логи каждые 2 секунды
+                const logInterval = setInterval(updateProjectLogs, 2000);
+                
+                // Обработчик кнопки обновления логов
+                $('#refreshProjectLogsBtn').off('click').on('click', updateProjectLogs);
+                
+                // Обработчик кнопки завершения
+                $('#finishProjectBtn').off('click').on('click', function() {
+                    projectModal.hide();
+                    location.reload(); // Перезагружаем страницу после завершения
+                });
+                
+                // Обработчик кнопки скачивания логов
+                $('#downloadProjectLogsBtn').off('click').on('click', function() {
+                    const logFileName = $('#projectLogsModal').data('log-file');
+                    
+                    // Создаем временную форму для скачивания
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '/';
+                    form.style.display = 'none';
+                    
+                    const params = {
+                        'section': 'docker',
+                        'action': 'download_project_logs',
+                        'log_file': logFileName  // ← исправляем здесь тоже
+                    };
+                    
+                    for (const [key, value] of Object.entries(params)) {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = key;
+                        input.value = value;
+                        form.appendChild(input);
+                    }
+                    
+                    document.body.appendChild(form);
+                    form.submit();
+                    document.body.removeChild(form);
+                });
+                
+                // Сохраняем interval ID
+                $('#projectLogsModal').data('log-interval', logInterval);
+            } else {
+                $('#projectLogsStatus').removeClass('alert-info')
+                                    .addClass('alert-danger')
+                                    .text(response.message || '{{ t("project_start_failed") }}');
+                $btn.prop('disabled', false);
+            }
+        }).fail(function() {
+            $('#projectLogsStatus').removeClass('alert-info')
+                                .addClass('alert-danger')
+                                .text('{{ t("request_failed") }}');
+            $btn.prop('disabled', false);
+        });
+    });
+
+    // Очистка интервала при закрытии модального окна
+    $('#projectLogsModal').on('hidden.bs.modal', function() {
+        const logInterval = $(this).data('log-interval');
+        if (logInterval) {
+            clearInterval(logInterval);
+        }
+        $('#startProjectBtn').prop('disabled', false);
+    });
+
+    // Функция для обновления статуса кнопок
+    function updateButtonStates() {
+    
+        const dockerInstalled = {{ 'true' if docker_info.installed else 'false' }};
+        const composeInstalled = {{ 'true' if docker_info.compose_installed else 'false' }};
+        
+        // Обновляем кнопки
+        $('#restartDockerBtn').prop('disabled', !dockerInstalled);
+        $('#pruneSystemBtn').prop('disabled', !dockerInstalled);
+        
+        // Обновляем бейджи
+        $('#dockerStatusBadge')
+            .removeClass('bg-danger bg-success')
+            .addClass(dockerInstalled ? 'bg-success' : 'bg-danger')
+            .text(dockerInstalled ? '{{ t("installed") }}' : '{{ t("not_installed") }}');
+            
+        $('#composeStatusBadge')
+            .removeClass('bg-danger bg-success')
+            .addClass(composeInstalled ? 'bg-success' : 'bg-danger')
+            .text(composeInstalled ? '{{ t("installed") }}' : '{{ t("not_installed") }}');
+    }
+
+    // Инициализация статуса кнопок
+    updateButtonStates();
+
+    // Обработчик кнопки обновления
+    $('#refreshDockerBtn').on('click', function() {
+        // Перезагружаем содержимое Docker info
+        $.post('/', {
+            section: 'docker',
+            action: 'info'
+        }, function(html) {
+            $('#dockerContent').html(html);
+            updateButtonStates();
+        }).fail(function() {
+            alert('{{ t("request_failed") }}');
+        });
+    });
+
+    // Обработчик кнопки перезапуска Docker
+    $('#restartDockerBtn').on('click', function() {
+        if(confirm('{{ t("confirm_restart_docker") }}')) {
+            $.post('/', {
+                section: 'docker', 
+                action: 'restart_docker'
+            }, function(response) {
+                if(response.status === 'success') {
+                    toastr.success(response.message);
+                    $('#refreshDockerBtn').click();
+                } else {
+                    toastr.error(response.message);
+                }
+            }).fail(function() {
+                toastr.error('{{ t("request_failed") }}');
+            });
+        }
+    });
+
+    // Обработчик кнопки очистки системы
+    $('#pruneSystemBtn').on('click', function() {
+        if(confirm('{{ t("confirm_prune_system") }}')) {
+            $.post('/', {
+                section: 'docker', 
+                action: 'prune_system'
+            }, function(response) {
+                if(response.status === 'success') {
+                    toastr.success(response.message);
+                    $('#refreshDockerBtn').click();
+                } else {
+                    toastr.error(response.message);
+                }
+            }).fail(function() {
+                toastr.error('{{ t("request_failed") }}');
+            });
+        }
+    });
+});
+</script>
+
+
+<!-- ТАБЛИЦА ИСТОРИИ ЗАПУСКОВ -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-clock-history me-2"></i> {{ t('launch_history') }}
+                    <button class="btn btn-sm btn-outline-primary float-end" id="refreshHistoryBtn">
+                        <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                    </button>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm" id="launchHistoryTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th><i class="bi bi-calendar me-1"></i> {{ t('date_time') }}</th>
+                                <th><i class="bi bi-file-text me-1"></i> {{ t('log_file') }}</th>
+                                <th><i class="bi bi-file-bar-graph me-1"></i> {{ t('size') }}</th>
+                                <th><i class="bi bi-check-circle me-1"></i> {{ t('status') }}</th>
+                                <th><i class="bi bi-gear me-1"></i> {{ t('actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr id="historyLoading">
+                                <td colspan="5" class="text-center py-4">
+                                    <div class="spinner-border spinner-border-sm" role="status">
+                                        <span class="visually-hidden">{{ t('loading') }}...</span>
+                                    </div>
+                                    <span class="ms-2">{{ t('loading_history') }}...</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="alert alert-info mt-3 mb-0" id="noHistoryAlert" style="display: none;">
+                    <i class="bi bi-info-circle me-2"></i> {{ t('no_launch_history') }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Модальное окно для просмотра логов -->
+<div class="modal fade" id="viewLogModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="viewLogModalTitle">{{ t('log_content') }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="{{ t('close') }}"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <small class="text-muted" id="logFileName"></small>
+                </div>
+                <div class="card">
+                    <div class="card-body bg-dark text-white" style="max-height: 60vh; overflow-y: auto;">
+                        <pre id="logContent" class="mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('close') }}</button>
+                <button type="button" class="btn btn-primary" id="downloadThisLogBtn">
+                    <i class="bi bi-download me-1"></i> {{ t('download_logs') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+// Функция загрузки истории запусков
+// Функция загрузки истории запусков
+function loadLaunchHistory() {
+    $('#historyLoading').show();
+    $('#noHistoryAlert').hide();
+    
+    $.post('/', {
+        section: 'docker',
+        action: 'get_launch_history'
+    }, function(response) {
+        $('#historyLoading').hide();
+        
+        if (response.status === 'success' && response.history && response.history.length > 0) {
+            const tbody = $('#launchHistoryTable tbody');
+            tbody.empty();
+            
+            // Сортируем по дате в обратном порядке (новые сверху)
+            response.history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            response.history.forEach(log => {
+                const statusClass = log.status === 'success' ? 'success' : 
+                                  log.status === 'failed' ? 'danger' : 'warning';
+                const statusText = log.status === 'success' ? '{{ t("status_success") }}' : 
+                                 log.status === 'failed' ? '{{ t("status_failed") }}' : 
+                                 '{{ t("status_running") }}';
+                
+                const row = `
+                    <tr>
+                        <td>${log.formatted_date}</td>
+                        <td>
+                            <span class="font-monospace small">${log.filename}</span>
+                        </td>
+                        <td>${formatFileSize(log.size)}</td>
+                        <td>
+                            <span class="badge bg-${statusClass}">${statusText}</span>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary view-log-btn" data-filename="${log.filename}" title="{{ t('view_logs') }}">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button class="btn btn-outline-success download-log-btn" data-filename="${log.filename}" title="{{ t('download_logs') }}">
+                                    <i class="bi bi-download"></i>
+                                </button>
+                                <button class="btn btn-outline-danger delete-log-btn" data-filename="${log.filename}" title="{{ t('delete_log') }}">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+        } else {
+            $('#noHistoryAlert').show();
+        }
+    }).fail(function() {
+        $('#historyLoading').hide();
+        $('#noHistoryAlert').show();
+        toastr.error('{{ t("request_failed") }}');
+    });
+}
+
+// Функция форматирования размера файла
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Функция просмотра лога
+function viewLog(filename) {
+    $.post('/', {
+        section: 'docker',
+        action: 'get_project_logs',
+        log_file: filename
+    }, function(response) {
+        if (response.status === 'success') {
+            $('#logFileName').text(filename);
+            $('#logContent').text(response.logs);
+            $('#viewLogModal').modal('show');
+            $('#downloadThisLogBtn').data('filename', filename);
+            
+            // Автоскролл к концу
+            const logContainer = $('#logContent');
+            logContainer.scrollTop(logContainer[0].scrollHeight);
+        } else {
+            toastr.error(response.message || '{{ t("log_request_failed") }}');
+        }
+    }).fail(function() {
+        toastr.error('{{ t("request_failed") }}');
+    });
+}
+
+// Функция скачивания лога
+function downloadLog(filename) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/';
+    form.style.display = 'none';
+    
+    const params = {
+        'section': 'docker',
+        'action': 'download_project_logs',
+        'log_file': filename
+    };
+    
+    for (const [key, value] of Object.entries(params)) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = value;
+        form.appendChild(input);
+    }
+    
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+}
+
+// Функция удаления лога
+function deleteLog(filename) {
+    if (!confirm('{{ t("confirm_delete_log") }}')) return;
+    
+    $.post('/', {
+        section: 'docker',
+        action: 'delete_log_file',
+        log_file: filename
+    }, function(response) {
+        if (response.status === 'success') {
+            toastr.success('{{ t("log_deleted_success") }}');
+            loadLaunchHistory(); // Перезагружаем таблицу
+        } else {
+            toastr.error(response.message || '{{ t("log_deleted_error") }}');
+        }
+    }).fail(function() {
+        toastr.error('{{ t("request_failed") }}');
+    });
+}
+
+// Обработчики событий
+$(document).ready(function() {
+    // Загружаем историю при загрузке страницы
+    loadLaunchHistory();
+    
+    // Обновление истории
+    $('#refreshHistoryBtn').on('click', loadLaunchHistory);
+    
+    // Просмотр лога
+    $(document).on('click', '.view-log-btn', function() {
+        const filename = $(this).data('filename');
+        viewLog(filename);
+    });
+    
+    // Скачивание лога
+    $(document).on('click', '.download-log-btn', function() {
+        const filename = $(this).data('filename');
+        downloadLog(filename);
+    });
+    
+    // Удаление лога
+    $(document).on('click', '.delete-log-btn', function() {
+        const filename = $(this).data('filename');
+        deleteLog(filename);
+    });
+    
+    // Скачивание из модального окна
+    $('#downloadThisLogBtn').on('click', function() {
+        const filename = $(this).data('filename');
+        if (filename) {
+            downloadLog(filename);
+        }
+    });
+    
+    // Обновляем историю после закрытия модального окна запуска
+    $('#projectLogsModal').on('hidden.bs.modal', function() {
+        loadLaunchHistory();
+    });
+});
+</script>

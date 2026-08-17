@@ -1,0 +1,126 @@
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="bi bi-cpu me-2"></i> {{ t('starter_updates') }}
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-secondary check-starter-btn">
+                        <i class="bi bi-arrow-repeat"></i> {{ t('check_updates') }}
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary update-starter-btn">
+                        <i class="bi bi-cloud-arrow-down"></i> {{ t('update_now') }}
+                    </button>
+                    <button class="btn btn-sm btn-outline-info view-starter-history-btn">
+                        <i class="bi bi-clock-history"></i> {{ t('view_history') }}
+                    </button>
+                    <button class="btn btn-sm btn-outline-warning settings-starter-btn">
+                        <i class="bi bi-gear"></i> {{ t('settings') }}
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>{{ t('current_status') }}</h6>
+                        <span class="badge bg-{{ starter_status.color }} fs-6">
+                            {{ t(starter_status.status) }}
+                        </span>
+                        {% if starter_status.last_update %}
+                            <p class="mt-2 mb-0 text-muted">
+                                {{ t('last_update') }}: {{ starter_status.last_update.strftime('%Y-%m-%d %H:%M:%S') }}
+                            </p>
+                        {% else %}
+                            <p class="mt-2 mb-0 text-muted">
+                                {{ t('never_updated') }}
+                            </p>
+                        {% endif %}
+                        
+                        <!-- Информация о текущем репозитории -->
+                        <div class="mt-3">
+                            <h6>{{ t('current_repository') }}</h6>
+                            <div class="card bg-light">
+                                <div class="card-body py-2">
+                                    <strong>{{ starter_status.current_repository.name }}</strong>
+                                    <br>
+                                    <small class="text-muted">{{ starter_status.current_repository.description }}</small>
+                                    <br>
+                                    <small><code>{{ starter_status.current_repository.url }}</code></small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <!-- Уведомления о обновлениях -->
+                        {% if starter_status.update_available %}
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                <strong>{{ t('update_strongly_recommended') }}</strong>
+                            </div>
+                        {% elif starter_status.has_update %}
+                            <div class="alert alert-warning">
+                                <i class="bi bi-info-circle"></i>
+                                {{ t('update_available') }}
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Настройки -->
+                        <div class="mt-3">
+                            <h6>{{ t('update_settings') }}</h6>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    {{ t('auto_update') }}
+                                    <span class="badge bg-{% if update_settings.AUTO_UPDATE %}success{% else %}secondary{% endif %}">
+                                        {% if update_settings.AUTO_UPDATE %}{{ t('enabled') }}{% else %}{{ t('disabled') }}{% endif %}
+                                    </span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    {{ t('notifications') }}
+                                    <span class="badge bg-{% if update_settings.NOTIFY_AVAILABLE %}success{% else %}secondary{% endif %}">
+                                        {% if update_settings.NOTIFY_AVAILABLE %}{{ t('enabled') }}{% else %}{{ t('disabled') }}{% endif %}
+                                    </span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    {{ t('check_interval') }}
+                                    <span class="badge bg-info">{{ update_settings.CHECK_INTERVAL_MINUTES }} min</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Доступные репозитории -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <h6>{{ t('available_repositories') }}</h6>
+                        <div class="row">
+                            {% for repo in repositories %}
+                            <div class="col-md-4 mb-3">
+                                <div class="card {% if repo.name == starter_status.current_repository.name %}border-primary{% endif %}">
+                                    <div class="card-body">
+                                        <h6 class="card-title">{{ repo.name }}</h6>
+                                        <p class="card-text small text-muted">{{ repo.description }}</p>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="text-muted">Branch: {{ repo.branch }}</small>
+                                            {% if repo.name != starter_status.current_repository.name %}
+                                            <button class="btn btn-sm btn-outline-primary switch-repo-btn" 
+                                                    data-repo-name="{{ repo.name }}">
+                                                {{ t('switch') }}
+                                            </button>
+                                            {% else %}
+                                            <span class="badge bg-success">{{ t('current') }}</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

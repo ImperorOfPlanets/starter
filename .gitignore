@@ -1,0 +1,30 @@
+# Генерируемая структура кода
+project_structure.html
+codereader_config.json
+codereaderForAIv2.py
+
+# Лог сервиса
+service.log
+
+# Игнорируем содержимое директорий backups и extracted
+/backups/*
+/extracted/*
+/differences/*
+/docker/*
+/logs/*
+/.vscode
+# Игнорируем все директории __pycache__, независимо от местоположения
+**/__pycache__/
+
+# Файл логов запуска для предотвращения зацикеливания запуска при обновлении
+/files/logs
+/files/web/ssl
+files/updates
+
+# Файл настроек стартера
+temp.txt
+.env
+.vscode
+
+/venv
+venv8*/

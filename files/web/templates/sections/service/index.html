@@ -1,0 +1,521 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('service_title') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button class="btn btn-sm btn-outline-secondary" data-action="refreshStatus">
+                <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-gear me-2"></i> {{ t('service_status') }}</span>
+                    <a href="#" class="btn btn-sm btn-primary" 
+                       data-action="loadSection" 
+                       data-data='{"section": "service", "action": "info"}'>
+                        <i class="bi bi-info-circle"></i> {{ t('details') }}
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td><strong>{{ t('service_name') }}</strong></td>
+                                    <td>{{ service_name }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('service_installed') }}</strong></td>
+                                    <td>
+                                        {% if service_status.installed %}
+                                            <span class="badge bg-success">{{ t('yes') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">{{ t('no') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('service_running') }}</strong></td>
+                                    <td>
+                                        {% if service_status.running %}
+                                            <span class="badge bg-success">{{ t('yes') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ t('no') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('service_autostart') }}</strong></td>
+                                    <td>
+                                        {% if service_status.enabled %}
+                                            <span class="badge bg-success">{{ t('yes') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ t('no') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-lightning me-2"></i> {{ t('service_actions') }}
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        {% if service_status.installed %}
+                            {% if service_status.running %}
+                                <button class="btn btn-danger" data-action="serviceAction" data-data='{"action": "stop"}'>
+                                    <i class="bi bi-stop-circle"></i> {{ t('service_stop') }}
+                                </button>
+                                <button class="btn btn-warning" data-action="serviceAction" data-data='{"action": "restart"}'>
+                                    <i class="bi bi-arrow-repeat"></i> {{ t('service_restart') }}
+                                </button>
+                            {% else %}
+                                <button class="btn btn-success" data-action="serviceAction" data-data='{"action": "start"}'>
+                                    <i class="bi bi-play-circle"></i> {{ t('service_start') }}
+                                </button>
+                            {% endif %}
+                            
+                            {% if service_status.enabled %}
+                                <button class="btn btn-outline-warning" data-action="serviceAction" data-data='{"action": "disable"}'>
+                                    <i class="bi bi-x-circle"></i> {{ t('service_disable_autostart') }}
+                                </button>
+                            {% else %}
+                                <button class="btn btn-outline-success" data-action="serviceAction" data-data='{"action": "enable"}'>
+                                    <i class="bi bi-check-circle"></i> {{ t('service_enable_autostart') }}
+                                </button>
+                            {% endif %}
+
+                            <button class="btn btn-outline-info" data-action="diagnoseService">
+                                <i class="bi bi-search"></i> {{ t('service_diagnose') }}
+                            </button>
+
+                            <button class="btn btn-outline-danger" data-action="uninstallService">
+                                <i class="bi bi-trash"></i> {{ t('service_uninstall') }}
+                            </button>
+                        {% else %}
+                            <button class="btn btn-success" data-action="installService">
+                                <i class="bi bi-download"></i> {{ t('service_install') }}
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица для управления периодическими задачами -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-clock me-2"></i> {{ t('scheduled_tasks') }}</span>
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+                        <i class="bi bi-plus-circle"></i> {{ t('add_task') }}
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="tasksTable">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('task_name') }}</th>
+                                    <th>{{ t('task_schedule') }}</th>
+                                    <th>{{ t('task_command') }}</th>
+                                    <th>{{ t('task_status') }}</th>
+                                    <th>{{ t('actions') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="5" class="text-center">
+                                        {{ t('no_tasks_configured') }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно диагностики -->
+<div class="modal fade" id="diagnoseModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">{{ t('service_diagnosis') }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-center mb-3">
+                    <div class="spinner-border text-info" role="status" id="diagnoseSpinner">
+                        <span class="visually-hidden">{{ t('loading') }}...</span>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info" id="diagnoseStatus">
+                    {{ t('diagnosing_service') }}
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        {{ t('diagnosis_results') }}
+                        <button class="btn btn-sm btn-outline-secondary float-end" id="refreshDiagnosisBtn">
+                            <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                        </button>
+                    </div>
+                    <div class="card-body" style="max-height: 60vh; overflow-y: auto;">
+                        <div id="diagnoseResults"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('close') }}</button>
+                <button type="button" class="btn btn-primary" id="copyDiagnosisBtn">
+                    <i class="bi bi-clipboard"></i> {{ t('copy_to_clipboard') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно добавления задачи -->
+<div class="modal fade" id="addTaskModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ t('add_scheduled_task') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addTaskForm">
+                    <div class="mb-3">
+                        <label for="taskName" class="form-label">{{ t('task_name') }}</label>
+                        <input type="text" class="form-control" id="taskName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskSchedule" class="form-label">{{ t('task_schedule') }}</label>
+                        <select class="form-select" id="taskSchedule" required>
+                            <option value="hourly">{{ t('hourly') }}</option>
+                            <option value="daily">{{ t('daily') }}</option>
+                            <option value="weekly">{{ t('weekly') }}</option>
+                            <option value="monthly">{{ t('monthly') }}</option>
+                            <option value="custom">{{ t('custom') }}</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="customScheduleGroup" style="display: none;">
+                        <label for="customSchedule" class="form-label">{{ t('custom_schedule') }}</label>
+                        <input type="text" class="form-control" id="customSchedule" 
+                               placeholder="0 * * * * (каждый час)">
+                        <div class="form-text">{{ t('cron_format_help') }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskCommand" class="form-label">{{ t('task_command') }}</label>
+                        <textarea class="form-control" id="taskCommand" rows="3" required 
+                                  placeholder="python /path/to/script.py --task"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('cancel') }}</button>
+                <button type="button" class="btn btn-primary" id="saveTaskBtn">{{ t('save_task') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Обработчик диагностики сервиса
+    $('[data-action="diagnoseService"]').on('click', function() {
+        $('#diagnoseModal').modal('show');
+        runServiceDiagnosis();
+    });
+
+    // Функция запуска диагностики
+    function runServiceDiagnosis() {
+        $('#diagnoseSpinner').show();
+        $('#diagnoseStatus').removeClass('alert-danger alert-success').addClass('alert-info')
+                        .text('{{ t("diagnosing_service") }}');
+        $('#diagnoseResults').empty();
+
+        $.post('/', {
+            section: 'service',
+            action: 'diagnose_service'
+        }, function(response) {
+            $('#diagnoseSpinner').hide();
+            
+            if (response.status === 'success') {
+                $('#diagnoseStatus').removeClass('alert-info').addClass('alert-success')
+                                .text('{{ t("diagnosis_completed") }}');
+                displayDiagnosisResults(response);
+            } else {
+                $('#diagnoseStatus').removeClass('alert-info').addClass('alert-danger')
+                                .text('{{ t("diagnosis_failed") }}: ' + (response.message || 'Unknown error'));
+            }
+        }).fail(function() {
+            $('#diagnoseSpinner').hide();
+            $('#diagnoseStatus').removeClass('alert-info').addClass('alert-danger')
+                            .text('{{ t("request_failed") }}');
+        });
+    }
+
+    // Функция отображения результатов диагностики
+    function displayDiagnosisResults(data) {
+        const $results = $('#diagnoseResults');
+        $results.empty();
+
+        // Основная информация о статусе
+        if (data.status_info) {
+            $results.append('<h5>{{ t("service_status") }}</h5>');
+            const status = data.status_info;
+            $results.append(`
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <tr><td><strong>{{ t("installed") }}</strong></td><td>${status.installed ? '✅' : '❌'}</td></tr>
+                        <tr><td><strong>{{ t("running") }}</strong></td><td>${status.running ? '✅' : '❌'}</td></tr>
+                        <tr><td><strong>{{ t("enabled") }}</strong></td><td>${status.enabled ? '✅' : '❌'}</td></tr>
+                        <tr><td><strong>OS</strong></td><td>${status.os}</td></tr>
+                    </table>
+                </div>
+            `);
+        }
+
+        // Проблемы
+        if (data.problems && data.problems.length > 0) {
+            $results.append('<h5 class="text-danger">{{ t("problems_detected") }}</h5>');
+            data.problems.forEach(problem => {
+                $results.append(`<div class="alert alert-danger">❌ ${problem}</div>`);
+            });
+        }
+
+        // Детальный статус
+        if (data.detailed_status) {
+            $results.append('<h5>{{ t("detailed_status") }}</h5>');
+            $results.append(`<pre class="bg-light p-3">${escapeHtml(data.detailed_status)}</pre>`);
+        }
+
+        // Логи журнала
+        if (data.journal_logs) {
+            $results.append('<h5>{{ t("journal_logs") }}</h5>');
+            $results.append(`<pre class="bg-dark text-light p-3">${escapeHtml(data.journal_logs)}</pre>`);
+        }
+
+        // Конфигурация сервиса
+        if (data.service_config) {
+            $results.append('<h5>{{ t("service_configuration") }}</h5>');
+            $results.append(`<pre class="bg-light p-3">${escapeHtml(data.service_config)}</pre>`);
+        }
+
+        // Права доступа
+        if (data.service_permissions) {
+            $results.append('<h5>{{ t("permissions") }}</h5>');
+            $results.append(`<p>${data.service_permissions}</p>`);
+        }
+
+        // Пути
+        if (data.paths) {
+            $results.append('<h5>{{ t("paths") }}</h5>');
+            $results.append(`
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        ${Object.entries(data.paths).map(([key, value]) => `
+                            <tr>
+                                <td><strong>${key}</strong></td>
+                                <td>${typeof value === 'boolean' ? (value ? '✅' : '❌') : value}</td>
+                            </tr>
+                        `).join('')}
+                    </table>
+                </div>
+            `);
+        }
+
+        // Ошибки
+        if (data.error) {
+            $results.append('<h5 class="text-danger">{{ t("errors") }}</h5>');
+            $results.append(`<div class="alert alert-danger">${escapeHtml(data.error)}</div>`);
+        }
+    }
+
+    // Вспомогательная функция для экранирования HTML
+    function escapeHtml(text) {
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    // Кнопка обновления диагностики
+    $('#refreshDiagnosisBtn').on('click', runServiceDiagnosis);
+
+    // Кнопка копирования в буфер обмена
+    $('#copyDiagnosisBtn').on('click', function() {
+        const diagnosisText = $('#diagnoseResults').text();
+        navigator.clipboard.writeText(diagnosisText).then(() => {
+            alert('{{ t("copied_to_clipboard") }}');
+        }).catch(() => {
+            alert('{{ t("copy_failed") }}');
+        });
+    });
+
+    // Обработчик кнопки обновления статуса
+    $('[data-action="refreshStatus"]').on('click', function() {
+        $('#mainMenu a[data-section="service"]').click();
+    });
+
+    // Обработчик установки сервиса
+    $('[data-action="installService"]').on('click', function() {
+        if (confirm('{{ t("confirm_install_service") }}')) {
+            $.post('/', {
+                section: 'service',
+                action: 'install_service'
+            }, function(response) {
+                if (response.status === 'success') {
+                    alert('{{ t("service_installed_successfully") }}');
+                    $('#mainMenu a[data-section="service"]').click();
+                } else {
+                    alert('{{ t("service_installation_failed") }}: ' + response.message);
+                }
+            }).fail(function() {
+                alert('{{ t("request_failed") }}');
+            });
+        }
+    });
+
+    // Обработчик удаления сервиса
+    $('[data-action="uninstallService"]').on('click', function() {
+        if (confirm('{{ t("confirm_uninstall_service") }}')) {
+            $.post('/', {
+                section: 'service',
+                action: 'uninstall_service'
+            }, function(response) {
+                if (response.status === 'success') {
+                    alert('{{ t("service_uninstalled_successfully") }}');
+                    $('#mainMenu a[data-section="service"]').click();
+                } else {
+                    alert('{{ t("service_uninstallation_failed") }}: ' + response.message);
+                }
+            }).fail(function() {
+                alert('{{ t("request_failed") }}');
+            });
+        }
+    });
+
+    // Обработчик действий с сервисом (старт, стоп и т.д.)
+    $('[data-action="serviceAction"]').on('click', function() {
+        const actionData = $(this).data('data');
+        $.post('/', {
+            section: 'service',
+            action: 'service_action',
+            ...actionData
+        }, function(response) {
+            if (response.status === 'success') {
+                alert('{{ t("action_completed_successfully") }}');
+                $('#mainMenu a[data-section="service"]').click();
+            } else {
+                alert('{{ t("action_failed") }}: ' + response.message);
+            }
+        }).fail(function() {
+            alert('{{ t("request_failed") }}');
+        });
+    });
+
+    // Показать/скрыть поле для кастомного расписания
+    $('#taskSchedule').on('change', function() {
+        if ($(this).val() === 'custom') {
+            $('#customScheduleGroup').show();
+        } else {
+            $('#customScheduleGroup').hide();
+        }
+    });
+
+    // Обработчик сохранения задачи
+    $('#saveTaskBtn').on('click', function() {
+        const taskData = {
+            task_name: $('#taskName').val(),
+            task_schedule: $('#taskSchedule').val(),
+            task_command: $('#taskCommand').val()
+        };
+
+        if (taskData.task_schedule === 'custom') {
+            taskData.custom_schedule = $('#customSchedule').val();
+        }
+
+        $.post('/', {
+            section: 'service',
+            action: 'add_scheduled_task',
+            ...taskData
+        }, function(response) {
+            if (response.status === 'success') {
+                alert('{{ t("task_added_successfully") }}');
+                $('#addTaskModal').modal('hide');
+                // Обновить таблицу задач
+                loadScheduledTasks();
+            } else {
+                alert('{{ t("task_addition_failed") }}: ' + response.message);
+            }
+        }).fail(function() {
+            alert('{{ t("request_failed") }}');
+        });
+    });
+
+    // Функция загрузки списка задач
+    function loadScheduledTasks() {
+        $.post('/', {
+            section: 'service',
+            action: 'get_scheduled_tasks'
+        }, function(response) {
+            if (response.status === 'success') {
+                // Обработать и отобразить задачи в таблице
+                updateTasksTable(response.tasks);
+            } else {
+                console.error('Failed to load tasks:', response.message);
+            }
+        }).fail(function() {
+            console.error('Request failed');
+        });
+    }
+
+    // Функция обновления таблицы задач
+    function updateTasksTable(tasks) {
+        const $tableBody = $('#tasksTable tbody');
+        $tableBody.empty();
+
+        if (tasks.length === 0) {
+            $tableBody.append('<tr><td colspan="5" class="text-center">{{ t("no_tasks_configured") }}</td></tr>');
+            return;
+        }
+
+        tasks.forEach(task => {
+            const $row = $('<tr>');
+            $row.append($('<td>').text(task.name));
+            $row.append($('<td>').text(task.schedule));
+            $row.append($('<td>').text(task.command));
+            $row.append($('<td>').html('<span class="badge bg-success">{{ t("active") }}</span>'));
+            
+            const $actions = $('<td>');
+            $actions.append('<button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>');
+            $row.append($actions);
+            
+            $tableBody.append($row);
+        });
+    }
+
+    // Загрузить задачи при открытии страницы
+    loadScheduledTasks();
+});
+</script>

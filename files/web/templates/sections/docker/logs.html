@@ -1,0 +1,55 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('logs') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="btn-group me-2">
+                <select class="form-select form-select-sm" id="containerSelector">
+                    <option value="">{{ t('select_container') }}</option>
+                    {% for container in containers %}
+                    <option value="{{ container.id }}" {% if container.id == container_id %}selected{% endif %}>
+                        {{ container.name }} ({{ container.image }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-sm btn-outline-secondary" id="refreshLogsBtn">
+                    <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {% if container_id %}
+    <div class="card mb-3">
+        <div class="card-header">
+            {{ t('logs_for_container') }}: {{ container_id|truncate(12, True, '') }}
+        </div>
+        <div class="card-body p-0">
+            <pre class="m-0 p-3 bg-dark text-white" style="max-height: 500px; overflow-y: auto;">{{ logs }}</pre>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        {{ t('select_container_to_view_logs') }}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+$(document).ready(function() {
+    // Выбор контейнера для просмотра логов
+    $('#containerSelector').change(function() {
+        const containerId = $(this).val();
+        if(containerId) {
+            loadDockerContent('logs', {container_id: containerId});
+        }
+    });
+
+    // Обновление логов
+    $('#refreshLogsBtn').click(function() {
+        const containerId = $('#containerSelector').val();
+        if(containerId) {
+            loadDockerContent('logs', {container_id: containerId});
+        }
+    });
+});
+</script>

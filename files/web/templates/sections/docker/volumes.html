@@ -1,0 +1,50 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('volumes') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button class="btn btn-sm btn-outline-secondary" id="refreshVolumesBtn">
+                <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+            </button>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-striped table-sm">
+            <thead>
+                <tr>
+                    <th>{{ t('name') }}</th>
+                    <th>{{ t('driver') }}</th>
+                    <th>{{ t('scope') }}</th>
+                    <th>{{ t('mountpoint') }}</th>
+                    <th>{{ t('labels') }}</th>
+                    <th>{{ t('created') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for volume in volumes %}
+                <tr>
+                    <td>{{ volume.name }}</td>
+                    <td>{{ volume.driver }}</td>
+                    <td>{{ volume.scope }}</td>
+                    <td>{{ volume.mountpoint }}</td>
+                    <td>{{ volume.labels }}</td>
+                    <td>{{ volume.created_at }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center">{{ t('no_volumes_found') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Обновление списка томов
+    $('#refreshVolumesBtn').click(function() {
+        loadDockerContent('volumes');
+    });
+});
+</script>

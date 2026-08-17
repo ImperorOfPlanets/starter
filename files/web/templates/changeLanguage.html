@@ -1,0 +1,67 @@
+<div class="dropdown">    
+    <select class="form-select form-select-sm" id="languageSelector" 
+            aria-label="{{ t('changeLanguage_selector_label') }}">
+        {% if languages %}
+            {% for code, data in languages.items() %}
+                <option value="{{ code }}" {% if current_language == code %}selected{% endif %}>
+                    {{ data.this_language }}
+                </option>
+            {% endfor %}
+        {% else %}
+            <option>{{ t('changeLanguage_no_languages') }}</option>
+        {% endif %}
+    </select>
+</div>
+
+<script>
+    $(document).ready(function() {
+        // Загружаем переводы для JavaScript
+        const translations = {
+            network_error: "{{ t('changeLanguage_network_error') }}",
+            change_failed: "{{ t('changeLanguage_change_failed') }}",
+            unknown_error: "{{ t('changeLanguage_unknown_error') }}"
+        };
+
+        $('#languageSelector').change(function() {
+            var lang = $(this).val();
+            var originalLang = '{{ current_language }}';
+            
+            // Создаем FormData и добавляем параметры
+            var formData = new FormData();
+            formData.append('section', 'language');
+            formData.append('action', 'changeLanguage');
+            formData.append('lang', lang);
+            
+            // Добавляем заголовок Accept для явного указания JSON
+            var headers = new Headers();
+            headers.append('Accept', 'application/json');
+    
+            // Отправка AJAX-запроса
+            fetch('/', {
+                method: 'POST',
+                body: formData,
+                headers: headers
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(translations.network_error);
+                }
+                return response.json();
+            })
+            .then(result => {
+                if (result.status === 'success') {
+                    window.location.reload();
+                } else {
+                    console.error('Error:', result.message);
+                    alert(translations.change_failed + ': ' + (result.message || ''));
+                    $('#languageSelector').val(originalLang);
+                }
+            })
+            .catch(error => {
+                console.error('AJAX Error:', error);
+                alert(translations.unknown_error);
+                $('#languageSelector').val(originalLang);
+            });
+        });
+    });
+</script>

@@ -1,0 +1,267 @@
+<!-- Шаблон для вкладки "Обзор" -->
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">Обзор фаервола</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button class="btn btn-sm btn-outline-secondary" id="refreshFirewallBtn">
+                <i class="bi bi-arrow-repeat"></i> Обновить
+            </button>
+        </div>
+    </div>
+
+    <!-- Сообщение, если фаервол не обнаружен -->
+    {% if not firewall_info.is_available %}
+    <div class="alert alert-warning" role="alert">
+        <h4 class="alert-heading">Фаервол не обнаружен</h4>
+        <p>В системе не обнаружено активного фаервола (UFW, firewalld, iptables или nftables).</p>
+        <hr>
+        <p class="mb-0">
+            Рекомендуется установить и настроить один из фаерволов для обеспечения безопасности системы.
+        </p>
+    </div>
+    {% endif %}
+
+    <!-- Карточки с общей информацией -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-shield me-2"></i> Активный фаервол
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title text-capitalize">{{ firewall_info.active_firewall }}</h5>
+                    <p class="card-text">
+                        <span class="badge bg-{% if firewall_info.is_available %}success{% else %}danger{% endif %}">
+                            {% if firewall_info.is_available %}
+                                Активен
+                            {% else %}
+                                Неактивен
+                            {% endif %}
+                        </span>
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <i class="bi bi-door-open me-2"></i> Открытые порты
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ firewall_info.open_ports|length }}</h5>
+                    <p class="card-text">
+                        {% if firewall_info.all_ports_open %}
+                        <span class="badge bg-warning text-dark">Все порты открыты</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <i class="bi bi-ear me-2"></i> Прослушивающие порты
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ firewall_info.listening_ports|length }}</h5>
+                    <p class="card-text">Слушают входящие соединения</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Предупреждение о безопасности -->
+    {% if firewall_info.all_ports_open %}
+    <div class="alert alert-danger" role="alert">
+        <h4 class="alert-heading">Внимание: все порты открыты!</h4>
+        <p>Это представляет серьезную угрозу безопасности. Рекомендуется ограничить открытые порты только необходимыми для работы системы.</p>
+        <hr>
+        <p class="mb-0">
+            <button class="btn btn-sm btn-outline-danger" id="secureFirewallBtn">
+                <i class="bi bi-shield-lock"></i> Заблокировать все порты
+            </button>
+        </p>
+    </div>
+    {% endif %}
+
+    <!-- Статистика по протоколам -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <i class="bi bi-pie-chart me-2"></i> Статистика по протоколам
+                </div>
+                <div class="card-body">
+                    <canvas id="protocolChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <i class="bi bi-lightning me-2"></i> Быстрые действия
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary" id="addPortBtn">
+                            <i class="bi bi-plus-circle me-2"></i> Открыть порт
+                        </button>
+                        <button class="btn btn-outline-info" id="restartFirewallBtn">
+                            <i class="bi bi-arrow-clockwise me-2"></i> Перезапустить фаервол
+                        </button>
+                        <button class="btn btn-outline-warning" id="flushRulesBtn">
+                            <i class="bi bi-trash me-2"></i> Сбросить правила
+                        </button>
+                        <button class="btn btn-outline-success" id="saveRulesBtn">
+                            <i class="bi bi-check-circle me-2"></i> Сохранить правила
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Инициализация графика
+    const protocolCtx = document.getElementById('protocolChart').getContext('2d');
+    const protocolChart = new Chart(protocolCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['TCP', 'UDP', 'Другие'],
+            datasets: [{
+                data: [{% for port in firewall_info.open_ports %}{% if port.protocol == 'tcp' %}1{% endif %}{% endfor %}, 
+                       {% for port in firewall_info.open_ports %}{% if port.protocol == 'udp' %}1{% endif %}{% endfor %}, 
+                       {% for port in firewall_info.open_ports %}{% if port.protocol != 'tcp' and port.protocol != 'udp' %}1{% endif %}{% endfor %}],
+                backgroundColor: [
+                    'rgba(54, 162, 235, 0.8)',
+                    'rgba(75, 192, 192, 0.8)',
+                    'rgba(153, 102, 255, 0.8)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                },
+                title: {
+                    display: true,
+                    text: 'Распределение по протоколам'
+                }
+            }
+        }
+    });
+
+    // Обработчики кнопок
+    $('#refreshFirewallBtn').on('click', function() {
+        loadFirewallContent('overview');
+    });
+
+    $('#addPortBtn').on('click', function() {
+        $('#portModalTitle').text('Открыть порт');
+        $('#portAction').val('open');
+        $('#portForm')[0].reset();
+        $('#portServiceContainer').show();
+        var portModal = new bootstrap.Modal('#portModal');
+        portModal.show();
+    });
+
+    $('#restartFirewallBtn').on('click', function() {
+        $('#confirmMessage').text('Вы уверены, что хотите перезапустить фаервол? Это может временно прервать сетевое соединение.');
+        $('#confirmActionBtn').data('action', 'restart');
+        var confirmModal = new bootstrap.Modal('#confirmModal');
+        confirmModal.show();
+    });
+
+    $('#flushRulesBtn').on('click', function() {
+        $('#confirmMessage').text('Вы уверены, что хотите сбросить все правила фаервола? Это действие нельзя отменить.');
+        $('#confirmActionBtn').data('action', 'flush');
+        var confirmModal = new bootstrap.Modal('#confirmModal');
+        confirmModal.show();
+    });
+
+    $('#saveRulesBtn').on('click', function() {
+        $.post('/', {
+            section: 'firewall',
+            action: 'save_rules'
+        }, function(response) {
+            showAlert(response.status === 'success' ? 'alert-success' : 'alert-danger', response.message);
+        });
+    });
+
+    $('#secureFirewallBtn').on('click', function() {
+        $('#confirmMessage').text('Вы уверены, что хотите заблокировать все порты? После этого нужно будет вручную открыть необходимые порты.');
+        $('#confirmActionBtn').data('action', 'secure');
+        var confirmModal = new bootstrap.Modal('#confirmModal');
+        confirmModal.show();
+    });
+
+    $('#savePortBtn').on('click', function() {
+        const formData = $('#portForm').serializeArray();
+        const data = {};
+        $.each(formData, function() {
+            data[this.name] = this.value;
+        });
+        
+        $.post('/', {
+            section: 'firewall',
+            action: data.action + '_port',
+            port: data.port,
+            protocol: data.protocol,
+            service: data.service
+        }, function(response) {
+            if (response.status === 'success') {
+                $('#portModal').modal('hide');
+                showAlert('alert-success', response.message);
+                loadFirewallContent('overview');
+            } else {
+                showAlert('alert-danger', response.message);
+            }
+        });
+    });
+
+    $('#confirmActionBtn').on('click', function() {
+        const action = $(this).data('action');
+        $('#confirmModal').modal('hide');
+        
+        let postData = { section: 'firewall' };
+        
+        switch(action) {
+            case 'restart':
+                postData.action = 'restart_firewall';
+                break;
+            case 'flush':
+                postData.action = 'flush_rules';
+                break;
+            case 'secure':
+                postData.action = 'block_all_ports';
+                break;
+        }
+        
+        $.post('/', postData, function(response) {
+            showAlert(response.status === 'success' ? 'alert-success' : 'alert-danger', response.message);
+            if (response.status === 'success') {
+                loadFirewallContent('overview');
+            }
+        });
+    });
+
+    function showAlert(type, message) {
+        const alertDiv = $('<div class="alert ' + type + ' alert-dismissible fade show" role="alert">')
+            .html(message + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>');
+        
+        $('.container-fluid').prepend(alertDiv);
+        
+        setTimeout(function() {
+            alertDiv.alert('close');
+        }, 5000);
+    }
+});
+</script>

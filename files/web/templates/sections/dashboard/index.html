@@ -1,0 +1,488 @@
+<!-- Модальное окно установки -->
+{% include 'sections/dashboard/modal.html' %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-end pt-3 pb-2 mb-3 border-bottom">
+        <div class="btn-toolbar">
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" id="refreshDashboardBtn">
+                    <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Карточки с общей информацией -->
+    <div class="row mb-4">
+        <!-- OS -->
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-pc-display me-2"></i> {{ t('system') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('hostname') }}:</strong> {{ hostname }}</p>
+                    <p class="card-text"><strong>{{ t('username') }}:</strong> {{ username }}</p>
+                    <p class="card-text"><strong>{{ t('os') }}:</strong> {{ sys_info.os }} {{ sys_info.os_release }} ({{ sys_info.architecture }})</p>
+                    <p class="card-text"><strong>{{ t('version') }}:</strong> {{ sys_info.os_version }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- CPU -->
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header bg-danger text-white">
+                    <i class="bi bi-cpu me-2"></i> {{ t('cpu') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('processor') }}:</strong> {{ cpu_info.name }}</p>
+                    <p class="card-text"><strong>{{ t('cores') }}:</strong> {{ cpu_info.cores }} ({{ cpu_info.logical_cores }} {{ t('logical') }})</p>
+                    <p class="card-text"><strong>{{ t('usage') }}:</strong> {{ cpu_info.usage }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory -->
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header bg-secondary text-white">
+                    <i class="bi bi-memory me-2"></i> {{ t('memory') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('total') }}:</strong> {{ memory_info.total }}</p>
+                    <p class="card-text"><strong>{{ t('used') }}:</strong> {{ memory_info.used }} ({{ memory_info.percent }})</p>
+                    <p class="card-text"><strong>{{ t('available') }}:</strong> {{ memory_info.available }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- DISK -->
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <i class="bi bi-hdd me-2"></i> {{ t('disk') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('total') }}:</strong> {{ disk_info.total }}</p>
+                    <p class="card-text"><strong>{{ t('used') }}:</strong> {{ disk_info.used }} ({{ disk_info.percent }})</p>
+                    <p class="card-text"><strong>{{ t('free') }}:</strong> {{ disk_info.free }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- UP TIME -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <i class="bi bi-clock me-2"></i> {{ t('uptime') }}
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('current_time') }}:</strong> {{ current_time }}</p>
+                    <p class="card-text"><strong>{{ t('system_uptime') }}:</strong> {{ uptime }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- PYTHON -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <i class="bi bi-file-code me-2"></i> Python
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('version') }}:</strong> {{ python_info.version }}</p>
+                    <p class="card-text"><strong>{{ t('implementation') }}:</strong> {{ python_info.implementation }}</p>
+                    <p class="card-text"><strong>{{ t('compiler') }}:</strong> {{ python_info.compiler }}</p>
+                </div>
+            </div>
+        </div>
+        <hr class="mt-3"/>
+
+        <h1>Обязательный софт</h1>
+
+        <!-- Docker -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-docker me-2"></i> Docker
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
+                        {% if sys_info.docker.docker_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="docker">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                    <p class="card-text"><strong>Compose:</strong> 
+                        {% if sys_info.docker.docker_compose_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="docker-compose">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Port Knocking -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-shield-lock me-2"></i> Port Knocking
+                    {% if sys_info.os_type == 'windows' %}
+                        <small class="text-muted">(FW)</small>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong>
+                        {% if sys_info.knocking.knocking_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>        
+
+        <!-- Git -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-git me-2"></i> Git
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong> 
+                        {% if sys_info.git.git_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="git">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- VPN -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-shield-lock me-2"></i> Tailscale
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>{{ t('status') }}:</strong>
+                        {% if sys_info.tailscale.tailscale_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="tailscale">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Starter Service and SYSTEMD -->
+        <div class="col-md-3 mt-2">
+            <div class="card h-100">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-gear me-2"></i> Starter Service
+                </div>
+                <div class="card-body">
+                    <p class="card-text"><strong>Systemd:</strong> 
+                        {% if sys_info.systemd.systemd_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="systemd">
+                                <i class="bi bi-download"></i> {{ t('install') }}
+                            </button>
+                        {% endif %}
+                    </p>
+                    <p class="card-text"><strong>Service:</strong> 
+                        {% if sys_info.systemd.service_installed %}
+                            <span class="badge bg-success">{{ t('installed') }}</span>
+                            <span class="badge bg-info">{{ sys_info.systemd.service_status }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ t('not_installed') }}</span>
+                            {% if sys_info.systemd.systemd_installed %}
+                                <button class="btn btn-sm btn-success mt-2 install-btn" data-pkg="starter-service">
+                                    <i class="bi bi-download"></i> {{ t('install') }}
+                                </button>
+                            {% else %}
+                                <small class="text-muted">Install systemd first</small>
+                            {% endif %}
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Кнопка автоустановки -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <button class="btn btn-primary btn-lg" id="autoInstallBtn" data-bs-toggle="modal" data-bs-target="#autoInstallModal">
+                <i class="bi bi-gear-wide-connected me-2"></i> {{ t('auto_install') }}
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно автоустановки -->
+<div class="modal fade" id="autoInstallModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-gear-wide-connected me-2"></i> {{ t('auto_install_title') }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="{{ t('close') }}"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">{{ t('auto_install_description') }}</p>
+
+                <div class="list-group" id="autoInstallList">
+                    <!-- Docker -->
+                    <label class="list-group-item d-flex justify-content-between align-items-center {% if sys_info.docker.docker_installed %}list-group-item-success{% endif %}">
+                        <div>
+                            <input class="form-check-input me-2 auto-install-check" type="checkbox" value="docker"
+                                   data-checkable="true" data-installed="{{ sys_info.docker.docker_installed|lower }}">
+                            <i class="bi bi-docker me-2"></i> <strong>Docker</strong>
+                            {% if sys_info.docker.docker_installed %}
+                                <span class="badge bg-success ms-2">{{ t('installed') }}</span>
+                            {% else %}
+                                <span class="badge bg-danger ms-2">{{ t('not_installed') }}</span>
+                            {% endif %}
+                        </div>
+                    </label>
+
+                    <!-- Docker Compose -->
+                    <label class="list-group-item d-flex justify-content-between align-items-center {% if sys_info.docker.docker_compose_installed %}list-group-item-success{% endif %}">
+                        <div>
+                            <input class="form-check-input me-2 auto-install-check" type="checkbox" value="docker-compose"
+                                   data-checkable="true" data-installed="{{ sys_info.docker.docker_compose_installed|lower }}">
+                            <i class="bi bi-box-seam me-2"></i> <strong>Docker Compose</strong>
+                            {% if sys_info.docker.docker_compose_installed %}
+                                <span class="badge bg-success ms-2">{{ t('installed') }}</span>
+                            {% else %}
+                                <span class="badge bg-danger ms-2">{{ t('not_installed') }}</span>
+                            {% endif %}
+                        </div>
+                    </label>
+
+                    <!-- Git -->
+                    <label class="list-group-item d-flex justify-content-between align-items-center {% if sys_info.git.git_installed %}list-group-item-success{% endif %}">
+                        <div>
+                            <input class="form-check-input me-2 auto-install-check" type="checkbox" value="git"
+                                   data-checkable="true" data-installed="{{ sys_info.git.git_installed|lower }}">
+                            <i class="bi bi-git me-2"></i> <strong>Git</strong>
+                            {% if sys_info.git.git_installed %}
+                                <span class="badge bg-success ms-2">{{ t('installed') }}</span>
+                            {% else %}
+                                <span class="badge bg-danger ms-2">{{ t('not_installed') }}</span>
+                            {% endif %}
+                        </div>
+                    </label>
+
+                    <!-- Tailscale -->
+                    <label class="list-group-item d-flex justify-content-between align-items-center {% if sys_info.tailscale.tailscale_installed %}list-group-item-success{% endif %}">
+                        <div>
+                            <input class="form-check-input me-2 auto-install-check" type="checkbox" value="tailscale"
+                                   data-checkable="true" data-installed="{{ sys_info.tailscale.tailscale_installed|lower }}">
+                            <i class="bi bi-shield-lock me-2"></i> <strong>Tailscale</strong>
+                            {% if sys_info.tailscale.tailscale_installed %}
+                                <span class="badge bg-success ms-2">{{ t('installed') }}</span>
+                            {% else %}
+                                <span class="badge bg-danger ms-2">{{ t('not_installed') }}</span>
+                            {% endif %}
+                        </div>
+                    </label>
+
+                    <!-- Port Knocking -->
+                    <label class="list-group-item d-flex justify-content-between align-items-center {% if sys_info.knocking.knocking_installed %}list-group-item-success{% endif %}">
+                        <div>
+                            <input class="form-check-input me-2 auto-install-check" type="checkbox" value="port-knocking"
+                                   data-checkable="true" data-installed="{{ sys_info.knocking.knocking_installed|lower }}">
+                            <i class="bi bi-shield-lock me-2"></i> <strong>Port Knocking</strong>
+                            {% if sys_info.os_type == 'windows' %}
+                                <small class="text-muted">(FW rules)</small>
+                            {% endif %}
+                            {% if sys_info.knocking.knocking_installed %}
+                                <span class="badge bg-success ms-2">{{ t('installed') }}</span>
+                            {% else %}
+                                <span class="badge bg-danger ms-2">{{ t('not_installed') }}</span>
+                            {% endif %}
+                        </div>
+                    </label>
+
+                    <!-- Starter Service -->
+                    <label class="list-group-item d-flex justify-content-between align-items-center {% if sys_info.systemd.service_installed %}list-group-item-success{% endif %}">
+                        <div>
+                            <input class="form-check-input me-2 auto-install-check" type="checkbox" value="starter-service"
+                                   data-checkable="true" data-installed="{{ sys_info.systemd.service_installed|lower }}">
+                            <i class="bi bi-gear me-2"></i> <strong>Starter Service</strong>
+                            {% if sys_info.systemd.service_installed %}
+                                <span class="badge bg-success ms-2">{{ t('installed') }}</span>
+                            {% else %}
+                                <span class="badge bg-danger ms-2">{{ t('not_installed') }}</span>
+                            {% endif %}
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Логи автоустановки -->
+                <div class="mt-3" id="autoInstallLogsSection" style="display: none;">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-terminal me-2"></i> {{ t('installation_logs') }}</span>
+                            <div class="spinner-border spinner-border-sm text-primary" id="autoInstallSpinner" role="status" style="display: none;">
+                                <span class="visually-hidden">{{ t('loading') }}...</span>
+                            </div>
+                        </div>
+                        <div class="card-body bg-dark text-white" style="height: 30vh; overflow-y: auto;">
+                            <pre id="autoInstallLogs" class="mb-0"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('close') }}</button>
+                <button type="button" class="btn btn-success" id="startAutoInstallBtn">
+                    <i class="bi bi-play-circle me-1"></i> {{ t('start_install') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Обработчик кнопки обновления
+    $('#refreshDashboardBtn').on('click', function() {
+        location.reload();
+    });
+
+    // Автоустановка: снятие галочек с уже установленного
+    $('.auto-install-check').each(function() {
+        if ($(this).data('installed') === true) {
+            $(this).prop('checked', false).prop('disabled', true);
+        }
+    });
+
+    // Кнопка запуска автоустановки
+    $('#startAutoInstallBtn').on('click', function() {
+        const selected = [];
+        $('.auto-install-check:checked').each(function() {
+            selected.push($(this).val());
+        });
+
+        if (selected.length === 0) {
+            alert('Выберите компоненты для установки');
+            return;
+        }
+
+        if (!confirm('Установить выбранные компоненты: ' + selected.join(', ') + '?')) {
+            return;
+        }
+
+        const $btn = $(this);
+        $btn.prop('disabled', true);
+        $('#autoInstallLogsSection').show();
+        $('#autoInstallSpinner').show();
+        $('#autoInstallLogs').text('');
+
+        // Запускаем последовательную установку
+        installNext(selected, 0);
+    });
+
+    function installNext(packages, index) {
+        if (index >= packages.length) {
+            $('#autoInstallSpinner').hide();
+            $('#autoInstallLogs').append('\n=== ALL INSTALLATIONS COMPLETE ===\n');
+            $('#startAutoInstallBtn').prop('disabled', false);
+            return;
+        }
+
+        const pkg = packages[index];
+        $('#autoInstallLogs').append('\n--- Installing: ' + pkg + ' ---\n');
+
+        fetch('/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json'
+            },
+            body: new URLSearchParams({
+                'section': 'dashboard',
+                'action': 'install_package',
+                'package': pkg
+            })
+        })
+        .then(response => response.json())
+        .then(response => {
+            if (response.status === 'started') {
+                const installId = response.install_id;
+                pollLogs(pkg, installId, function() {
+                    installNext(packages, index + 1);
+                });
+            } else {
+                $('#autoInstallLogs').append('Error starting ' + pkg + ': ' + (response.message || 'unknown') + '\n');
+                installNext(packages, index + 1);
+            }
+        })
+        .catch(error => {
+            $('#autoInstallLogs').append('Request failed for ' + pkg + ': ' + error + '\n');
+            installNext(packages, index + 1);
+        });
+    }
+
+    function pollLogs(pkg, installId, callback) {
+        const interval = setInterval(function() {
+            fetch('/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Accept': 'application/json'
+                },
+                body: new URLSearchParams({
+                    'section': 'dashboard',
+                    'action': 'get_install_logs',
+                    'install_id': installId,
+                    'package': pkg
+                })
+            })
+            .then(response => response.json())
+            .then(logResponse => {
+                if (logResponse.status === 'success') {
+                    $('#autoInstallLogs').text($('#autoInstallLogs').text());
+                    const logContainer = $('#autoInstallLogs').parent();
+                    logContainer.scrollTop(logContainer[0].scrollHeight);
+
+                    if (logResponse.completed) {
+                        clearInterval(interval);
+                        if (logResponse.installed) {
+                            $('#autoInstallLogs').append(pkg + ': DONE\n');
+                        } else {
+                            $('#autoInstallLogs').append(pkg + ': FAILED\n');
+                        }
+                        callback();
+                    }
+                }
+            })
+            .catch(() => {});
+        }, 2000);
+    }
+});
+</script>

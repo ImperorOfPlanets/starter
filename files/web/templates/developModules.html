@@ -1,0 +1,190 @@
+<div data-action="modules" data-title="Загруженные модули" class="container-fluid">
+  <div class="card border mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 fw-semibold text-gray-700 d-flex align-items-center">
+          <i class="bi bi-boxes me-2"></i> Загруженные модули
+        </h2>
+        <button class="btn btn-sm btn-outline-primary" id="refresh-modules">
+          <i class="bi bi-arrow-clockwise"></i> Обновить
+        </button>
+      </div>
+      <div id="modules-container">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2 text-muted">Загрузка данных...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Глобальная функция инициализации модулей
+  function initModules() {
+    console.log('Инициализация модулей...');
+    $('#refresh-modules').off('click').on('click', loadModules);
+    loadModules();
+  }
+  
+  function loadModules() {
+    const container = $('#modules-container');
+    container.html(`
+      <div class="text-center py-4">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2 text-muted">Загрузка данных...</p>
+      </div>
+    `);
+  
+    $.ajax({
+      url: '/',
+      method: 'POST',
+      data: { section: 'develop', action: 'modules' },
+      dataType: 'json',
+      headers: { 'Accept': 'application/json' },
+    })
+    .done(res => {
+      if (res.status === 'success' && res.data?.length > 0) {
+        renderModules(res.data);
+      } else {
+        container.html(`
+          <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>${res.message || 'Нет данных о модулях'}
+          </div>
+        `);
+      }
+    })
+    .fail(xhr => {
+      container.html(`
+        <div class="alert alert-danger">
+          <i class="bi bi-exclamation-circle me-2"></i>${xhr.responseJSON?.message || xhr.statusText || 'Ошибка сети'}
+        </div>
+      `);
+    });
+  }
+  
+  function renderModules(modules) {
+    const container = $('#modules-container');
+    container.empty();
+    
+    if (!modules || modules.length === 0) {
+      container.html('<p class="text-muted">Нет модулей для отображения</p>');
+      return;
+    }
+  
+    modules.forEach(module => {
+      container.append(createModuleCard(module));
+    });
+    initModuleCardHandlers();
+  }
+  
+  function createModuleCard(module) {
+    const implCount = module.implementations?.length || 0;
+    
+    return `
+      <div class="card mb-3 module-card" data-module="${module.module_name}">
+        <div class="module-header card-header bg-light d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center">
+            <h4 class="card-title mb-0 me-3">${module.module_name}</h4>
+            <span class="badge bg-secondary">${implCount} реализаций</span>
+          </div>
+          <i class="bi bi-chevron-down module-toggle-icon"></i>
+        </div>
+        <div class="module-body card-body d-none">
+          <div class="accordion" id="impl-accordion-${module.module_name}">
+            ${renderImplementations(module.implementations, module.module_name)}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  function renderImplementations(implementations, moduleName) {
+    if (!implementations || implementations.length === 0) {
+      return '<p class="text-muted small">Нет реализаций</p>';
+    }
+  
+    return implementations.map((impl, index) => {
+      const implId = `impl-${moduleName}-${index}`;
+      const levelNames = {
+        0: "ВЕРСИЯ ОС (высший приоритет)",
+        1: "ОС DEFAULT",
+        2: "GLOBAL DEFAULT (низший приоритет)"
+      };
+      
+      const osInfo = impl.os ? 
+        `${impl.os}${impl.os_version ? ' ' + impl.os_version : ''}` : 
+        'Global';
+      
+      return `
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="heading-${implId}">
+            <button class="accordion-button collapsed" type="button" 
+                    data-bs-toggle="collapse" data-bs-target="#collapse-${implId}"
+                    aria-expanded="false" aria-controls="collapse-${implId}">
+              <div class="d-flex justify-content-between w-100 me-3">
+                <span>
+                  <span class="badge bg-info me-2">Уровень ${impl.level}</span>
+                  ${levelNames[impl.level] || `Уровень ${impl.level}`}
+                </span>
+                <span>${osInfo}</span>
+              </div>
+            </button>
+          </h2>
+          <div id="collapse-${implId}" class="accordion-collapse collapse" 
+               aria-labelledby="heading-${implId}" data-bs-parent="#impl-accordion-${moduleName}">
+            <div class="accordion-body">
+              <div class="d-flex justify-content-between mb-3">
+                <small class="text-truncate">
+                  <i class="bi bi-file-code me-1"></i> ${impl.path}
+                </small>
+                <span class="badge bg-primary">${impl.class_name}</span>
+              </div>
+              <div class="functions-container mt-3">
+                <h6>Функции:</h6>
+                ${renderFunctions(impl.functions)}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+  
+  function renderFunctions(functions) {
+    if (!functions || functions.length === 0) {
+      return '<p class="text-muted small">Нет функций</p>';
+    }
+  
+    return `
+      <div class="row g-2">
+        ${functions.map(func => `
+          <div class="col-md-6">
+            <div class="card h-100">
+              <div class="card-body">
+                <div class="d-flex justify-content-between">
+                  <h6 class="card-title">${func.name}</h6>
+                  <span class="badge bg-secondary">${func.kind}</span>
+                </div>
+                ${func.doc ? `<p class="card-text small mt-2">${func.doc}</p>` : ''}
+                ${func.comment ? `<div class="text-muted small mt-2">${func.comment}</div>` : ''}
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+  
+  function initModuleCardHandlers() {
+    $(document).off('click', '.module-header').on('click', '.module-header', function() {
+      const $header = $(this);
+      const $card = $header.closest('.module-card');
+      const $body = $card.find('.module-body');
+      const $icon = $header.find('.module-toggle-icon');
+      
+      $body.toggleClass('d-none');
+      $icon.toggleClass('bi-chevron-down bi-chevron-up');
+    });
+  }
+  </script>

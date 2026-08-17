@@ -1,0 +1,306 @@
+<div data-action="tutorials" data-title="Интерактивные руководства" class="container-fluid">
+  <div class="card border mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 fw-semibold text-gray-700 d-flex align-items-center">
+          <i class="bi bi-play-circle me-2"></i> Интерактивные руководства
+        </h2>
+        <button class="btn btn-sm btn-outline-primary" id="reset-tutorial">
+          <i class="bi bi-arrow-counterclockwise"></i> Сбросить прогресс
+        </button>
+      </div>
+
+      <div id="tutorial-container">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2 text-muted">Загрузка руководств...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Глобальная функция инициализации руководств
+function initTutorials() {
+  console.log('Инициализация интерактивных руководств...');
+  loadTutorials();
+  $('#reset-tutorial').on('click', resetTutorialProgress);
+}
+
+// Загрузка руководств
+function loadTutorials() {
+  const container = $('#tutorial-container');
+
+  // Имитация загрузки данных руководств
+  const tutorials = [
+    {
+      id: 'first-start',
+      title: 'Первый запуск Starter',
+      description: 'Полное руководство по первичной настройке и запуску системы',
+      steps: [
+        {
+          title: 'Подготовка окружения',
+          content: 'Убедитесь, что у вас установлен Python 3.8+ и Docker. Скачайте Starter и распакуйте в удобную директорию.',
+          action: 'check-environment'
+        },
+        {
+          title: 'Первый запуск',
+          content: 'Запустите <code>python starter.py</code> в терминале. Система автоматически проверит зависимости и создаст виртуальное окружение.',
+          action: 'run-starter'
+        },
+        {
+          title: 'Первичная настройка',
+          content: 'Следуйте инструкциям мастера настройки. Создайте администраторскую учетную запись и настройте базовые параметры.',
+          action: 'initial-setup'
+        },
+        {
+          title: 'Проверка работы',
+          content: 'Откройте веб-интерфейс в браузере по адресу, указанному в консоли. Проверьте основные функции системы.',
+          action: 'verify-setup'
+        }
+      ],
+      estimatedTime: '15 минут'
+    },
+    {
+      id: 'docker-management',
+      title: 'Управление Docker контейнерами',
+      description: 'Изучите основы работы с Docker через веб-интерфейс Starter',
+      steps: [
+        {
+          title: 'Просмотр контейнеров',
+          content: 'Перейдите в раздел "Docker" → "Контейнеры". Изучите список запущенных и остановленных контейнеров.',
+          action: 'view-containers'
+        },
+        {
+          title: 'Управление контейнерами',
+          content: 'Попробуйте запустить, остановить и перезапустить контейнер. Обратите внимание на логи операций.',
+          action: 'manage-containers'
+        },
+        {
+          title: 'Просмотр логов',
+          content: 'Откройте логи контейнера для диагностики проблем. Изучите различные уровни логирования.',
+          action: 'check-logs'
+        }
+      ],
+      estimatedTime: '10 минут'
+    },
+    {
+      id: 'firewall-config',
+      title: 'Настройка фаервола',
+      description: 'Научитесь управлять сетевыми правилами безопасности',
+      steps: [
+        {
+          title: 'Проверка статуса',
+          content: 'Перейдите в раздел "Фаервол" и проверьте текущий статус системы безопасности.',
+          action: 'check-firewall-status'
+        },
+        {
+          title: 'Просмотр правил',
+          content: 'Изучите существующие правила фаервола и открытые порты.',
+          action: 'view-rules'
+        },
+        {
+          title: 'Добавление правила',
+          content: 'Добавьте новое правило для открытия порта (например, 8080) для веб-приложения.',
+          action: 'add-rule'
+        }
+      ],
+      estimatedTime: '8 минут'
+    }
+  ];
+
+  renderTutorials(tutorials);
+}
+
+// Отрисовка руководств
+function renderTutorials(tutorials) {
+  const container = $('#tutorial-container');
+  container.empty();
+
+  tutorials.forEach(tutorial => {
+    const progress = getTutorialProgress(tutorial.id);
+    const card = createTutorialCard(tutorial, progress);
+    container.append(card);
+  });
+}
+
+// Создание карточки руководства
+function createTutorialCard(tutorial, progress) {
+  const completedSteps = progress.completed || 0;
+  const totalSteps = tutorial.steps.length;
+  const progressPercent = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
+
+  return `
+    <div class="card mb-4 tutorial-card" data-tutorial-id="${tutorial.id}">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <h5 class="mb-1">${tutorial.title}</h5>
+          <p class="mb-0 text-muted small">${tutorial.description}</p>
+        </div>
+        <div class="text-end">
+          <div class="badge bg-info mb-1">${tutorial.estimatedTime}</div>
+          <div class="small text-muted">${completedSteps}/${totalSteps} шагов</div>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div class="progress mb-3" style="height: 8px;">
+          <div class="progress-bar" role="progressbar" style="width: ${progressPercent}%"
+               aria-valuenow="${progressPercent}" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+
+        <div class="tutorial-steps">
+          ${renderTutorialSteps(tutorial.steps, progress)}
+        </div>
+
+        <div class="mt-3">
+          <button class="btn btn-primary btn-sm me-2" onclick="startTutorial('${tutorial.id}')">
+            <i class="bi bi-play-fill me-1"></i>Начать руководство
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="resetTutorial('${tutorial.id}')">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Сбросить
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Отрисовка шагов руководства
+function renderTutorialSteps(steps, progress) {
+  return steps.map((step, index) => {
+    const isCompleted = progress.completedSteps && progress.completedSteps.includes(index);
+    const isActive = progress.currentStep === index;
+
+    let statusClass = '';
+    let statusIcon = '';
+
+    if (isCompleted) {
+      statusClass = 'completed';
+      statusIcon = '<i class="bi bi-check-circle-fill text-success"></i>';
+    } else if (isActive) {
+      statusClass = 'active';
+      statusIcon = '<i class="bi bi-circle-fill text-primary"></i>';
+    } else {
+      statusIcon = '<i class="bi bi-circle text-muted"></i>';
+    }
+
+    return `
+      <div class="tutorial-step ${statusClass} ${isActive ? 'current' : ''}" data-step="${index}">
+        <div class="d-flex align-items-start">
+          <div class="step-indicator me-3 mt-1">
+            ${statusIcon}
+          </div>
+          <div class="step-content flex-grow-1">
+            <h6 class="step-title">${step.title}</h6>
+            <div class="step-description">${step.content}</div>
+            ${isActive ? `<div class="mt-2"><button class="btn btn-success btn-sm" onclick="completeStep('${progress.tutorialId}', ${index})">Завершить шаг</button></div>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Управление прогрессом руководств
+function getTutorialProgress(tutorialId) {
+  const stored = localStorage.getItem(`tutorial_${tutorialId}`);
+  return stored ? JSON.parse(stored) : {
+    tutorialId: tutorialId,
+    completed: 0,
+    currentStep: 0,
+    completedSteps: []
+  };
+}
+
+function saveTutorialProgress(progress) {
+  localStorage.setItem(`tutorial_${progress.tutorialId}`, JSON.stringify(progress));
+}
+
+function startTutorial(tutorialId) {
+  const progress = getTutorialProgress(tutorialId);
+  progress.currentStep = 0;
+  saveTutorialProgress(progress);
+  loadTutorials(); // Перерисовать
+}
+
+function completeStep(tutorialId, stepIndex) {
+  const progress = getTutorialProgress(tutorialId);
+  if (!progress.completedSteps.includes(stepIndex)) {
+    progress.completedSteps.push(stepIndex);
+    progress.completed = progress.completedSteps.length;
+  }
+
+  // Переход к следующему шагу
+  if (stepIndex + 1 < getTutorialSteps(tutorialId).length) {
+    progress.currentStep = stepIndex + 1;
+  } else {
+    progress.currentStep = -1; // Завершено
+  }
+
+  saveTutorialProgress(progress);
+  loadTutorials(); // Перерисовать
+}
+
+function resetTutorial(tutorialId) {
+  localStorage.removeItem(`tutorial_${tutorialId}`);
+  loadTutorials(); // Перерисовать
+}
+
+function resetTutorialProgress() {
+  const tutorials = ['first-start', 'docker-management', 'firewall-config'];
+  tutorials.forEach(id => {
+    localStorage.removeItem(`tutorial_${id}`);
+  });
+  loadTutorials(); // Перерисовать
+}
+
+function getTutorialSteps(tutorialId) {
+  // Здесь можно загрузить шаги из данных, но для простоты возвращаем фиксированные
+  const tutorialData = {
+    'first-start': 4,
+    'docker-management': 3,
+    'firewall-config': 3
+  };
+  return Array(tutorialData[tutorialId] || 0).fill({});
+}
+</script>
+
+<style>
+.tutorial-step {
+  padding: 1rem;
+  border-left: 3px solid #e9ecef;
+  margin-bottom: 1rem;
+  transition: all 0.3s ease;
+}
+
+.tutorial-step.completed {
+  border-left-color: #198754;
+  background-color: #f8fff9;
+}
+
+.tutorial-step.active {
+  border-left-color: #0d6efd;
+  background-color: #f0f8ff;
+}
+
+.tutorial-step.current {
+  border-left-color: #fd7e14;
+  background-color: #fff8e1;
+}
+
+.step-indicator {
+  min-width: 24px;
+}
+
+.step-title {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.step-description {
+  color: #6c757d;
+  line-height: 1.5;
+}
+</style>

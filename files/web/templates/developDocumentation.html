@@ -1,0 +1,244 @@
+<div data-action="documentation" data-title="Документация" class="container-fluid">
+  <div class="card border mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 fw-semibold text-gray-700 d-flex align-items-center">
+          <i class="bi bi-book me-2"></i> Документация проекта
+        </h2>
+        <div class="d-flex gap-2">
+          <div class="position-relative">
+            <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-2"></i>
+            <input type="text" id="doc-search" class="form-control ps-4" placeholder="Поиск по документации...">
+          </div>
+          <button class="btn btn-sm btn-outline-secondary" id="clear-search">
+            <i class="bi bi-x"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="row">
+        <!-- Навигация по документации -->
+        <div class="col-md-3">
+          <div class="list-group" id="doc-nav">
+            <button class="list-group-item list-group-item-action active" data-doc-type="overview">
+              <i class="bi bi-house-door me-2"></i>Обзор проекта
+            </button>
+            <button class="list-group-item list-group-item-action" data-doc-type="architecture">
+              <i class="bi bi-diagram-3 me-2"></i>Архитектура
+            </button>
+            <button class="list-group-item list-group-item-action" data-doc-type="api">
+              <i class="bi bi-code-slash me-2"></i>API документация
+            </button>
+            <button class="list-group-item list-group-item-action" data-doc-type="deployment">
+              <i class="bi bi-rocket-takeoff me-2"></i>Развертывание
+            </button>
+            <button class="list-group-item list-group-item-action" data-doc-type="faq">
+              <i class="bi bi-question-circle me-2"></i>FAQ
+            </button>
+          </div>
+        </div>
+
+        <!-- Контент документации -->
+        <div class="col-md-9">
+          <div id="doc-content">
+            <div class="text-center py-4">
+              <div class="spinner-border text-primary" role="status"></div>
+              <p class="mt-2 text-muted">Загрузка документации...</p>
+            </div>
+          </div>
+
+          <!-- Результаты поиска -->
+          <div id="search-results" class="d-none">
+            <h4 class="mb-3">Результаты поиска</h4>
+            <div id="search-results-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Глобальная функция инициализации документации
+function initDocumentation() {
+  console.log('Инициализация документации...');
+
+  // Загружаем обзор по умолчанию
+  loadDocumentation('overview');
+
+  // Обработчики событий
+  $('#doc-nav .list-group-item').on('click', function() {
+    const docType = $(this).data('doc-type');
+    loadDocumentation(docType);
+
+    // Обновляем активный элемент
+    $('#doc-nav .list-group-item').removeClass('active');
+    $(this).addClass('active');
+  });
+
+  // Поиск по документации
+  $('#doc-search').on('input', function() {
+    const query = $(this).val().trim();
+    if (query.length > 2) {
+      searchDocumentation(query);
+    } else if (query.length === 0) {
+      clearSearch();
+    }
+  });
+
+  $('#clear-search').on('click', function() {
+    $('#doc-search').val('');
+    clearSearch();
+  });
+}
+
+// Загрузка документации
+function loadDocumentation(docType) {
+  const content = $('#doc-content');
+  const searchResults = $('#search-results');
+
+  content.html(`
+    <div class="text-center py-4">
+      <div class="spinner-border text-primary" role="status"></div>
+      <p class="mt-2 text-muted">Загрузка документации...</p>
+    </div>
+  `);
+
+  searchResults.addClass('d-none');
+
+  $.ajax({
+    url: '/',
+    method: 'POST',
+    data: {
+      section: 'develop',
+      action: 'documentation',
+      type: docType
+    },
+    dataType: 'json',
+    headers: {
+      'Accept': 'application/json'
+    }
+  })
+  .done(res => {
+    if (res.status === 'success' && res.data) {
+      renderDocumentation(res.data);
+    } else {
+      content.html(`
+        <div class="alert alert-danger">
+          <i class="bi bi-exclamation-circle me-2"></i>${res.message || 'Ошибка загрузки документации'}
+        </div>
+      `);
+    }
+  })
+  .fail(xhr => {
+    content.html(`
+      <div class="alert alert-danger">
+        <i class="bi bi-exclamation-circle me-2"></i>${xhr.responseJSON?.message || xhr.statusText || 'Ошибка сети'}
+      </div>
+    `);
+  });
+}
+
+// Отрисовка документации
+function renderDocumentation(data) {
+  const content = $('#doc-content');
+
+  content.html(`
+    <div class="doc-content">
+      <h3 class="mb-4">${data.title}</h3>
+      <div class="doc-body">
+        ${data.content}
+      </div>
+    </div>
+  `);
+}
+
+// Поиск по документации
+function searchDocumentation(query) {
+  const content = $('#doc-content');
+  const searchResults = $('#search-results');
+  const resultsList = $('#search-results-list');
+
+  content.addClass('d-none');
+  searchResults.removeClass('d-none');
+
+  resultsList.html(`
+    <div class="text-center py-3">
+      <div class="spinner-border text-primary spinner-border-sm" role="status"></div>
+      <span class="ms-2">Поиск...</span>
+    </div>
+  `);
+
+  $.ajax({
+    url: '/',
+    method: 'POST',
+    data: {
+      section: 'develop',
+      action: 'search_documentation',
+      query: query
+    },
+    dataType: 'json',
+    headers: {
+      'Accept': 'application/json'
+    }
+  })
+  .done(res => {
+    if (res.status === 'success' && res.data) {
+      renderSearchResults(res.data);
+    } else {
+      resultsList.html(`
+        <div class="alert alert-warning">
+          <i class="bi bi-exclamation-triangle me-2"></i>${res.message || 'Ошибка поиска'}
+        </div>
+      `);
+    }
+  })
+  .fail(xhr => {
+    resultsList.html(`
+      <div class="alert alert-danger">
+        <i class="bi bi-exclamation-circle me-2"></i>${xhr.responseJSON?.message || xhr.statusText || 'Ошибка сети'}
+      </div>
+    `);
+  });
+}
+
+// Отрисовка результатов поиска
+function renderSearchResults(data) {
+  const resultsList = $('#search-results-list');
+
+  if (data.results.length === 0) {
+    resultsList.html(`
+      <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>По запросу "${data.query}" ничего не найдено
+      </div>
+    `);
+    return;
+  }
+
+  let html = `<p class="text-muted">Найдено результатов: ${data.total}</p>`;
+
+  data.results.forEach(result => {
+    html += `
+      <div class="card mb-2">
+        <div class="card-body">
+          <h6 class="card-title">
+            <button class="btn btn-link p-0 text-decoration-none" onclick="loadDocumentation('${result.type}')">
+              ${result.title}
+            </button>
+          </h6>
+          <p class="card-text small text-muted">${result.context}</p>
+        </div>
+      </div>
+    `;
+  });
+
+  resultsList.html(html);
+}
+
+// Очистка поиска
+function clearSearch() {
+  $('#doc-content').removeClass('d-none');
+  $('#search-results').addClass('d-none');
+  $('#doc-search').val('');
+}
+</script>

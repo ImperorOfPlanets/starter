@@ -1,0 +1,97 @@
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="bi bi-server me-2"></i> {{ t('current_server_updates') }}
+                    <span class="badge bg-primary ms-2">{{ server_type }}</span>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary" id="refresh-server-btn">
+                    <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                </button>
+            </div>
+            <div class="card-body">
+                {% if server_info %}
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>{{ t('server_info') }}</h6>
+                        <p><strong>{{ t('server_name') }}:</strong> {{ server_info.name }}</p>
+                        <p><strong>{{ t('server_description') }}:</strong> {{ server_info.description }}</p>
+                        <p><strong>{{ t('server_type') }}:</strong> <code>{{ server_type }}</code></p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>{{ t('update_targets') }}</h6>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">
+                                <i class="bi bi-folder me-2"></i> {{ t('code_folder') }}
+                            </li>
+                            <li class="list-group-item">
+                                <i class="bi bi-docker me-2"></i> {{ t('docker_folder') }}
+                            </li>
+                            <li class="list-group-item">
+                                <i class="bi bi-gear me-2"></i> {{ t('config_files') }}
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="btn-group">
+                            <button class="btn btn-outline-primary update-server-btn" data-update-type="code">
+                                <i class="bi bi-code-slash"></i> {{ t('update_server_code') }}
+                            </button>
+                            <button class="btn btn-outline-info update-server-btn" data-update-type="docker">
+                                <i class="bi bi-docker"></i> {{ t('update_server_docker') }}
+                            </button>
+                            <button class="btn btn-outline-success update-server-btn" data-update-type="full">
+                                <i class="bi bi-arrow-repeat"></i> {{ t('update_server_full') }}
+                            </button>
+                            <button class="btn btn-outline-secondary" id="view-server-history-btn">
+                                <i class="bi bi-clock-history"></i> {{ t('view_history') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Репозитории сервера -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>{{ t('server_repositories') }}</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Название</th>
+                                        <th>URL</th>
+                                        <th>Ветка</th>
+                                        <th>Статус</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for repo in server_info.repositories %}
+                                    <tr>
+                                        <td>{{ repo.name }}</td>
+                                        <td><code class="small">{{ repo.url }}</code></td>
+                                        <td><span class="badge bg-secondary">{{ repo.branch }}</span></td>
+                                        <td>
+                                            <span class="badge bg-success">Доступен</span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Сервер не настроен</strong>
+                    <p>Тип сервера не настроен в системе. Проверьте переменную TYPE_SERVER в настройках.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>

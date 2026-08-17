@@ -1,0 +1,114 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('knocking_settings_title') }}</h1>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-gear me-2"></i> {{ t('knocking_configuration') }}
+                </div>
+                <div class="card-body">
+                    <form id="knockingSettingsForm">
+                        <div class="mb-3">
+                            <label for="portsInput" class="form-label">{{ t('knocking_ports_label') }}</label>
+                            <input type="text" class="form-control" id="portsInput" 
+                                   name="ports" value="{{ status.ports|join(', ') }}"
+                                   placeholder="1000,2000,3000">
+                            <div class="form-text">{{ t('knocking_ports_help') }}</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="timeoutInput" class="form-label">{{ t('knocking_timeout_label') }}</label>
+                            <input type="number" class="form-control" id="timeoutInput" 
+                                   name="timeout" value="{{ status.timeout }}" min="1" max="10">
+                            <div class="form-text">{{ t('knocking_timeout_help') }}</div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> {{ t('save_changes') }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-shield-check me-2"></i> {{ t('knocking_test') }}
+                </div>
+                <div class="card-body">
+                    <p>{{ t('knocking_test_description') }}</p>
+                    <button class="btn btn-outline-primary" id="testKnockingBtn">
+                        <i class="bi bi-shield-check"></i> {{ t('knocking_test_button') }}
+                    </button>
+                    <div id="testResult" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Обработчик формы настроек
+    $('#knockingSettingsForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = $(this).serialize();
+        const $form = $(this);
+        
+        $.ajax({
+            url: '/',
+            type: 'POST',
+            data: formData + '&section=knocking&action=updateSettings',
+            dataType: 'json',
+            success: function(result) {
+                if (result.status === 'success') {
+                    alert(result.message);
+                    $('#mainMenu a[data-section="knocking"]').click();
+                } else {
+                    alert(result.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                alert('Error: ' + error);
+            }
+        });
+    });
+    
+    // Обработчик кнопки тестирования
+    $('#testKnockingBtn').on('click', function() {
+        const $btn = $(this);
+        const $result = $('#testResult');
+        
+        $btn.prop('disabled', true);
+        $result.html('<div class="spinner-border spinner-border-sm" role="status"></div> Testing...');
+        
+        $.ajax({
+            url: '/',
+            type: 'POST',
+            data: {
+                section: 'knocking',
+                action: 'testSequence'
+            },
+            dataType: 'json',
+            success: function(result) {
+                if (result.status === 'success') {
+                    $result.html('<div class="alert alert-success">' + result.message + '</div>');
+                } else {
+                    $result.html('<div class="alert alert-danger">' + result.message + '</div>');
+                }
+            },
+            error: function(xhr, status, error) {
+                $result.html('<div class="alert alert-danger">Error: ' + error + '</div>');
+            },
+            complete: function() {
+                $btn.prop('disabled', false);
+            }
+        });
+    });
+});
+</script>

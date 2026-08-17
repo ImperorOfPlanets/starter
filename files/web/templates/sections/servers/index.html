@@ -1,0 +1,688 @@
+<style>
+.folder-item > div:hover { background: rgba(0,0,0,0.05); border-radius: 4px; }
+.folder-item > div { transition: background 0.15s; padding: 4px 6px; border-radius: 4px; cursor: pointer; }
+.folder-children { border-left: 1px dashed #dee2e6; margin-left: 8px; padding-left: 4px; }
+.folder-name { font-size: 13px; }
+</style>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4><i class="bi bi-hdd-rack me-2"></i> Серверы</h4>
+        {% if can_manage %}
+        <button class="btn btn-success btn-sm"
+                data-bs-toggle="modal"
+                data-bs-target="#serverInstallModal">
+            <i class="bi bi-plus-lg me-1"></i> Установить сервер
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- Установленные серверы -->
+    <h6 class="text-muted mb-2">Установленные</h6>
+    <div id="serversList">
+        {% if servers %}
+        {% for server in servers %}
+        <div class="card mb-2">
+            <div class="card-body py-2">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>{{ server.name }}</strong>
+                        {% if server.path %}
+                        <small class="text-muted ms-2">{{ server.path }}</small>
+                        {% endif %}
+                        {% if server.type and server.type != 'unknown' %}
+                        <span class="badge bg-info ms-1">{{ server.type }}</span>
+                        {% endif %}
+                        {% if server.status %}
+                        <span class="badge {% if server.status == 'running' %}bg-success{% elif server.status == 'stopped' %}bg-danger{% elif server.status == 'no_docker' %}bg-secondary{% elif server.status == 'no_compose' %}bg-warning text-dark{% elif server.status == 'not_deployed' %}bg-warning text-dark{% elif server.status == 'initializing' %}bg-warning text-dark{% elif server.status == 'restarting' %}bg-info{% else %}bg-secondary{% endif %} ms-1">
+                            {% if server.status == 'running' %}🟢 Работает
+                            {% elif server.status == 'stopped' %}🔴 Остановлен
+                            {% elif server.status == 'no_docker' %}⚠️ Нет Docker
+                            {% elif server.status == 'no_compose' %}⚠️ Нет compose
+                            {% elif server.status == 'not_deployed' %}📦 Не развёрнут
+                            {% elif server.status == 'initializing' %}⏳ Инициализация
+                            {% elif server.status == 'restarting' %}🔄 Перезапуск
+                            {% else %}{{ server.status }}{% endif %}
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex gap-1">
+                        {% if server.status == 'running' and server.has_web_interface %}
+                        <button class="btn btn-success btn-sm open-web-interface"
+                                data-server-port="{{ server.port }}"
+                                title="Открыть интерфейс">
+                            <i class="bi bi-box-arrow-up-right"></i> Интерфейс
+                        </button>
+                        {% endif %}
+                        {% if can_manage %}
+                        {% if server.status == 'stopped' or server.status == 'no_compose' or server.status == 'not_deployed' %}
+                        <button class="btn btn-outline-success btn-sm start-server"
+                                data-server-id="{{ server.id }}"
+                                title="Запустить">
+                            <i class="bi bi-play-fill"></i>
+                        </button>
+                        {% elif server.status == 'running' %}
+                        <button class="btn btn-outline-warning btn-sm stop-server"
+                                data-server-id="{{ server.id }}"
+                                title="Остановить">
+                            <i class="bi bi-stop-fill"></i>
+                        </button>
+                        {% endif %}
+                        <button class="btn btn-outline-primary btn-sm configure-server"
+                                data-server-id="{{ server.id }}"
+                                data-server-type="{{ server.type }}"
+                                title="Настроить">
+                            <i class="bi bi-gear"></i>
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm delete-server"
+                                data-server-id="{{ server.id }}"
+                                title="Удалить">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center text-muted py-3 mb-4">
+            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+            <p class="mt-2 mb-0">Серверы не установлены</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Доступные для установки -->
+    <h6 class="text-muted mb-2 mt-4">Публичные серверы</h6>
+    <div id="serverTypesList" class="row">
+        <div class="col-12 text-muted p-3">Загрузка...</div>
+    </div>
+
+    <h6 class="text-muted mb-2 mt-4">Персональные серверы (MyIDon)</h6>
+    <div id="serverTypesApiList" class="row">
+        <div class="col-12 text-muted p-3">Загрузка...</div>
+    </div>
+</div>
+
+<!-- Модальное окно установки сервера -->
+<div class="modal fade" id="serverInstallModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Установка сервера</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Шаг 1: Выбор типа -->
+                <div id="step1">
+                    <h6>1. Тип сервера</h6>
+                    <select id="installType" class="form-select mb-2">
+                        <option value="">Загрузка...</option>
+                    </select>
+                    <input type="text" id="installName" class="form-control form-control-sm" placeholder="Имя сервера (необязательно)">
+                </div>
+
+                <!-- Шаг 2: Выбор диска -->
+                <div id="step2">
+                    <h6>2. Выберите диск</h6>
+                    <div id="drivesList" class="list-group mb-3">
+                        <div class="text-muted">Загрузка...</div>
+                    </div>
+                </div>
+
+                <!-- Шаг 3: Файловый браузер -->
+                <div id="step3">
+                    <h6>3. Выберите папку</h6>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <input type="text" id="currentPath" class="form-control form-control-sm" readonly placeholder="Выберите диск...">
+                        <button class="btn btn-outline-primary btn-sm" id="createFolderBtn" onclick="showCreateFolder()" disabled title="Создать папку">
+                            <i class="bi bi-folder-plus"></i> Создать
+                        </button>
+                    </div>
+                    <!-- Поле создания папки (скрыто по умолчанию) -->
+                    <div id="createFolderDiv" class="d-none mb-2">
+                        <div class="input-group input-group-sm">
+                            <input type="text" id="newFolderName" class="form-control" placeholder="Имя папки">
+                            <button class="btn btn-success" onclick="createFolder()">Создать</button>
+                            <button class="btn btn-secondary" onclick="hideCreateFolder()">Отмена</button>
+                        </div>
+                    </div>
+                    <div id="foldersTree" class="border rounded p-2" style="max-height: 250px; overflow-y: auto; background: #f8f9fa;">
+                        <div class="text-muted text-center py-3">Выберите диск выше</div>
+                    </div>
+                </div>
+
+                <!-- Итоговый путь -->
+                <div class="mt-3 p-2 bg-light rounded">
+                    <strong>Путь установки:</strong> <code id="finalPath">выберите диск и папку</code>
+                    <div id="reinstallHint" class="d-none mt-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="forceReinstall">
+                            <label class="form-check-label text-warning" for="forceReinstall">
+                                <i class="bi bi-exclamation-triangle"></i> Папка не пустая — переустановить (контейнеры будут остановлены)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="installResult" class="d-none mt-2"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-success" id="installBtn" onclick="installServer()" disabled>
+                    <i class="bi bi-download me-1"></i> Установить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var selectedPath = '';
+var cachedServerTypes = [];
+
+function loadServerTypes() {
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'list_server_types'})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.status === 'success' && res.server_types) {
+            cachedServerTypes = res.server_types;
+            renderServerTypes(res.server_types);
+            renderInstallSelect(res.server_types);
+        }
+    })
+    .catch(function(err) {
+        document.getElementById('serverTypesList').innerHTML = '<div class="col-12 text-danger p-3">Ошибка загрузки: ' + err.message + '</div>';
+    });
+}
+
+function renderServerTypes(types) {
+    var container = document.getElementById('serverTypesList');
+    var apiContainer = document.getElementById('serverTypesApiList');
+    if (!types.length) {
+        container.innerHTML = '<div class="col-12 text-muted p-3">Нет доступных серверов</div>';
+        apiContainer.innerHTML = '';
+        return;
+    }
+    var html = '';
+    var apiHtml = '';
+    types.forEach(function(info) {
+        var hasRepo = info.repository && info.repository.url;
+        var isApi = info.from_api;
+        var cardBorder = hasRepo ? 'border-success' : 'border-danger';
+        var cardHeader = hasRepo ? 'bg-success bg-opacity-10 text-success' : 'bg-danger bg-opacity-10 text-danger';
+
+        var card = '';
+        card += '<div class="col-md-6 col-lg-4 mb-2">';
+        card += '<div class="card h-100 ' + cardBorder + '">';
+        card += '<div class="card-header py-1 ' + cardHeader + '">';
+        if (hasRepo) {
+            card += '<i class="bi bi-check-circle-fill me-1"></i> Доступен для установки';
+        } else {
+            card += '<i class="bi bi-x-circle-fill me-1"></i> Нет репозитория';
+        }
+        card += '</div>';
+        card += '<div class="card-body py-2">';
+        card += '<h6 class="card-title mb-1">' + info.name + '</h6>';
+        card += '<p class="card-text small text-muted mb-2">' + (info.description || '') + '</p>';
+        card += '<div class="d-flex gap-1 flex-wrap mb-2">';
+        if (info.requires_reverse_proxy) card += '<span class="badge bg-warning text-dark">нужен reverse-proxy</span>';
+        if (info.requires_auth) card += '<span class="badge bg-info">требует авторизацию</span>';
+        if (info.has_web_interface) card += '<span class="badge bg-success">web UI</span>';
+        if (!info.can_have_multiple) card += '<span class="badge bg-secondary">1 экз.</span>';
+        if (info.default_port) card += '<span class="badge bg-dark">:' + info.default_port + '</span>';
+        if (isApi) card += '<span class="badge bg-primary">MyIDon</span>';
+        card += '</div>';
+        if (hasRepo) {
+            card += '<button class="btn btn-outline-primary btn-sm w-100" data-bs-toggle="modal" data-bs-target="#serverInstallModal" onclick="setInstallType(\'' + info.key + '\', \'' + info.name + '\')">';
+            card += '<i class="bi bi-download me-1"></i> Установить';
+            card += '</button>';
+        } else {
+            card += '<button class="btn btn-secondary btn-sm w-100" disabled>';
+            card += '<i class="bi bi-lock me-1"></i> Нет репозитория';
+            card += '</button>';
+        }
+        card += '</div></div></div>';
+
+        if (isApi) {
+            apiHtml += card;
+        } else {
+            html += card;
+        }
+    });
+    container.innerHTML = html || '<div class="col-12 text-muted p-3">Нет публичных серверов</div>';
+    apiContainer.innerHTML = apiHtml || '<div class="col-12 text-muted p-3">Нет персональных серверов</div>';
+}
+
+function renderInstallSelect(types) {
+    var select = document.getElementById('installType');
+    var html = '<option value="">-- Выберите сервер --</option>';
+    types.forEach(function(info) {
+        var hasRepo = info.repository && info.repository.url;
+        var label = info.name;
+        if (!hasRepo) label += ' (нет репозитория)';
+        html += '<option value="' + info.key + '"' + (hasRepo ? '' : ' disabled style="color:red"') + '>' + label + '</option>';
+    });
+    select.innerHTML = html;
+}
+
+// Загружаем при открытии страницы
+loadServerTypes();
+
+// Загружаем диски при открытии модалки
+document.getElementById('serverInstallModal').addEventListener('show.bs.modal', function() {
+    loadDrives();
+});
+
+function setInstallType(type, name) {
+    document.getElementById('installType').value = type;
+}
+
+function loadDrives() {
+    document.getElementById('drivesList').innerHTML = '<div class="text-muted p-2">Загрузка дисков...</div>';
+    document.getElementById('foldersTree').innerHTML = '<div class="text-muted text-center py-3">Выберите диск выше</div>';
+    
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'list_drives'})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.status === 'success' && res.drives && res.drives.length > 0) {
+            var html = '';
+            res.drives.forEach(function(d) {
+                html += '<button class="list-group-item list-group-item-action" onclick="toggleDrive(this, \'' + d.path.replace(/\\/g, '\\\\') + '\')">';
+                html += '<i class="bi bi-hdd me-2"></i>';
+                html += '<strong>' + d.letter + '</strong>';
+                html += ' <small class="text-muted">' + d.free_gb + ' GB / ' + d.total_gb + ' GB</small>';
+                html += '</button>';
+            });
+            document.getElementById('drivesList').innerHTML = html;
+        } else {
+            document.getElementById('drivesList').innerHTML = '<div class="text-danger p-2">Диски не найдены</div>';
+        }
+    })
+    .catch(function(err) {
+        document.getElementById('drivesList').innerHTML = '<div class="text-danger p-2">Ошибка: ' + err.message + '</div>';
+    });
+}
+
+function toggleDrive(el, path) {
+    // Убираем выделение со всех дисков
+    document.querySelectorAll('#drivesList .list-group-item').forEach(function(item) {
+        item.classList.remove('active');
+    });
+    el.classList.add('active');
+    
+    document.getElementById('currentPath').value = path;
+    document.getElementById('createFolderBtn').disabled = false;
+    selectedPath = path;
+    document.getElementById('finalPath').textContent = path;
+    document.getElementById('installBtn').disabled = false;
+    
+    // Загружаем корневые папки диска
+    loadFoldersIntoTree(path, document.getElementById('foldersTree'));
+}
+
+function loadFoldersIntoTree(path, container) {
+    container.innerHTML = '<div class="text-muted p-2"><i class="bi bi-hourglass-split"></i> Загрузка...</div>';
+
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'list_folders', path: path})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.status === 'success' && res.folders && res.folders.length > 0) {
+            var html = '';
+            res.folders.forEach(function(f) {
+                var icon = 'bi-folder';
+                if (f.has_docker || f.has_code) icon = 'bi-folder2-open text-success';
+                
+                html += '<div class="folder-item mb-1">';
+                html += '<div class="d-flex align-items-center p-1 rounded" style="cursor:pointer;" onclick="toggleFolder(this, \'' + f.path.replace(/\\/g, '\\\\') + '\', this.parentElement)">';
+                html += '<i class="bi bi-chevron-right me-1" style="font-size: 10px; width: 14px;"></i>';
+                html += '<i class="' + icon + ' me-1 text-warning"></i>';
+                html += '<span class="folder-name">' + f.name + '</span>';
+                if (f.has_docker) html += ' <span class="badge bg-success ms-1" style="font-size:9px;">docker</span>';
+                if (f.has_code) html += ' <span class="badge bg-info ms-1" style="font-size:9px;">code</span>';
+                if (f.writable === false) html += ' <span class="badge bg-secondary ms-1" style="font-size:9px;">🔒</span>';
+                html += '</div>';
+                html += '<div class="folder-children ms-4 d-none"></div>';
+                html += '</div>';
+            });
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = '<div class="text-muted p-2" style="font-size: 12px;">Папок нет</div>';
+        }
+    })
+    .catch(function(err) {
+        container.innerHTML = '<div class="text-danger p-2">Ошибка: ' + err.message + '</div>';
+    });
+}
+
+function toggleFolder(row, path, parent) {
+    var childrenDiv = parent.querySelector('.folder-children');
+    var chevron = row.querySelector('.bi-chevron-right, .bi-chevron-down');
+    
+    if (childrenDiv.classList.contains('d-none')) {
+        // Открываем
+        childrenDiv.classList.remove('d-none');
+        if (chevron) {
+            chevron.classList.remove('bi-chevron-right');
+            chevron.classList.add('bi-chevron-down');
+        }
+        // Загружаем подпапки если ещё не загружены
+        if (childrenDiv.innerHTML.trim() === '') {
+            loadFoldersIntoTree(path, childrenDiv);
+        }
+    } else {
+        // Закрываем
+        childrenDiv.classList.add('d-none');
+        if (chevron) {
+            chevron.classList.remove('bi-chevron-down');
+            chevron.classList.add('bi-chevron-right');
+        }
+    }
+    
+    // Выбираем эту папку
+    selectedPath = path;
+    document.getElementById('currentPath').value = path;
+    document.getElementById('finalPath').textContent = path;
+    document.getElementById('installBtn').disabled = false;
+    
+    // Подсвечиваем выбранную
+    document.querySelectorAll('.folder-item > div').forEach(function(d) {
+        d.style.background = '';
+    });
+    row.style.background = 'rgba(102, 126, 234, 0.2)';
+}
+
+function showCreateFolder() {
+    document.getElementById('createFolderDiv').classList.remove('d-none');
+    document.getElementById('newFolderName').focus();
+}
+
+function hideCreateFolder() {
+    document.getElementById('createFolderDiv').classList.add('d-none');
+    document.getElementById('newFolderName').value = '';
+}
+
+function createFolder() {
+    var name = document.getElementById('newFolderName').value.trim();
+    if (!name) return;
+    
+    var current = document.getElementById('currentPath').value;
+    if (!current) {
+        alert('Сначала выберите диск');
+        return;
+    }
+    
+    var sep = current.includes('\\') ? '\\' : '/';
+    var newPath = current + sep + name;
+    
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'create_folder', path: newPath})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.status === 'success') {
+            hideCreateFolder();
+            // Перезагружаем дерево
+            var tree = document.getElementById('foldersTree');
+            loadFoldersIntoTree(current, tree);
+            // Автоматически выбираем новую папку
+            selectedPath = newPath;
+            document.getElementById('currentPath').value = newPath;
+            document.getElementById('finalPath').textContent = newPath;
+        } else {
+            alert(res.message || 'Не удалось создать папку');
+        }
+    })
+    .catch(function(err) {
+        alert('Ошибка: ' + err.message);
+    });
+}
+
+document.getElementById('newFolderName').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') createFolder();
+    if (e.key === 'Escape') hideCreateFolder();
+});
+
+function installServer() {
+    var type = document.getElementById('installType').value;
+    var path = selectedPath;
+    var force = document.getElementById('forceReinstall').checked;
+
+    if (!type) {
+        alert('Выберите тип сервера');
+        return;
+    }
+    if (!path) {
+        alert('Выберите путь установки');
+        return;
+    }
+
+    if (!force && !confirm('Установить сервер в ' + path + '?')) return;
+    if (force && !confirm('Переустановить сервер в ' + path + '? Контейнеры будут остановлены!')) return;
+
+    var btn = document.getElementById('installBtn');
+    var result = document.getElementById('installResult');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Установка...';
+    result.classList.remove('d-none');
+    result.innerHTML = '<div class="alert alert-info mb-0">Выполняется установка...</div>';
+    document.getElementById('reinstallHint').classList.add('d-none');
+
+    console.log('Installing:', {type: type, path: path, force: force});
+
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({
+            section: 'servers',
+            action: 'install_server',
+            server_type: type,
+            path: path,
+            name: document.getElementById('installName').value.trim(),
+            force: force ? 'true' : 'false'
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        console.log('Install result:', res);
+        result.classList.remove('d-none');
+        if (res.status === 'success') {
+            result.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-1"></i> ' + (res.message || 'Установлено') + '<br><small>Перезагрузка...</small></div>';
+            setTimeout(function() { window.location.href = '/'; }, 1500);
+        } else if (res.code === 'NOT_EMPTY') {
+            result.innerHTML = '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-triangle me-1"></i> ' + res.message + '<br><small>Включите галочку "Переустановить" и нажмите Установить снова</small></div>';
+            document.getElementById('reinstallHint').classList.remove('d-none');
+            document.getElementById('forceReinstall').checked = true;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-download me-1"></i> Переустановить';
+        } else {
+            result.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-1"></i> ' + (res.message || 'Ошибка') + '</div>';
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-download me-1"></i> Установить';
+        }
+    })
+    .catch(function(err) {
+        console.error('Install error:', err);
+        result.classList.remove('d-none');
+        result.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-1"></i> Ошибка: ' + err.message + '</div>';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-download me-1"></i> Установить';
+    });
+}
+
+$(document).on('click', '.delete-server', function() {
+    if (!confirm('Удалить сервер?')) return;
+    var id = $(this).data('server-id');
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'remove_server', server_id: id})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.status === 'success') location.reload();
+        else alert(res.message || 'Ошибка');
+    })
+    .catch(function(err) {
+        alert('Ошибка: ' + err.message);
+    });
+});
+
+// Запуск сервера
+$(document).on('click', '.start-server', function() {
+    var btn = $(this);
+    var id = btn.data('server-id');
+    btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i>');
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'start_server', server_id: id})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.status === 'success') location.reload();
+        else { alert(res.message || 'Ошибка запуска'); btn.prop('disabled', false).html('<i class="bi bi-play-fill"></i>'); }
+    })
+    .catch(function(err) { alert('Ошибка: ' + err.message); btn.prop('disabled', false).html('<i class="bi bi-play-fill"></i>'); });
+});
+
+// Остановка сервера
+$(document).on('click', '.stop-server', function() {
+    var btn = $(this);
+    var id = btn.data('server-id');
+    if (!confirm('Остановить сервер?')) return;
+    btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i>');
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'stop_server', server_id: id})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.status === 'success') location.reload();
+        else { alert(res.message || 'Ошибка остановки'); btn.prop('disabled', false).html('<i class="bi bi-stop-fill"></i>'); }
+    })
+    .catch(function(err) { alert('Ошибка: ' + err.message); btn.prop('disabled', false).html('<i class="bi bi-stop-fill"></i>'); });
+});
+
+// Открыть веб-интерфейс
+$(document).on('click', '.open-web-interface', function() {
+    var port = $(this).data('server-port');
+    if (port && port > 0) {
+        window.open('https://localhost:' + port, '_blank');
+    } else {
+        alert('Порт сервера неизвестен');
+    }
+});
+
+// Настройка сервера - загрузка env переменных
+$(document).on('click', '.configure-server', function() {
+    var serverId = $(this).data('server-id');
+    var serverType = $(this).data('server-type');
+
+    $('#configServerId').val(serverId);
+    $('#configServerType').text(serverType);
+    $('#configEnvBody').html('<div class="text-center py-3"><div class="spinner-border text-primary"></div><p class="mt-2">Загрузка...</p></div>');
+    $('#configModal').modal('show');
+
+    // Загружаем env переменные
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'get_server_config', server_id: serverId})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.status === 'success') {
+            var html = '<form id="configForm">';
+            var env = res.env || {};
+            for (var key in env) {
+                var val = env[key];
+                var isSecret = key.includes('SECRET') || key.includes('PASSWORD') || key.includes('KEY') || key.includes('TOKEN');
+                html += '<div class="mb-2">';
+                html += '<label class="form-label small text-muted">' + key + '</label>';
+                html += '<input type="' + (isSecret ? 'password' : 'text') + '" class="form-control form-control-sm" name="' + key + '" value="' + val + '">';
+                html += '</div>';
+            }
+            html += '</form>';
+            $('#configEnvBody').html(html);
+        } else {
+            $('#configEnvBody').html('<div class="alert alert-danger">' + (res.message || 'Ошибка загрузки') + '</div>');
+        }
+    })
+    .catch(function(err) {
+        $('#configEnvBody').html('<div class="alert alert-danger">Ошибка: ' + err.message + '</div>');
+    });
+});
+
+// Сохранение конфигурации
+$(document).on('click', '#saveConfigBtn', function() {
+    var btn = $(this);
+    var form = $('#configForm');
+    var serverId = $('#configServerId').val();
+
+    // Собираем данные из формы
+    var data = {section: 'servers', action: 'save_server_config', server_id: serverId};
+    form.serializeArray().forEach(function(item) {
+        data[item.name] = item.value;
+    });
+
+    btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Сохранение...');
+
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams(data)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        btn.prop('disabled', false).html('<i class="bi bi-check-lg"></i> Сохранить');
+        if (res.status === 'success') {
+            alert('Конфигурация сохранена!');
+            $('#configModal').modal('hide');
+        } else {
+            alert(res.message || 'Ошибка сохранения');
+        }
+    })
+    .catch(function(err) {
+        btn.prop('disabled', false).html('<i class="bi bi-check-lg"></i> Сохранить');
+        alert('Ошибка: ' + err.message);
+    });
+});
+</script>
+
+<!-- Модальное окно настройки сервера -->
+<div class="modal fade" id="configModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-gear me-2"></i> Настройка: <span id="configServerType"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="configServerId">
+                <p class="text-muted small mb-3">Измените переменные окружения и нажмите "Сохранить". Для применения изменений перезапустите сервер.</p>
+                <div id="configEnvBody"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="saveConfigBtn"><i class="bi bi-check-lg"></i> Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>

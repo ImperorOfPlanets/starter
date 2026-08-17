@@ -1,0 +1,211 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ log_types[log_type] }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="btn-group me-2">
+                <button class="btn btn-sm btn-outline-secondary" data-action="refreshLogs">
+                    <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                </button>
+                {% if current_file %}
+                <button class="btn btn-sm btn-outline-primary" 
+                        data-action="downloadLog" 
+                        data-data='{"type": "{{ log_type }}", "file": "{{ current_file }}"}'>
+                    <i class="bi bi-download"></i> {{ t('download') }}
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-files me-2"></i> {{ t('logs_files') }}
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for file in log_files %}
+                    <a href="#" class="list-group-item list-group-item-action {% if current_file == file.name %}active{% endif %}"
+                       data-action="loadSection" 
+                       data-data='{"section": "logs", "action": "view", "type": "{{ log_type }}", "file": "{{ file.name }}"}'>
+                        {{ file.name }}
+                        <small class="text-muted">{{ file.stat().st_size|filesizeformat }}</small>
+                    </a>
+                    {% else %}
+                    <div class="list-group-item text-muted">
+                        {{ t('logs_no_files') }}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-funnel me-2"></i> {{ t('logs_filters') }}
+                </div>
+                <div class="card-body">
+                    <form id="logFiltersForm">
+                        <div class="mb-3">
+                            <label class="form-label">{{ t('logs_level') }}</label>
+                            <select class="form-select" name="level">
+                                <option value="">{{ t('all_levels') }}</option>
+                                {% for level_key, level_name in log_levels.items() %}
+                                <option value="{{ level_key }}">{{ level_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">{{ t('logs_source') }}</label>
+                            <input type="text" class="form-control" name="source" 
+                                   placeholder="{{ t('logs_source_placeholder') }}">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">{{ t('logs_search') }}</label>
+                            <input type="text" class="form-control" name="search" 
+                                   placeholder="{{ t('logs_search_placeholder') }}">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-filter"></i> {{ t('apply_filters') }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-9">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>
+                        <i class="bi bi-journal-text me-2"></i> 
+                        {% if current_file %}{{ current_file }}{% else %}{{ t('logs_no_file_selected') }}{% endif %}
+                    </span>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary" data-action="scrollToTop">
+                            <i class="bi bi-arrow-up"></i> {{ t('logs_top') }}
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" data-action="scrollToBottom">
+                            <i class="bi bi-arrow-down"></i> {{ t('logs_bottom') }}
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width: 160px;">{{ t('logs_time') }}</th>
+                                    <th style="width: 100px;">{{ t('logs_level') }}</th>
+                                    <th style="width: 150px;">{{ t('logs_source') }}</th>
+                                    <th>{{ t('logs_message') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logContent">
+                                {% for log in logs %}
+                                <tr class="log-row log-level-{{ log.level|lower }}">
+                                    <td>{{ log.timestamp }}</td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if log.level == 'DEBUG' %}bg-secondary
+                                            {% elif log.level == 'INFO' %}bg-info text-dark
+                                            {% elif log.level == 'WARNING' %}bg-warning text-dark
+                                            {% elif log.level == 'ERROR' %}bg-danger
+                                            {% elif log.level == 'CRITICAL' %}bg-dark
+                                            {% else %}bg-light text-dark{% endif %}">
+                                            {{ log_levels[log.level] }}
+                                        </span>
+                                    </td>
+                                    <td><small>{{ log.source }}</small></td>
+                                    <td><code>{{ log.message }}</code></td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-4">
+                                        {{ t('logs_no_entries') }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="card-footer text-muted small">
+                    {{ logs|length }} {{ t('logs_entries_shown') }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+$(document).ready(function() {
+    // Обработчик формы фильтров
+    $('#logFiltersForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = $(this).serialize();
+        const currentData = {
+            section: 'logs',
+            action: 'view',
+            type: '{{ log_type }}',
+            {% if current_file %}file: '{{ current_file }}'{% endif %}
+        };
+        
+        // Обновляем параметры запроса
+        const newData = {...currentData, ...$.deparam(formData)};
+        
+        // Загружаем логи с новыми фильтрами
+        $.ajax({
+            url: '/',
+            type: 'POST',
+            data: newData,
+            dataType: 'html',
+            success: function(response) {
+                $('#logsSection').html(response);
+            },
+            error: function(xhr, status, error) {
+                console.error('Error applying filters:', error);
+            }
+        });
+    });
+    
+    // Обработчики кнопок прокрутки
+    $('[data-action="scrollToTop"]').on('click', function() {
+        $('#logContent').parent().scrollTop(0);
+    });
+    
+    $('[data-action="scrollToBottom"]').on('click', function() {
+        const $container = $('#logContent').parent();
+        $container.scrollTop($container[0].scrollHeight);
+    });
+    
+    // Подсветка строк логов по уровню
+    $('.log-row').each(function() {
+        const $row = $(this);
+        const level = $row.attr('class').match(/log-level-(\w+)/)[1];
+        
+        // Добавляем эффект при наведении
+        $row.hover(
+            function() { $(this).addClass('bg-light'); },
+            function() { $(this).removeClass('bg-light'); }
+        );
+    });
+});
+</script>
+
+<style>
+.log-row.log-level-debug { color: #6c757d; }
+.log-row.log-level-info { color: #0dcaf0; }
+.log-row.log-level-warning { color: #ffc107; }
+.log-row.log-level-error { color: #dc3545; }
+.log-row.log-level-critical { color: #212529; font-weight: bold; }
+
+#logContent {
+    max-height: 70vh;
+    overflow-y: auto;
+    display: block;
+}
+</style>

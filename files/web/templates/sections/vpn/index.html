@@ -1,0 +1,237 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">
+            <i class="bi bi-shield-lock me-2"></i> Tailscale VPN
+        </h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button class="btn btn-sm btn-outline-secondary" onclick="refreshStatus()">
+                <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+            </button>
+        </div>
+    </div>
+
+    {% if not tailscale_installed %}
+    <!-- Установка -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <i class="bi bi-exclamation-triangle me-2"></i> {{ t('tailscale_not_installed') }}
+                </div>
+                <div class="card-body">
+                    <p>{{ t('tailscale_install_instructions') }}</p>
+                    <button class="btn btn-success install-btn" data-pkg="tailscale">
+                        <i class="bi bi-download me-2"></i> {{ t('tailscale_install') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Статус -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-info-circle me-2"></i> {{ t('tailscale_status') }}
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <td><strong>{{ t('tailscale_status') }}</strong></td>
+                                <td>
+                                    {% if tailscale_status.connected %}
+                                        <span class="badge bg-success">{{ t('tailscale_connected') }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ t('tailscale_disconnected') }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% if tailscale_status.ip %}
+                            <tr>
+                                <td><strong>{{ t('tailscale_ip') }}</strong></td>
+                                <td><code>{{ tailscale_status.ip }}</code></td>
+                            </tr>
+                            {% endif %}
+                            {% if tailscale_status.hostname %}
+                            <tr>
+                                <td><strong>{{ t('tailscale_hostname') }}</strong></td>
+                                <td>{{ tailscale_status.hostname }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if tailscale_status.version %}
+                            <tr>
+                                <td><strong>{{ t('tailscale_version') }}</strong></td>
+                                <td>{{ tailscale_status.version }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if tailscale_status.backend_state %}
+                            <tr>
+                                <td><strong>{{ t('tailscale_backend_state') }}</strong></td>
+                                <td>{{ tailscale_status.backend_state }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if login_server %}
+                            <tr>
+                                <td><strong>{{ t('tailscale_headscale_server') }}</strong></td>
+                                <td><code>{{ login_server }}</code></td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-lightning me-2"></i> {{ t('tailscale_actions') }}
+                </div>
+                <div class="card-body">
+                    {% if tailscale_status.connected %}
+                        <button class="btn btn-danger w-100" id="disconnectBtn" onclick="disconnectVpn()">
+                            <i class="bi bi-plug"></i> {{ t('tailscale_disconnect') }}
+                        </button>
+                    {% else %}
+                        <button class="btn btn-success w-100" id="connectBtn" onclick="requestVpn()">
+                            <i class="bi bi-plug-fill"></i> {{ t('tailscale_connect') }}
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Auth URL (показывается после нажатия Connect) -->
+            <div class="card mb-4" id="authCard" style="display:none;">
+                <div class="card-header bg-info text-white">
+                    <i class="bi bi-link-45deg me-2"></i> {{ t('tailscale_auth_required') }}
+                </div>
+                <div class="card-body">
+                    <p>{{ t('tailscale_auth_click_link') }}</p>
+                    <a id="authLink" href="#" target="_blank" class="btn btn-primary w-100 mb-2">
+                        <i class="bi bi-box-arrow-up-right me-2"></i> {{ t('tailscale_auth_open') }}
+                    </a>
+                    <div id="authWaiting" class="text-center text-muted">
+                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                        {{ t('tailscale_auth_waiting') }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Серверы в VPN-сети -->
+    {% if tailscale_peers %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-hdd-network me-2"></i> {{ t('tailscale_peers') }} ({{ tailscale_peers|length }})
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>{{ t('tailscale_hostname') }}</th>
+                                <th>{{ t('tailscale_ip') }}</th>
+                                <th>OS</th>
+                                <th>{{ t('tailscale_status') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for peer in tailscale_peers %}
+                            <tr>
+                                <td><strong>{{ peer.hostname }}</strong></td>
+                                <td><code>{{ peer.ip or 'N/A' }}</code></td>
+                                <td>{{ peer.os }}</td>
+                                <td>
+                                    {% if peer.online %}
+                                        <span class="badge bg-success">{{ t('tailscale_online') }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ t('tailscale_offline') }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+
+<script>
+function refreshStatus() {
+    location.reload();
+}
+
+function requestVpn() {
+    const btn = document.getElementById('connectBtn');
+    if (btn) btn.disabled = true;
+
+    fetch('/api/vpn/request', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({login_server: '{{ login_server }}'})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'auth_required' && data.auth_url) {
+            document.getElementById('authCard').style.display = 'block';
+            document.getElementById('authLink').href = data.auth_url;
+            window.open(data.auth_url, '_blank');
+            pollStatus();
+        } else if (data.status === 'success') {
+            location.reload();
+        } else {
+            alert(data.message || 'Error');
+            if (btn) btn.disabled = false;
+        }
+    })
+    .catch(err => {
+        alert('Error: ' + err);
+        if (btn) btn.disabled = false;
+    });
+}
+
+function disconnectVpn() {
+    const btn = document.getElementById('disconnectBtn');
+    if (btn) btn.disabled = true;
+
+    fetch('/api/vpn/disconnect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({})
+    })
+    .then(r => r.json())
+    .then(data => {
+        location.reload();
+    })
+    .catch(err => {
+        alert('Error: ' + err);
+        if (btn) btn.disabled = false;
+    });
+}
+
+function pollStatus() {
+    const interval = setInterval(() => {
+        fetch('/api/vpn/status', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.connected) {
+                clearInterval(interval);
+                location.reload();
+            }
+        })
+        .catch(() => {});
+    }, 3000);
+}
+</script>

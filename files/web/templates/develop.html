@@ -1,0 +1,120 @@
+<!-- Кнопка переключения меню -->
+<div id="toggleMenuBtn" class="position-fixed top-50 end-0 translate-middle-y bg-primary text-white rounded-start p-0 user-select-none fs-3 d-flex align-items-center justify-content-center z-1050" 
+     style="width: 36px; height: 60px; cursor: pointer;" title="Toggle menu">
+  <span id="arrowIcon">&lt;</span>
+</div>
+
+<!-- Сайдбар меню (будет заполняться динамически) -->
+<div id="sideMenu" class="position-fixed top-50 translate-middle-y bg-white border shadow-sm d-none z-1049 rounded-start p-2" 
+     style="right: 36px; width: 220px;">
+  <!-- Меню будет генерироваться здесь -->
+</div>
+
+<!-- Контейнер для контента -->
+<div id="devContent" class="position-fixed top-0 start-0 w-100 h-100 overflow-auto bg-white z-1060 d-none">
+  <!-- Фиксированная кнопка закрытия -->
+  <button id="devContentCloseBtn" class="position-fixed bg-danger text-white border-0 rounded-circle d-flex align-items-center justify-content-center fw-bold z-1099" 
+          style="width: 42px; height: 42px; top: 20px; right: 20px; cursor: pointer; font-size: 1.5rem;">
+    ✕
+  </button>
+  
+  <!-- Контент с небольшим отступом сверху -->
+  <div id="devContentInner" class="p-4 pt-5">
+    {% include 'developGlobals.html' %}
+    {% include 'developModules.html' %}
+    <!-- Другие динамические блоки -->
+  </div>
+</div>
+
+<script>
+$(function() {
+  const $arrow = $('#arrowIcon');
+  const $menu = $('#sideMenu');
+  const $btn = $('#toggleMenuBtn');
+  const $dev = $('#devContent');
+  const $inner = $('#devContentInner');
+  const $close = $('#devContentCloseBtn');
+  let menuOpen = false;
+  
+  // Инициализация динамического меню
+  function initDynamicMenu() {
+    // Находим все блоки с атрибутами data-action и data-title
+    const $sections = $inner.find('[data-action][data-title]');
+    
+    // Очищаем меню перед созданием
+    $menu.empty();
+    
+    // Создаем кнопки меню для каждого раздела
+    $sections.each(function() {
+      const $section = $(this);
+      const action = $section.data('action');
+      const title = $section.data('title');
+      
+      // Создаем элемент меню
+      const $menuItem = $('<button>')
+        .addClass('menu-item w-100 border-0 bg-transparent px-3 py-2 text-start fw-medium rounded')
+        .css('cursor', 'pointer')
+        .text(title)
+        .data('action', action);
+      
+      // Добавляем в меню
+      $menu.append($menuItem);
+      
+      // Скрываем раздел изначально
+      $section.addClass('d-none');
+    });
+    
+    // Обработка кликов по пунктам меню
+    $menu.on('click', '.menu-item', function() {
+      const $this = $(this);
+      const action = $this.data('action');
+      
+      // Скрываем все разделы
+      $inner.find('[data-action]').addClass('d-none');
+      
+      // Показываем выбранный раздел
+      const $section = $inner.find(`[data-action="${action}"]`);
+      $section.removeClass('d-none');
+      
+      // Вызываем функцию инициализации
+      const initFuncName = 'init' + action.charAt(0).toUpperCase() + action.slice(1);
+      if (typeof window[initFuncName] === 'function') {
+        window[initFuncName]();
+      }
+      
+      // Показываем контейнер с контентом
+      $dev.removeClass('d-none');
+    });
+  }
+  
+  // Переключение меню
+  $btn.on('click', function() {
+    menuOpen = !menuOpen;
+    $menu.toggleClass('d-none');
+    $arrow.text(menuOpen ? '>' : '<');
+  });
+  
+  // Закрытие контейнера с контентом
+  $close.on('click', function() {
+    $dev.addClass('d-none');
+  });
+  
+  // Автозагрузка при прямой ссылке
+  function loadFromUrlParam() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const view = urlParams.get('view');
+    
+    if (view) {
+      // Находим соответствующий пункт меню и кликаем его
+      const $menuItem = $menu.find(`.menu-item[data-action="${view}"]`);
+      if ($menuItem.length) {
+        $menuItem.trigger('click');
+      }
+    }
+  }
+  
+  // Инициализация
+  initDynamicMenu();
+  loadFromUrlParam();
+});
+</script>

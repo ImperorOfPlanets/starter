@@ -1,0 +1,148 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4><i class="bi bi-people me-2"></i> Пользователи</h4>
+        <button class="btn btn-success btn-sm" data-action="show_add_user_form">
+            <i class="bi bi-plus-lg me-1"></i> Добавить
+        </button>
+    </div>
+
+    <!-- Форма добавления -->
+    <div id="addUserForm" class="card mb-3 d-none">
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <input type="text" id="newLogin" class="form-control form-control-sm" placeholder="Логин">
+                </div>
+                <div class="col-md-3">
+                    <input type="password" id="newPassword" class="form-control form-control-sm" placeholder="Пароль">
+                </div>
+                <div class="col-md-2">
+                    <select id="newRole" class="form-select form-select-sm">
+                        {% for role_key, role_info in roles.items() %}
+                        <option value="{{ role_key }}">{{ role_info.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <input type="text" id="newServers" class="form-control form-control-sm"
+                           placeholder="* или id,id">
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-success btn-sm w-100" id="addUserBtn">
+                        <i class="bi bi-check-lg"></i> Создать
+                    </button>
+                </div>
+            </div>
+            <small class="text-muted">Серверы: * = все, или через запятую ID</small>
+        </div>
+    </div>
+
+    <!-- Список пользователей -->
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                <th>Логин</th>
+                <th>Роль</th>
+                <th>Серверы</th>
+                <th>Статус</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td>
+                    <strong>{{ u.login }}</strong>
+                    {% if u.id == current_user.id %}
+                    <span class="badge bg-primary ms-1">вы</span>
+                    {% endif %}
+                </td>
+                <td><span class="badge bg-secondary">{{ u.role }}</span></td>
+                <td>
+                    {% if u.servers == ['*'] %}
+                    <span class="text-muted">все</span>
+                    {% else %}
+                    {{ u.servers|join(', ') }}
+                    {% endif %}
+                </td>
+                <td>
+                    {% if u.get('active', True) %}
+                    <span class="badge bg-success">активен</span>
+                    {% else %}
+                    <span class="badge bg-danger">заблокирован</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if u.id != current_user.id %}
+                    <button class="btn btn-outline-danger btn-sm delete-user" data-user-id="{{ u.id }}">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+$(document).ready(function() {
+    $('[data-action="show_add_user_form"]').on('click', function() {
+        $('#addUserForm').toggleClass('d-none');
+    });
+
+    $('#addUserBtn').on('click', function() {
+        var login = $('#newLogin').val().trim();
+        var password = $('#newPassword').val().trim();
+        var role = $('#newRole').val();
+        var servers = $('#newServers').val().trim() || '*';
+
+        if (!login || !password) {
+            alert('Логин и пароль обязательны');
+            return;
+        }
+
+        $.ajax({
+            url: '/',
+            method: 'POST',
+            data: {
+                section: 'users_mgmt',
+                action: 'add_user',
+                login: login,
+                password: password,
+                role: role,
+                servers: servers
+            },
+            dataType: 'json',
+            headers: { 'Accept': 'application/json' },
+            success: function(res) {
+                if (res.status === 'success') {
+                    location.reload();
+                } else {
+                    alert(res.message || 'Ошибка');
+                }
+            }
+        });
+    });
+
+    $(document).on('click', '.delete-user', function() {
+        if (!confirm('Удалить пользователя?')) return;
+        var id = $(this).data('user-id');
+
+        $.ajax({
+            url: '/',
+            method: 'POST',
+            data: { section: 'users_mgmt', action: 'remove_user', user_id: id },
+            dataType: 'json',
+            headers: { 'Accept': 'application/json' },
+            success: function(res) {
+                if (res.status === 'success') {
+                    location.reload();
+                } else {
+                    alert(res.message || 'Ошибка');
+                }
+            }
+        });
+    });
+});
+</script>

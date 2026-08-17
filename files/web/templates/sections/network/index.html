@@ -1,0 +1,200 @@
+<!-- Блок с утилитами -->
+{% include 'sections/network/tools_info.html' %}
+
+<!-- Блок с устройствами -->
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <!-- Панель с кнопкой скрытия -->
+            <div class="card-header p-2 bg-light">
+                <button id="toggle-disabled" class="btn btn-sm btn-outline-secondary w-100">
+                    <i class="bi bi-eye-slash"></i> Скрыть отключенные
+                </button>
+            </div>
+            
+            <!-- Панель выбора типа устройств -->
+            <div class="card-header p-0">
+                <ul class="nav nav-tabs card-header-tabs m-0 nav-justified">
+                    <li class="nav-item">
+                        <a class="nav-link active" data-bs-toggle="tab" href="#physical-tab">Физические</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="tab" href="#virtual-tab">Виртуальные</a>
+                    </li>
+                </ul>
+            </div>
+            
+            <!-- Список устройств -->
+            <div class="card-body p-0">
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="physical-tab">
+                        <div class="list-group list-group-flush">
+                            {% for device in physical_devices %}
+                            <a href="#" class="list-group-item list-group-item-action device-item {% if not device.is_up %}text-muted bg-light device-disabled{% else %}device-enabled{% endif %} {% if loop.first %}active{% endif %}" 
+                               data-device-name="{{ device.name }}">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="{% if device.is_up %}fw-semibold{% else %}fw-light{% endif %}">
+                                        {{ device.name }}
+                                    </span>
+                                    {% if not device.is_up %}<span class="badge bg-secondary rounded-pill">Отключен</span>{% endif %}
+                                </div>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="virtual-tab">
+                        <div class="list-group list-group-flush">
+                            {% for device in virtual_devices %}
+                            <a href="#" class="list-group-item list-group-item-action device-item {% if not device.is_up %}text-muted bg-light device-disabled{% else %}device-enabled{% endif %}" 
+                               data-device-name="{{ device.name }}">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="{% if device.is_up %}fw-semibold{% else %}fw-light{% endif %}">
+                                        {{ device.name }}
+                                    </span>
+                                    {% if not device.is_up %}<span class="badge bg-secondary rounded-pill">Отключен</span>{% endif %}
+                                </div>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8" id="device-details-container">
+        <!-- Здесь будет отображаться детальная информация -->
+        <div class="card">
+            <div class="card-body text-center text-muted">
+                <i class="bi bi-hdd-network fs-1"></i>
+                <p class="mt-2">Выберите устройство для просмотра деталей</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function() {
+        // Функция загрузки деталей устройства
+        function loadDeviceDetails(deviceName) {
+            $('#device-details-container').html(`
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Загрузка...</span>
+                    </div>
+                    <p class="mt-2">Загрузка данных устройства</p>
+                </div>
+            `);
+            
+            // Создаем форму для отправки POST запроса
+            const formData = new FormData();
+            formData.append('section', 'network');
+            formData.append('action', 'get_device_details');
+            formData.append('device_name', deviceName);
+            
+            fetch('/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(html => {
+                $('#device-details-container').html(html);
+            })
+            .catch(error => {
+                $('#device-details-container').html(`
+                    <div class="alert alert-danger">
+                        Ошибка при загрузке данных: ${error || 'Неизвестная ошибка'}
+                    </div>
+                `);
+            });
+        }
+        
+        // Обработчик выбора устройства
+        $('.device-item').on('click', function(e) {
+            e.preventDefault();
+            selectDevice($(this));
+        });
+        
+        function selectDevice($device) {
+            $('.device-item').removeClass('active');
+            $device.addClass('active');
+            $device[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            loadDeviceDetails($device.data('device-name'));
+        }
+        
+        // Кнопка обновления сетевой информации
+        $('#refreshNetworkBtn').on('click', function() {
+            const $btn = $(this);
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Обновление...');
+            
+            // Создаем форму для отправки POST запроса
+            const formData = new FormData();
+            formData.append('section', 'network');
+            formData.append('action', 'refresh_network');
+            
+            fetch('/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    location.reload();
+                } else {
+                    alert('Ошибка обновления: ' + (data.message || 'Неизвестная ошибка'));
+                }
+            })
+            .catch(error => {
+                alert('Ошибка сети при обновлении: ' + error);
+            })
+            .finally(() => {
+                $btn.prop('disabled', false).html('<i class="bi bi-arrow-repeat"></i> Обновить');
+            });
+        });
+        
+        // Инициализация - выделяем первое устройство
+        if ($('.device-item').length > 0) {
+            $('.device-item:first').addClass('active');
+            loadDeviceDetails($('.device-item:first').data('device-name'));
+        }
+        
+        // Обработчик клавиш вверх/вниз
+        $(document).on('keydown', function(e) {
+            const $active = $('.device-item.active');
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const $next = $active.next('.device-item');
+                if ($next.length) selectDevice($next);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const $prev = $active.prev('.device-item');
+                if ($prev.length) selectDevice($prev);
+            }
+        });
+        
+        // Кнопка скрыть/показать отключенные
+        let showDisabled = true;
+        $('#toggle-disabled').on('click', function() {
+            showDisabled = !showDisabled;
+            $(this).html(showDisabled ? 
+                '<i class="bi bi-eye-slash"></i> Скрыть отключенные' : 
+                '<i class="bi bi-eye"></i> Показать отключенные');
+            
+            if (showDisabled) {
+                $('.device-disabled').show();
+            } else {
+                $('.device-disabled').hide();
+                // Если текущее выбранное устройство скрыто, выбираем следующее
+                if ($('.device-item.active').hasClass('device-disabled')) {
+                    const nextDevice = $('.device-item.active').nextAll('.device-enabled:first');
+                    if (nextDevice.length) {
+                        selectDevice(nextDevice);
+                    } else {
+                        const prevDevice = $('.device-item.active').prevAll('.device-enabled:first');
+                        if (prevDevice.length) selectDevice(prevDevice);
+                    }
+                }
+            }
+        });
+    });
+</script>

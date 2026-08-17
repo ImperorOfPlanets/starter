@@ -1,0 +1,28 @@
+# --- Python & Venv ---
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# --- Environment & Secrets ---
+.env
+!.env.example
+
+# --- Logs & Temp ---
+*.log
+temp.txt
+
+# --- Starter Runtime ---
+files/logs/
+files/web/ssl/
+files/web/sessions/
+files/updates/
+files/__pycache__/
+
+# --- Generated Files ---
+codereader_config.json
+
+# --- IDE ---
+.vscode/
+.idea/
+.zed/

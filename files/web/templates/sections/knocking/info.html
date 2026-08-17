@@ -1,0 +1,72 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('knocking_info_title') }}</h1>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-shield-lock me-2"></i> {{ t('knocking_about') }}
+                </div>
+                <div class="card-body">
+                    <h5>{{ t('knocking_what_is') }}</h5>
+                    <p>{{ t('knocking_definition') }}</p>
+                    
+                    <h5 class="mt-4">{{ t('knocking_benefits') }}</h5>
+                    <ul>
+                        <li>{{ t('knocking_benefit1') }}</li>
+                        <li>{{ t('knocking_benefit2') }}</li>
+                        <li>{{ t('knocking_benefit3') }}</li>
+                    </ul>
+                    
+                    <h5 class="mt-4">{{ t('knocking_limitations') }}</h5>
+                    <ul>
+                        <li>{{ t('knocking_limit1') }}</li>
+                        <li>{{ t('knocking_limit2') }}</li>
+                        <li>{{ t('knocking_limit3') }}</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-gear me-2"></i> {{ t('knocking_current_config') }}
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td><strong>{{ t('knocking_status') }}</strong></td>
+                                    <td>
+                                        {% if status.enabled %}
+                                            <span class="badge bg-success">{{ t('active') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ t('inactive') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('knocking_ports') }}</strong></td>
+                                    <td>{{ status.ports|join(', ') }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{{ t('knocking_timeout') }}</strong></td>
+                                    <td>{{ status.timeout }} {{ t('seconds') }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <a href="#" class="btn btn-primary btn-sm w-100"
+                       data-action="loadSection" 
+                       data-data='{"section": "knocking", "action": "settings"}'>
+                        <i class="bi bi-gear"></i> {{ t('knocking_configure') }}
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

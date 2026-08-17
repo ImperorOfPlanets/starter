@@ -1,0 +1,247 @@
+<div data-action="globalVariables" data-title="Глобальные переменные" class="container-fluid">
+  <div class="card border mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 fw-semibold text-gray-700 d-flex align-items-center">
+          <i class="bi bi-globe2 me-2"></i> Глобальные переменные
+        </h2>
+        <div class="position-relative">
+          <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-2"></i>
+          <input type="text" id="global-search" class="form-control ps-4" placeholder="Поиск переменных...">
+        </div>
+      </div>
+
+      <div id="globals-container">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2 text-muted">Загрузка данных...</p>
+        </div>
+      </div>
+
+      <div id="no-results" class="text-center py-4 d-none">
+        <i class="bi bi-search display-4 text-muted"></i>
+        <p class="mt-2 text-muted">Совпадений не найдено</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Глобальная функция инициализации переменных
+function initGlobalVariables() {
+  console.log('Инициализация глобальных переменных...');
+  
+  // Инициализация обработчиков событий
+  $('#global-search').off('input').on('input', handleGlobalSearch);
+  
+  // Загрузка данных
+  loadGlobals();
+}
+
+// Функция загрузки глобальных переменных
+function loadGlobals() {
+  const container = $('#globals-container');
+  const noResults = $('#no-results');
+  
+  container.html(`
+    <div class="text-center py-4">
+      <div class="spinner-border text-primary" role="status"></div>
+      <p class="mt-2 text-muted">Загрузка данных...</p>
+    </div>
+  `);
+  noResults.addClass('d-none');
+
+  // Отправка запроса
+  $.ajax({
+    url: '/',
+    method: 'POST',
+    data: {
+      section: 'develop',
+      action: 'globalVariables'
+    },
+    dataType: 'json',
+    headers: {
+      'Accept': 'application/json'
+    }
+  })
+  .done(res => {
+    if (res.status === 'success' && res.data) {
+      renderGlobals(res.data);
+    } else {
+      const errorMsg = res.message || 'Нет данных для отображения';
+      container.html(`
+        <div class="alert alert-danger">
+          <i class="bi bi-exclamation-circle me-2"></i>${errorMsg}
+        </div>
+      `);
+    }
+  })
+  .fail((xhr) => {
+    let errorMsg = 'Ошибка сети';
+    try {
+      const response = JSON.parse(xhr.responseText);
+      errorMsg = response.message || errorMsg;
+    } catch (e) {
+      errorMsg = xhr.statusText || errorMsg;
+    }
+    
+    container.html(`
+      <div class="alert alert-danger">
+        <i class="bi bi-exclamation-circle me-2"></i>${errorMsg}
+      </div>
+    `);
+  });
+}
+
+// Функция отрисовки глобальных переменных
+function renderGlobals(data) {
+  const container = $('#globals-container');
+  const noResults = $('#no-results');
+  
+  // Очищаем предыдущие результаты
+  container.empty();
+  
+  if (!data || Object.keys(data).length === 0) {
+    container.html('<p class="text-muted">Нет данных для отображения</p>');
+    return;
+  }
+
+  // Создаем карточки для каждой переменной
+  Object.entries(data).forEach(([key, value]) => {
+    const card = createGlobalCard(key, value);
+    container.append(card);
+  });
+
+  // Инициализация обработчиков для карточек
+  initCardHandlers();
+}
+
+// Создание карточки для переменной
+function createGlobalCard(key, value) {
+  // Определение типа данных
+  let type = typeof value;
+  let typeLabel = type;
+  let typeClass = 'badge bg-secondary';
+  let isExpandable = false;
+  
+  if (value === null) {
+    type = 'null';
+    typeLabel = 'null';
+    typeClass = 'badge bg-dark';
+  } else if (Array.isArray(value)) {
+    type = 'array';
+    typeLabel = `array[${value.length}]`;
+    typeClass = 'badge bg-success';
+    isExpandable = true;
+  } else if (type === 'object') {
+    typeLabel = 'object';
+    typeClass = 'badge bg-primary';
+    isExpandable = true;
+  } else if (type === 'string') {
+    typeClass = 'badge bg-warning text-dark';
+  } else if (type === 'number') {
+    typeClass = 'badge bg-info';
+  } else if (type === 'boolean') {
+    typeClass = 'badge bg-danger';
+  } else if (type === 'function') {
+    typeClass = 'badge bg-purple';
+  }
+  
+  // Форматирование значения для предпросмотра
+  let previewValue = '';
+  try {
+    if (value === null) {
+      previewValue = 'null';
+    } else if (Array.isArray(value)) {
+      previewValue = `[${value.length} items]`;
+    } else if (type === 'object') {
+      previewValue = `{${Object.keys(value).length} keys}`;
+    } else if (type === 'function') {
+      previewValue = `function ${value.name || 'anonymous'}()`;
+    } else {
+      previewValue = JSON.stringify(value);
+      
+      // Обрезаем длинные строки
+      if (previewValue.length > 100) {
+        previewValue = previewValue.substring(0, 100) + '...';
+      }
+    }
+  } catch (e) {
+    previewValue = 'Unserializable value';
+  }
+  
+  // Форматирование полного значения (для раскрывающейся секции)
+  let fullValue = '';
+  if (isExpandable) {
+    try {
+      fullValue = JSON.stringify(value, null, 2);
+    } catch (e) {
+      fullValue = `Unserializable object: ${e.message}`;
+    }
+  }
+  
+  // Формируем HTML карточки
+  let cardHtml = `
+    <div class="card mb-3 global-card" data-key="${key}">
+      <div class="card-header d-flex justify-content-between align-items-center ${isExpandable ? 'expandable' : ''}" 
+           style="cursor: ${isExpandable ? 'pointer' : 'default'}">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <span class="fw-bold me-1">${key}</span>
+          <span class="${typeClass}">${typeLabel}</span>
+          <span class="ms-2 text-truncate">${previewValue}</span>
+        </div>
+        ${isExpandable ? '<i class="bi bi-chevron-down"></i>' : ''}
+      </div>
+  `;
+  
+  // Добавляем раскрывающуюся секцию только для массивов и объектов
+  if (isExpandable) {
+    cardHtml += `
+      <div class="card-body d-none">
+        <pre class="bg-light p-3 rounded">${fullValue}</pre>
+      </div>
+    `;
+  }
+  
+  cardHtml += `</div>`;
+  
+  return cardHtml;
+}
+
+// Инициализация обработчиков карточек
+function initCardHandlers() {
+  // Обработка кликов только для раскрываемых карточек
+  $('.card-header.expandable').off('click').on('click', function() {
+    const $body = $(this).next('.card-body');
+    $body.toggleClass('d-none');
+    $(this).find('i').toggleClass('bi-chevron-down bi-chevron-up');
+  });
+}
+
+// Обработка поиска
+function handleGlobalSearch() {
+  const searchTerm = $(this).val().toLowerCase();
+  const $cards = $('.global-card');
+  const noResults = $('#no-results');
+  let hasResults = false;
+  
+  if (searchTerm === '') {
+    $cards.show();
+    noResults.addClass('d-none');
+    return;
+  }
+  
+  $cards.each(function() {
+    const key = $(this).data('key').toLowerCase();
+    
+    if (key.includes(searchTerm)) {
+      $(this).show();
+      hasResults = true;
+    } else {
+      $(this).hide();
+    }
+  });
+  
+  noResults.toggleClass('d-none', hasResults);
+}
+</script>

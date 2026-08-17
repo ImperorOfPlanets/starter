@@ -1,0 +1,470 @@
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('updates_status_title') }}</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button id="check-all-btn" class="btn btn-sm btn-outline-primary me-2">
+                <i class="bi bi-arrow-repeat"></i> {{ t('check_all_updates') }}
+            </button>
+        </div>
+    </div>
+
+    <!-- Секция обновления стартера -->
+    {% include 'sections/updates/partials/starter_section.html' %}
+
+    <!-- Секция для серверных проектов -->
+    {% include 'sections/updates/partials/projects_section.html' %}
+</div>
+
+<!-- Модальные окна -->
+{% include 'sections/updates/partials/modals.html' %}
+
+<script>
+$(document).ready(function() {
+    console.log('DOM loaded, initializing update section...');
+    
+    // Функция для отправки POST запроса
+    function postFormData(action, data) {
+        var formData = new FormData();
+        formData.append('section', 'updates');
+        formData.append('action', action);
+        
+        for (var key in data) {
+            if (data.hasOwnProperty(key)) {
+                formData.append(key, data[key]);
+            }
+        }
+
+        return $.ajax({
+            url: '/',
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            dataType: 'json'
+        });
+    }
+
+    // =========================================================================
+    // ФУНКЦИИ ДЛЯ СТАРТЕРА
+    // =========================================================================
+
+    // Обновление стартера
+    $('.update-starter-btn').on('click', function() {
+        const $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("updating") }}');
+        
+        postFormData('update_starter', {})
+            .done(function(data) {
+                if (data.success) {
+                    trackUpdateProgress(data.update_id, 'Starter');
+                } else {
+                    alert('Error: ' + data.message);
+                }
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update_now") }}');
+            });
+    });
+
+    // Проверка обновлений стартера
+    $('.check-starter-btn').on('click', function() {
+        const $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i>');
+        
+        postFormData('check_starter_updates', {})
+            .done(function(data) {
+                if (data.success) {
+                    let message = '{{ t("up_to_date") }}';
+                    if (data.update_available) {
+                        message = '{{ t("update_strongly_recommended") }}';
+                    } else if (data.has_update) {
+                        message = '{{ t("update_available") }}';
+                    }
+                    alert(message);
+                } else {
+                    alert('Error: ' + data.message);
+                }
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_updates") }}');
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_updates") }}');
+            });
+    });
+
+    // Просмотр истории стартера
+    $('.view-starter-history-btn').on('click', function() {
+        postFormData('get_starter_history', {})
+            .done(function(response) {
+                if (response.success) {
+                    showHistoryModal(response.history, '{{ t("starter_update_history") }}');
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+            });
+    });
+
+    // =========================================================================
+    // ФУНКЦИИ ДЛЯ СЕРВЕРОВ
+    // =========================================================================
+
+    // Загрузка статуса серверов
+    function loadServersStatus() {
+        console.log('Loading servers status...');
+        
+        postFormData('get_server_updates_status', {})
+            .done(function(response) {
+                if (response.success) {
+                    renderServersStatus(response.server_status);
+                } else {
+                    $('#servers-status-container').html(`
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            Error loading servers status: ${response.message}
+                        </div>
+                    `);
+                }
+            })
+            .fail(function(error) {
+                $('#servers-status-container').html(`
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Network error: ${error.statusText}
+                    </div>
+                `);
+            });
+    }
+
+    // Отрисовка статуса серверов
+    function renderServersStatus(servers) {
+        const container = $('#servers-status-container');
+        
+        if (servers.length === 0) {
+            container.html(`
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    {{ t('no_servers_configured') }}
+                </div>
+            `);
+            return;
+        }
+        
+        let html = '';
+        servers.forEach(server => {
+            html += `
+                <div class="server-card mb-3 p-3 border rounded" data-server-type="${server.type}">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <h6 class="mb-1">${server.name}</h6>
+                            <p class="text-muted small mb-2">${server.description}</p>
+                            <span class="badge bg-${server.color}">${server.status}</span>
+                            ${server.is_current ? '<span class="badge bg-primary ms-1">{{ t("current") }}</span>' : ''}
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-secondary check-server-btn" 
+                                        data-server-type="${server.type}">
+                                    <i class="bi bi-arrow-repeat"></i> {{ t("check") }}
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary update-server-btn" 
+                                        data-server-type="${server.type}">
+                                    <i class="bi bi-cloud-arrow-down"></i> {{ t("update") }}
+                                </button>
+                                <button class="btn btn-sm btn-outline-info view-server-history-btn" 
+                                        data-server-type="${server.type}">
+                                    <i class="bi bi-clock-history"></i> {{ t("history") }}
+                                </button>
+                            </div>
+                            ${server.last_update ? `
+                            <p class="small text-muted mt-2 mb-0">
+                                {{ t("last_update") }}: ${new Date(server.last_update).toLocaleString()}
+                            </p>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.html(html);
+    }
+
+    // Проверка обновлений сервера
+    $(document).on('click', '.check-server-btn', function() {
+        const serverType = $(this).data('server-type');
+        const $btn = $(this);
+        
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i>');
+        
+        postFormData('check_server_updates', { server_type: serverType })
+            .done(function(response) {
+                if (response.success) {
+                    let message = '{{ t("up_to_date") }}';
+                    if (response.update_available) {
+                        message = '{{ t("update_strongly_recommended") }}';
+                    } else if (response.has_update) {
+                        message = '{{ t("update_available") }}';
+                    }
+                    alert(message);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check") }}');
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check") }}');
+            });
+    });
+
+    // Обновление сервера
+    $(document).on('click', '.update-server-btn', function() {
+        const serverType = $(this).data('server-type');
+        const $btn = $(this);
+        
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("updating") }}');
+        
+        postFormData('update_server', { server_type: serverType })
+            .done(function(response) {
+                if (response.success) {
+                    trackUpdateProgress(response.update_id, serverType);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update") }}');
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-cloud-arrow-down"></i> {{ t("update") }}');
+            });
+    });
+
+    // Просмотр истории сервера
+    $(document).on('click', '.view-server-history-btn', function() {
+        const serverType = $(this).data('server-type');
+        
+        postFormData('get_server_update_history', { server_type: serverType })
+            .done(function(response) {
+                if (response.success) {
+                    showHistoryModal(response.history, `{{ t("server_update_history") }}: ${serverType}`);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+            });
+    });
+
+    // =========================================================================
+    // ОБЩИЕ ФУНКЦИИ
+    // =========================================================================
+
+    // Функция для отображения модального окна истории
+    function showHistoryModal(history, title) {
+        const historyTable = $('#historyTableBody');
+        historyTable.empty();
+        
+        if (history.length === 0) {
+            historyTable.append(`
+                <tr>
+                    <td colspan="3" class="text-center text-muted py-4">
+                        <i class="bi bi-clock-history display-4 mb-3"></i>
+                        <p>{{ t("no_update_history") }}</p>
+                    </td>
+                </tr>
+            `);
+        } else {
+            history.forEach(item => {
+                const date = new Date(item.timestamp);
+                const row = `
+                    <tr>
+                        <td>${date.toLocaleString()}</td>
+                        <td>
+                            <span class="badge bg-${getStatusColor(item.status)}">
+                                ${item.status}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info view-log-btn" 
+                                    data-update-id="${item.update_id}">
+                                <i class="bi bi-file-text"></i> {{ t("view_log") }}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                historyTable.append(row);
+            });
+        }
+        
+        $('#historyModal .modal-title').text(title);
+        $('#historyModal').modal('show');
+    }
+
+    // Функция для отслеживания прогресса обновления
+    function trackUpdateProgress(updateId, projectName) {
+        const modal = $('#updateProgressModal');
+        modal.find('#updateProjectName').text(projectName);
+        const logContent = modal.find('#updateLogContent');
+        
+        // Показываем модальное окно
+        modal.modal('show');
+        
+        // Сохраняем ID для скачивания
+        $('#downloadProgressLogBtn').data('update-id', updateId);
+        
+        // Функция для обновления лога
+        function updateLog() {
+            postFormData('get_update_log', { update_id: updateId })
+                .done(function(response) {
+                    if (response.success) {
+                        logContent.text(response.log);
+                        // Прокрутка вниз
+                        logContent.scrollTop(logContent[0].scrollHeight);
+                        
+                        // Проверяем, завершено ли обновление
+                        if (response.log.includes('Обновление завершено успешно') || 
+                            response.log.includes('Ошибка при обновлении')) {
+                            clearInterval(intervalId);
+                        }
+                    }
+                })
+                .fail(function(error) {
+                    console.error('Error fetching log:', error);
+                });
+        }
+        
+        // Обновляем лог каждые 2 секунды
+        const intervalId = setInterval(updateLog, 2000);
+        
+        // Первоначальная загрузка
+        updateLog();
+        
+        // Остановка отслеживания при закрытии модального окна
+        modal.on('hidden.bs.modal', function() {
+            clearInterval(intervalId);
+        });
+    }
+
+    function getStatusColor(status) {
+        switch(status) {
+            case 'completed': return 'success';
+            case 'error': return 'danger';
+            case 'in_progress': return 'warning';
+            default: return 'secondary';
+        }
+    }
+
+    // Обработчик для кнопки просмотра лога
+    $(document).on('click', '.view-log-btn', function() {
+        const updateId = $(this).data('update-id');
+        
+        postFormData('get_update_log', { update_id: updateId })
+            .done(function(response) {
+                if (response.success) {
+                    $('#logModal .modal-body pre').text(response.log);
+                    $('#logModal').modal('show');
+                    $('#downloadLogBtn').data('update-id', updateId);
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+            });
+    });
+
+    // Обработчик для кнопки скачивания лога
+    $('#downloadLogBtn, #downloadProgressLogBtn').on('click', function() {
+        const updateId = $(this).data('update-id');
+        
+        // Создаем временную форму для скачивания
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/';
+        form.style.display = 'none';
+        
+        const params = {
+            'section': 'updates',
+            'action': 'download_update_log',
+            'update_id': updateId
+        };
+        
+        for (const [key, value] of Object.entries(params)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value;
+            form.appendChild(input);
+        }
+        
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+    });
+
+    // Кнопка проверки всех обновлений
+    $('#check-all-btn').on('click', function() {
+        console.log('Check all updates button clicked');
+        const $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.html('<i class="bi bi-arrow-repeat spin"></i> {{ t("checking") }}');
+        
+        postFormData('check_all', {})
+            .done(function(data) {
+                if (data.success) {
+                    alert('{{ t("updates_check_started") }}');
+                    // Перезагружаем статус серверов
+                    loadServersStatus();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_all_updates") }}');
+            })
+            .fail(function(error) {
+                alert('Network error: ' + error.statusText);
+                $btn.prop('disabled', false);
+                $btn.html('<i class="bi bi-arrow-repeat"></i> {{ t("check_all_updates") }}');
+            });
+    });
+
+    // Кнопка обновления статуса серверов
+    $('#refresh-servers-btn').on('click', function() {
+        loadServersStatus();
+    });
+
+    // Загрузка статуса серверов при загрузке страницы
+    console.log('Loading servers status on page load...');
+    loadServersStatus();
+    
+    console.log('Update section initialized successfully');
+});
+</script>
+
+<style>
+.bi-arrow-repeat.spin {
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+</style>

@@ -1,0 +1,81 @@
+<!-- starter/files/web/templates/login.html -->
+<form method="POST" action="/" id="authForm">
+    <input type="hidden" name="section" value="auth">
+    <input type="hidden" name="action" value="login">
+
+    <div class="mb-3">
+        <label class="form-label">Логин</label>
+        <input type="text" name="username" class="form-control" required>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Пароль</label>
+        <input type="password" name="password" class="form-control" required>
+    </div>
+
+    <div id="errorMessage" class="alert alert-danger d-none"></div>
+
+    <button type="submit" class="btn btn-primary w-100 mb-2">Войти</button>
+
+    <hr class="my-3">
+
+    <a id="myidonLoginBtn" href="#" class="btn btn-outline-primary w-100">
+        <i class="bi bi-shield-lock me-2"></i> Войти через MyIDon
+    </a>
+</form>
+
+<script>
+$(document).ready(function() {
+    $('#authForm').on('submit', function(e) {
+        e.preventDefault();
+        var $form = $(this);
+        var $errorMessage = $('#errorMessage');
+
+        $.ajax({
+            url: '/',
+            type: 'POST',
+            data: $form.serialize(),
+            dataType: 'json',
+            headers: { 'Accept': 'application/json' },
+            success: function(result) {
+                if (result.status === 'success' && result.redirect) {
+                    window.location.href = result.redirect;
+                } else if (result.message) {
+                    $errorMessage.text(result.message).removeClass('d-none');
+                }
+            },
+            error: function(xhr) {
+                var msg = 'Ошибка сети';
+                try { msg = JSON.parse(xhr.responseText).message || msg; } catch(e) {}
+                $errorMessage.text(msg).removeClass('d-none');
+            }
+        });
+    });
+
+    $('#myidonLoginBtn').on('click', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span> Загрузка...');
+
+        $.ajax({
+            url: '/',
+            type: 'POST',
+            data: { section: 'auth', action: 'login_with_myidon' },
+            dataType: 'json',
+            headers: { 'Accept': 'application/json' },
+            success: function(result) {
+                if (result.status === 'redirect' && result.redirect_url) {
+                    window.location.href = result.redirect_url;
+                } else if (result.message) {
+                    alert(result.message);
+                    $btn.prop('disabled', false).html('<i class="bi bi-shield-lock me-2"></i> Войти через MyIDon');
+                }
+            },
+            error: function() {
+                alert('Ошибка подключения к MyIDon');
+                $btn.prop('disabled', false).html('<i class="bi bi-shield-lock me-2"></i> Войти через MyIDon');
+            }
+        });
+    });
+});
+</script>

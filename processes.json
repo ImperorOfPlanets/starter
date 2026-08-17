@@ -1,0 +1,17 @@
+{
+  "21380": {
+    "pid": 21380,
+    "is_child": false,
+    "start_time": 1786956096.6324017,
+    "start_time_str": "2026-08-17 13:41:36",
+    "parent_pid": null,
+    "child_pid": null,
+    "port": 2000,
+    "python": "C:\\control\\starter\\venv\\Scripts\\python.exe",
+    "script": "C:\\control\\starter\\starter.py",
+    "starter_path": "C:\\control\\starter",
+    "project_path": "None",
+    "os_family": "unknown",
+    "os_name": "Windows"
+  }
+}

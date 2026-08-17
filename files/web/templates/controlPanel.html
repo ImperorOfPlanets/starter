@@ -1,0 +1,249 @@
+<div class="row">
+    <!-- Боковое меню -->
+    <div class="col-md-3 col-lg-2 d-md-block sidebar">
+        <div class="position-sticky pt-3">
+            <ul class="nav flex-column" id="mainMenu">
+                {% for section in sections_in_control_panel %}
+                <li class="nav-item">
+                    <a class="nav-link {% if loop.first %}active bg-primary text-white{% endif %}" href="#" data-section="{{ section.section_slug }}">
+                        <i class="bi {{ section.section_icon }} me-2"></i> {{ section.section_name }}
+                    </a>
+                </li>
+                {% endfor %}
+
+                {% for grp_slug, grp in sections_groups.items() %}
+                <li class="nav-item">
+                    <a class="nav-link sidebar-group-toggle" href="#" data-group="{{ grp_slug }}">
+                        <i class="bi {{ grp.group_icon }} me-2"></i> {{ grp.group_name }}
+                        <i class="bi bi-chevron-down float-end group-arrow" style="transition: transform 0.2s;"></i>
+                    </a>
+                    <ul class="nav flex-column ms-3 group-children" id="group-{{ grp_slug }}" style="display: none;">
+                        {% for section in grp.sections %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-section="{{ section.section_slug }}">
+                                <i class="bi {{ section.section_icon }} me-2"></i> {{ section.section_name }}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    
+    <!-- Область контента -->
+    <div class="col-md-9 col-lg-10 ms-sm-auto content-area">
+        <div id="loadingSpinner" class="loading-spinner">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">{{ t('controlPanel_loading') }}</span>
+            </div>
+        </div>
+        
+        <div id="contentArea">
+            {% for section in sections_in_control_panel %}
+            <div id="{{ section.section_slug }}Section" class="section-content {% if loop.first and not sections_groups %}active{% else %}d-none{% endif %}" data-loaded="{% if loop.first and not sections_groups %}true{% else %}false{% endif %}">
+            </div>
+            {% endfor %}
+
+            {% for grp_slug, grp in sections_groups.items() %}
+                {% for section in grp.sections %}
+                <div id="{{ section.section_slug }}Section" class="section-content d-none" data-loaded="false">
+                </div>
+                {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- localStorage functions (global scope) ---
+    function getLastSection() {
+        return localStorage.getItem('last_active_section');
+    }
+    function setLastSection(slug) {
+        localStorage.setItem('last_active_section', slug);
+    }
+    function getGroupState() {
+        try { return JSON.parse(localStorage.getItem('sidebar_groups') || '{}'); } catch(e) { return {}; }
+    }
+    function setGroupState(slug, collapsed) {
+        const state = getGroupState();
+        state[slug] = collapsed;
+        localStorage.setItem('sidebar_groups', JSON.stringify(state));
+    }
+
+$(document).ready(function() {
+    const translations = {
+        loading: "{{ t('controlPanel_loading') }}",
+        action_error: "{{ t('controlPanel_action_error') }}",
+        section_error: "{{ t('controlPanel_section_error') }}",
+        parse_error: "{{ t('controlPanel_parse_error') }}"
+    };
+
+    // Restore collapsed/expanded state
+    $('.sidebar-group-toggle').each(function() {
+        const grp = $(this).data('group');
+        const state = getGroupState();
+        const $children = $('#group-' + grp);
+        const $arrow = $(this).find('.group-arrow');
+        if (state[grp] !== true) {
+            $children.show();
+            $arrow.css('transform', 'rotate(0deg)');
+        } else {
+            $children.hide();
+            $arrow.css('transform', 'rotate(-90deg)');
+        }
+    });
+
+    // --- Group toggle ---
+    $(document).on('click', '.sidebar-group-toggle', function(e) {
+        e.preventDefault();
+        const grp = $(this).data('group');
+        const $children = $('#group-' + grp);
+        const $arrow = $(this).find('.group-arrow');
+        const isHidden = $children.is(':hidden');
+
+        if (isHidden) {
+            $children.slideDown(200);
+            $arrow.css('transform', 'rotate(0deg)');
+            setGroupState(grp, false);
+        } else {
+            $children.slideUp(200);
+            $arrow.css('transform', 'rotate(-90deg)');
+            setGroupState(grp, true);
+        }
+    });
+
+    // --- Menu init ---
+    initMenu();
+
+    // Restore last active section from localStorage
+    const lastSection = getLastSection();
+    let sectionLoaded = false;
+    
+    if (lastSection) {
+        const $lastLink = $(`#mainMenu a.nav-link[data-section="${lastSection}"]`);
+        if ($lastLink.length) {
+            // Check if parent group is collapsed, expand it
+            const $parentGroup = $lastLink.closest('.group-children');
+            if ($parentGroup.length) {
+                const groupSlug = $parentGroup.attr('id').replace('group-', '');
+                const $groupToggle = $(`#mainMenu a[data-group="${groupSlug}"]`);
+                if ($groupToggle.length && $parentGroup.is(':hidden')) {
+                    $groupToggle.trigger('click');
+                }
+            }
+            
+            $lastLink.addClass('active bg-primary text-white');
+            loadSection(lastSection, true);
+            sectionLoaded = true;
+        }
+    }
+    
+    // Fallback to first visible section
+    if (!sectionLoaded) {
+        const firstLink = $('#mainMenu a.nav-link.active').first();
+        if (!firstLink.length) {
+            const firstVisible = $('#mainMenu a.nav-link[data-section]:visible').first();
+            if (firstVisible.length) {
+                firstVisible.addClass('active bg-primary text-white');
+                loadSection(firstVisible.data('section'), true);
+            }
+        } else {
+            loadSection(firstLink.data('section'), true);
+        }
+    }
+
+    // --- Universal action handler ---
+    $(document).on('click', '.section-content [data-action]', function(e) {
+        e.preventDefault();
+        
+        const $this = $(this);
+        const action = $this.data('action');
+        const section = $this.closest('.section-content').attr('id').replace('Section', '');
+        const acceptType = $this.data('accept') || 'html';
+        
+        let additionalData = {};
+        try {
+            const dataAttr = $this.data('data');
+            if (dataAttr) additionalData = typeof dataAttr === 'string' ? JSON.parse(dataAttr) : dataAttr;
+        } catch (e) { console.error(translations.parse_error, e); }
+        
+        const $spinner = $('#loadingSpinner').show();
+        const $target = $this.closest('.section-content').find('#dockerContent');
+        
+        const requestData = { section, action, ...additionalData };
+        
+        $.ajax({
+            url: '/',
+            method: 'POST',
+            data: requestData,
+            headers: { 'Accept': acceptType === 'json' ? 'application/json' : 'text/html' },
+            dataType: acceptType === 'json' ? 'json' : 'html',
+            success: function(response) {
+                if (acceptType === 'html' && (typeof response === 'string' || response instanceof String)) {
+                    $target.html(response);
+                } else if (acceptType === 'json' && typeof response === 'object') {
+                    if (response.redirect) window.location.href = response.redirect;
+                    else if (response.html) $target.html(response.html);
+                    else if (response.message) console.log(response.message);
+                }
+                $('#mainMenu a.nav-link').removeClass('active bg-primary text-white');
+                $this.addClass('active bg-primary text-white');
+            },
+            error: function(xhr, status, error) {
+                $target.html(`<div class="alert alert-danger"><h5>${translations.action_error}</h5><p>${status}: ${error}</p></div>`);
+            },
+            complete: function() { $spinner.hide(); }
+        });
+    });
+});
+
+function initMenu() {
+    $('#mainMenu a.nav-link[data-section]').on('click', function(e) {
+        e.preventDefault();
+        const $this = $(this);
+        const section = $this.data('section');
+        if (!section) return;
+        if ($this.hasClass('active')) return;
+        
+        $('#mainMenu a.nav-link').removeClass('active bg-primary text-white');
+        $this.addClass('active bg-primary text-white');
+        setLastSection(section);
+        switchSection(section);
+    });
+}
+
+function switchSection(section) {
+    $('.section-content').removeClass('active').addClass('d-none');
+    const $el = $(`#${section}Section`);
+    $el.removeClass('d-none').addClass('active');
+    if ($el.data('loaded') !== true) loadSection(section, false);
+}
+
+function loadSection(section, isInitialLoad) {
+    const $el = $(`#${section}Section`);
+    const $spinner = $('#loadingSpinner');
+    
+    $spinner.css({ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }).show();
+    $el.html('').addClass('loading');
+    
+    $.ajax({
+        url: '/',
+        method: 'POST',
+        data: { section, action: 'index' },
+        dataType: 'html',
+        success: function(response) {
+            $el.html(response);
+            $el.data('loaded', true);
+            $spinner.hide();
+        },
+        error: function(xhr, status, error) {
+            $el.html(`<div class="alert alert-danger"><h5>Error</h5><p>${status}: ${error}</p></div>`);
+            $el.data('loaded', true);
+            $spinner.hide();
+        }
+    });
+}
+</script>

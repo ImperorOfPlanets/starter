@@ -1,0 +1,226 @@
+<!-- Добавляем модальное окно установки в конец общего шаблона -->
+<!-- Модальное окно установки (универсальное) -->
+<div class="modal fade" id="installModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="installModalTitle">{{ t('package_installation') }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="{{ t('close') }}"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-center mb-3">
+                    <div class="spinner-border text-primary" role="status" id="installSpinner">
+                        <span class="visually-hidden">{{ t('loading') }}...</span>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info" id="installStatus">
+                    {{ t('preparing_installation') }}
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        {{ t('installation_logs') }}
+                        <button class="btn btn-sm btn-outline-secondary float-end" id="refreshLogsBtn">
+                            <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
+                        </button>
+                    </div>
+                    <div class="card-body bg-dark text-white" style="height: 50vh; overflow-y: auto;">
+                        <pre id="installLogs" class="mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeInstallBtn">
+                    {{ t('close') }}
+                </button>
+                <button type="button" class="btn btn-success" id="finishInstallBtn" style="display: none;">
+                    <i class="bi bi-check-circle me-1"></i> {{ t('finish') }}
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="downloadLogsBtn" style="display: none;">
+                    <i class="bi bi-download me-1"></i> {{ t('download_logs') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Обработчик для всех кнопок установки
+    $(document).on('click', '.install-btn', function() {
+        const packageName = $(this).data('pkg');
+        const displayNames = {
+            'docker': 'Docker',
+            'docker-compose': 'Docker Compose',
+            'port-knocking': 'Port Knocking',
+            'git': 'Git'
+        };
+        const displayName = displayNames[packageName] || packageName;
+        
+        if (confirm('{{ t("confirm_install_package") }}: ' + displayName + '?')) {
+            const $btn = $(this);
+            $btn.prop('disabled', true);
+            
+            // Показать модальное окно
+            const installModal = new bootstrap.Modal('#installModal');
+            installModal.show();
+            
+            // Установить заголовок
+            $('#installModalTitle').text('{{ t("package_installation") }}: ' + displayName);
+            
+            // Сбросить состояние модального окна
+            $('#installLogs').text('');
+            $('#installStatus').removeClass('alert-success alert-danger alert-warning')
+                               .addClass('alert-info')
+                               .text('{{ t("starting_installation") }}');
+            $('#installSpinner').show();
+            $('#finishInstallBtn').hide();
+            $('#downloadLogsBtn').hide();
+            
+            // Начать установку
+            fetch('/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Accept': 'application/json'
+                },
+                body: new URLSearchParams({
+                    'section': 'dashboard',
+                    'action': 'install_package',
+                    'package': packageName
+                })
+            })
+            .then(response => response.json())
+            .then(response => {
+                if (response.status === 'started') {
+                    const installId = response.install_id;
+                    
+                    // Сохраняем ID установки и имя пакета
+                    $('#installModal').data('install-id', installId);
+                    $('#installModal').data('package', packageName);
+                    
+                    // Функция обновления логов
+                    function updateLogs() {
+                        fetch('/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'Accept': 'application/json'
+                            },
+                            body: new URLSearchParams({
+                                'section': 'dashboard',
+                                'action': 'get_install_logs',
+                                'install_id': installId,
+                                'package': packageName
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(logResponse => {
+                            if (logResponse.status === 'success') {
+                                $('#installLogs').text(logResponse.logs);
+                                
+                                // Автоскролл к последней записи
+                                const logContainer = $('#installLogs').parent();
+                                logContainer.scrollTop(logContainer[0].scrollHeight);
+                                
+                                // Проверяем завершение установки
+                                if (logResponse.completed) {
+                                    clearInterval(logInterval);
+                                    $('#installSpinner').hide();
+                                    $('#finishInstallBtn').show();
+                                    $('#downloadLogsBtn').show();
+                                    
+                                    if (logResponse.installed) {
+                                        $('#installStatus').removeClass('alert-info')
+                                                          .addClass('alert-success')
+                                                          .text('{{ t("installation_completed_success") }}');
+                                    } else {
+                                        $('#installStatus').removeClass('alert-info')
+                                                          .addClass('alert-danger')
+                                                          .text('{{ t("installation_failed") }}');
+                                    }
+                                }
+                            } else {
+                                $('#installStatus').append('<br>' + logResponse.message);
+                            }
+                        })
+                        .catch(error => {
+                            $('#installStatus').append('<br>{{ t("log_request_failed") }}');
+                        });
+                    }
+                    
+                    // Первое обновление
+                    updateLogs();
+                    
+                    // Обновляем логи каждые 2 секунды
+                    const logInterval = setInterval(updateLogs, 2000);
+                    
+                    // Обработчик кнопки обновления логов
+                    $('#refreshLogsBtn').off('click').on('click', updateLogs);
+                    
+                    // Обработчик кнопки завершения
+                    $('#finishInstallBtn').off('click').on('click', function() {
+                        installModal.hide();
+                        location.reload(); // Перезагружаем страницу после установки
+                    });
+                    
+                    // Обработчик кнопки скачивания логов
+                    $('#downloadLogsBtn').off('click').on('click', function() {
+                        const installId = $('#installModal').data('install-id');
+                        const packageName = $('#installModal').data('package');
+                        
+                        // Создаем временную форму для скачивания
+                        const form = document.createElement('form');
+                        form.method = 'POST';
+                        form.action = '/';
+                        form.style.display = 'none';
+                        
+                        const params = {
+                            'section': 'dashboard',
+                            'action': 'download_install_logs',
+                            'install_id': installId,
+                            'package': packageName
+                        };
+                        
+                        for (const [key, value] of Object.entries(params)) {
+                            const input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = key;
+                            input.value = value;
+                            form.appendChild(input);
+                        }
+                        
+                        document.body.appendChild(form);
+                        form.submit();
+                        document.body.removeChild(form);
+                    });
+                    
+                    // Сохраняем interval ID
+                    $('#installModal').data('log-interval', logInterval);
+                } else {
+                    $('#installStatus').removeClass('alert-info')
+                                      .addClass('alert-danger')
+                                      .text(response.message || '{{ t("start_install_failed") }}');
+                    $btn.prop('disabled', false);
+                }
+            })
+            .catch(error => {
+                $('#installStatus').removeClass('alert-info')
+                                  .addClass('alert-danger')
+                                  .text('{{ t("request_failed") }}');
+                $btn.prop('disabled', false);
+            });
+        }
+    });
+
+    // Очистка интервала при закрытии модального окна
+    $('#installModal').on('hidden.bs.modal', function() {
+        const logInterval = $(this).data('log-interval');
+        if (logInterval) {
+            clearInterval(logInterval);
+        }
+        $('.install-btn').prop('disabled', false);
+    });
+});
+</script>

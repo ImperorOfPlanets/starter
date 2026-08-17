@@ -1,0 +1,43 @@
+# Web Framework
+Flask>=2.0
+Flask-Session>=0.4.0
+Werkzeug>=2.0
+
+# Environment Configuration
+python-dotenv>=0.19
+
+# HTTP and Networking
+certifi>=2021.10
+idna>=2.10
+requests>=2.25
+urllib3>=1.26
+
+# Data Processing and Parsing
+chardet>=4.0
+PyYAML>=6.0
+python-dateutil>=2.8
+
+# System Utilities
+psutil>=5.8
+
+# Security and Cryptography
+pyOpenSSL>=20.0
+cryptography>=36.0
+
+# Type Hints and Extensions
+typing-extensions>=3.7.4
+
+# Python < 3.8 Compatibility
+importlib-metadata>=4.0; python_version < '3.8'
+zipfile38>=0.0.3; python_version < '3.8'
+
+# Windows-specific dependencies
+pywin32>=300
+winshell>=0.6
+
+# Windows-specific dependencies for Starter
+pystray>=0.19.0
+Pillow>=10.0.0
+plyer>=2.1.0
+pywin32>=300
+winshell>=0.6
