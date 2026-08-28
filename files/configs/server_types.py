@@ -229,6 +229,44 @@ SERVER_TYPES = {
             'url': 'https://gitflic.ru/project/imperor/phone.git',
             'branch': 'main'
         }
+    },
+    'opencode': {
+        'name': 'Opencode Server',
+        'description': 'OpenCode HTTPS сервер с Nginx (AI-ассистент)',
+        'requires_reverse_proxy': False,
+        'requires_auth': True,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 2002,
+        'order': 14,
+        'can_have_multiple': True,
+        'default_folder': 'opencode',
+        'docker_compose_path': 'docker/docker-compose.yml',
+        'env_example_path': 'docker/.env.example',
+        'repository': {
+            'name': 'GitFlic',
+            'url': 'https://gitflic.ru/project/imperor/opencode-server.git',
+            'branch': 'master'
+        }
+    },
+    'opencode_medical': {
+        'name': 'OpenCode Medical',
+        'description': 'Медицинский AI-ассистент для МИАЦ РБ',
+        'requires_reverse_proxy': False,
+        'requires_auth': True,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 2003,
+        'order': 15,
+        'can_have_multiple': False,
+        'default_folder': 'opencode-medical',
+        'docker_compose_path': 'docker/docker-compose.yml',
+        'env_example_path': 'docker/.env.example',
+        'repository': {
+            'name': 'GitFlic',
+            'url': 'https://gitflic.ru/project/imperor/opencode-medical.git',
+            'branch': 'master'
+        }
     }
 }
 

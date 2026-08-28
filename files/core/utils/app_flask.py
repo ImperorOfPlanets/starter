@@ -93,7 +93,7 @@ def configure_app() -> Flask:
         'SESSION_COOKIE_SECURE': True,
         'SESSION_COOKIE_SAMESITE': 'Lax',
         'PERMANENT_SESSION_LIFETIME': timedelta(days=30),
-        'PREFERRED_URL_SCHEME': 'https'
+        'PREFERRED_URL_SCHEME': 'http'
     })
 
     Session(app)

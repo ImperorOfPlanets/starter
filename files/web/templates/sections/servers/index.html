@@ -1,3 +1,5 @@
+<div id="errorModal" class="modal fade" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header bg-danger text-white"><h5 class="modal-title">Ошибка</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body"><pre id="errorModalBody" style="white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;background:#f8f9fa;padding:12px;border-radius:6px;font-size:13px;"></pre></div><div class="modal-footer"><button class="btn btn-outline-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('errorModalBody').textContent)">Копировать</button><button class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button></div></div></div></div>
+<script>function showErrorModal(msg){document.getElementById('errorModalBody').textContent=msg||'Неизвестная ошибка';new bootstrap.Modal(document.getElementById('errorModal')).show();}</script>
 <style>
 .folder-item > div:hover { background: rgba(0,0,0,0.05); border-radius: 4px; }
 .folder-item > div { transition: background 0.15s; padding: 4px 6px; border-radius: 4px; cursor: pointer; }
@@ -66,6 +68,13 @@
                                 data-server-id="{{ server.id }}"
                                 title="Остановить">
                             <i class="bi bi-stop-fill"></i>
+                        </button>
+                        {% endif %}
+                        {% if server.has_update %}
+                        <button class="btn btn-outline-info btn-sm update-server"
+                                data-server-id="{{ server.id }}"
+                                title="Доступно обновление!">
+                            <i class="bi bi-arrow-clockwise"></i>
                         </button>
                         {% endif %}
                         <button class="btn btn-outline-primary btn-sm configure-server"
@@ -421,7 +430,7 @@ function createFolder() {
     
     var current = document.getElementById('currentPath').value;
     if (!current) {
-        alert('Сначала выберите диск');
+        showErrorModal('Сначала выберите диск');
         return;
     }
     
@@ -445,11 +454,11 @@ function createFolder() {
             document.getElementById('currentPath').value = newPath;
             document.getElementById('finalPath').textContent = newPath;
         } else {
-            alert(res.message || 'Не удалось создать папку');
+            showErrorModal(res.message || 'Не удалось создать папку');
         }
     })
     .catch(function(err) {
-        alert('Ошибка: ' + err.message);
+        showErrorModal('Ошибка: ' + err.message);
     });
 }
 
@@ -464,11 +473,11 @@ function installServer() {
     var force = document.getElementById('forceReinstall').checked;
 
     if (!type) {
-        alert('Выберите тип сервера');
+        showErrorModal('Выберите тип сервера');
         return;
     }
     if (!path) {
-        alert('Выберите путь установки');
+        showErrorModal('Выберите путь установки');
         return;
     }
 
@@ -536,10 +545,10 @@ $(document).on('click', '.delete-server', function() {
     .then(function(r) { return r.json(); })
     .then(function(res) {
         if (res.status === 'success') location.reload();
-        else alert(res.message || 'Ошибка');
+        else showErrorModal(res.message || 'Ошибка');
     })
     .catch(function(err) {
-        alert('Ошибка: ' + err.message);
+        showErrorModal('Ошибка: ' + err.message);
     });
 });
 
@@ -556,9 +565,9 @@ $(document).on('click', '.start-server', function() {
     .then(function(r) { return r.json(); })
     .then(function(res) {
         if (res.status === 'success') location.reload();
-        else { alert(res.message || 'Ошибка запуска'); btn.prop('disabled', false).html('<i class="bi bi-play-fill"></i>'); }
+        else { showErrorModal(res.message || 'Ошибка запуска'); btn.prop('disabled', false).html('<i class="bi bi-play-fill"></i>'); }
     })
-    .catch(function(err) { alert('Ошибка: ' + err.message); btn.prop('disabled', false).html('<i class="bi bi-play-fill"></i>'); });
+    .catch(function(err) { showErrorModal('Ошибка: ' + err.message); btn.prop('disabled', false).html('<i class="bi bi-play-fill"></i>'); });
 });
 
 // Остановка сервера
@@ -575,9 +584,28 @@ $(document).on('click', '.stop-server', function() {
     .then(function(r) { return r.json(); })
     .then(function(res) {
         if (res.status === 'success') location.reload();
-        else { alert(res.message || 'Ошибка остановки'); btn.prop('disabled', false).html('<i class="bi bi-stop-fill"></i>'); }
+        else { showErrorModal(res.message || 'Ошибка остановки'); btn.prop('disabled', false).html('<i class="bi bi-stop-fill"></i>'); }
     })
-    .catch(function(err) { alert('Ошибка: ' + err.message); btn.prop('disabled', false).html('<i class="bi bi-stop-fill"></i>'); });
+    .catch(function(err) { showErrorModal('Ошибка: ' + err.message); btn.prop('disabled', false).html('<i class="bi bi-stop-fill"></i>'); });
+});
+
+// Обновление сервера
+$(document).on('click', '.update-server', function() {
+    var btn = $(this);
+    var id = btn.data('server-id');
+    if (!confirm('Обновить сервер? Git pull + restart docker')) return;
+    btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i>');
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'update_server', server_id: id})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.status === 'success') location.reload();
+        else { showErrorModal(res.message || 'Ошибка обновления'); btn.prop('disabled', false).html('<i class="bi bi-arrow-clockwise"></i>'); }
+    })
+    .catch(function(err) { showErrorModal('Ошибка: ' + err.message); btn.prop('disabled', false).html('<i class="bi bi-arrow-clockwise"></i>'); });
 });
 
 // Открыть веб-интерфейс
@@ -586,7 +614,7 @@ $(document).on('click', '.open-web-interface', function() {
     if (port && port > 0) {
         window.open('https://localhost:' + port, '_blank');
     } else {
-        alert('Порт сервера неизвестен');
+        showErrorModal('Порт сервера неизвестен');
     }
 });
 
@@ -653,15 +681,15 @@ $(document).on('click', '#saveConfigBtn', function() {
     .then(function(res) {
         btn.prop('disabled', false).html('<i class="bi bi-check-lg"></i> Сохранить');
         if (res.status === 'success') {
-            alert('Конфигурация сохранена!');
+            showErrorModal('Конфигурация сохранена!');
             $('#configModal').modal('hide');
         } else {
-            alert(res.message || 'Ошибка сохранения');
+            showErrorModal(res.message || 'Ошибка сохранения');
         }
     })
     .catch(function(err) {
         btn.prop('disabled', false).html('<i class="bi bi-check-lg"></i> Сохранить');
-        alert('Ошибка: ' + err.message);
+        showErrorModal('Ошибка: ' + err.message);
     });
 });
 </script>

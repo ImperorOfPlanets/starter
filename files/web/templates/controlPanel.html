@@ -7,6 +7,9 @@
                 <li class="nav-item">
                     <a class="nav-link {% if loop.first %}active bg-primary text-white{% endif %}" href="#" data-section="{{ section.section_slug }}">
                         <i class="bi {{ section.section_icon }} me-2"></i> {{ section.section_name }}
+                        {% if section.section_slug == 'updates' %}
+                        <span id="updatesBadge" class="badge bg-danger d-none ms-1" style="font-size:0.65em;">!</span>
+                        {% endif %}
                     </a>
                 </li>
                 {% endfor %}
@@ -226,6 +229,9 @@ function loadSection(section, isInitialLoad) {
     const $el = $(`#${section}Section`);
     const $spinner = $('#loadingSpinner');
     
+    $('#mainMenu a.nav-link').removeClass('active bg-primary text-white');
+    $(`#mainMenu a.nav-link[data-section="${section}"]`).addClass('active bg-primary text-white');
+    $el.removeClass('d-none').addClass('active');
     $spinner.css({ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }).show();
     $el.html('').addClass('loading');
     
@@ -246,4 +252,25 @@ function loadSection(section, isInitialLoad) {
         }
     });
 }
+
+// --- Ежедневная проверка обновлений ---
+function checkUpdatesBadge() {
+    $.ajax({
+        url: '/',
+        method: 'POST',
+        data: { section: 'updates', action: 'get_update_status' },
+        dataType: 'json',
+        headers: { 'Accept': 'application/json' },
+        success: function(response) {
+            if (response.success && response.status && response.status.has_any_update) {
+                $('#updatesBadge').removeClass('d-none');
+            }
+        }
+    });
+}
+
+// Проверяем обновления при загрузке страницы
+$(document).ready(function() {
+    setTimeout(checkUpdatesBadge, 2000);
+});
 </script>

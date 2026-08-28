@@ -470,3 +470,68 @@ def get_server_update_history_route(data, session):
     except Exception as e:
         logger.error(f"Error in get_server_update_history: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
+
+
+# =============================================================================
+# ЕЖЕДНЕВНАЯ ФОНОВАЯ ПРОВЕРКА ОБНОВЛЕНИЙ
+# =============================================================================
+
+def check_daily_updates(data, session):
+    """Принудительная проверка обновлений из GitFlic"""
+    try:
+        from files.core.oss.default.update_checker import UpdateCheckerModule
+        results = UpdateCheckerModule.force_check_now()
+        updates = [r for r in results if r.get('has_update')]
+        return jsonify({
+            'success': True,
+            'total_checked': len(results),
+            'updates_available': len(updates),
+            'updates': updates,
+            'all_results': results
+        })
+    except Exception as e:
+        logger.error(f"Error in daily update check: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+
+def get_update_status(data, session):
+    """Получает статус ежедневной проверки"""
+    try:
+        from files.core.oss.default.update_checker import UpdateCheckerModule
+        status = UpdateCheckerModule.get_all_updates_status()
+        return jsonify({
+            'success': True,
+            'status': status
+        })
+    except Exception as e:
+        logger.error(f"Error in get_update_status: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
+
+
+def check_single_project(data, session):
+    """Проверяет обновления для одного проекта"""
+    project_type = data.get('project_type')
+    if not project_type:
+        return jsonify({'success': False, 'message': 'project_type required'})
+
+    try:
+        from files.configs.server_types import SERVER_TYPES
+        from files.core.oss.default.update_checker import UpdateCheckerModule
+
+        if project_type not in SERVER_TYPES:
+            return jsonify({'success': False, 'message': f'Unknown project type: {project_type}'})
+
+        server_info = SERVER_TYPES[project_type]
+        repo = server_info.get('repository', {})
+        if not repo:
+            return jsonify({'success': False, 'message': 'No repository configured'})
+
+        result = UpdateCheckerModule.check_project_updates(
+            project_type=project_type,
+            repo_url=repo['url'],
+            branch=repo.get('branch', 'main')
+        )
+        return jsonify({'success': True, 'result': result})
+    except Exception as e:
+        logger.error(f"Error checking project: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)})
