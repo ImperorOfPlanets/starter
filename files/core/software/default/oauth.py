@@ -67,10 +67,16 @@ class OauthModule(BaseModule):
 
             # Определяем redirect_uri
             port = get_global('port', 2000)
-            host = 'localhost'
-            OauthModule.REDIRECT_URI = f"https://{host}:{port}/oauth/callback"
+            host = OauthModule._detect_external_ip()
+            protocol = 'https' if get_global('ssl_context') else 'http'
+            OauthModule.REDIRECT_URI = f"{protocol}://{host}:{port}/oauth/callback"
 
             logger.info(f"OAuth using existing credentials, redirect_uri={OauthModule.REDIRECT_URI}")
+
+            # Автоматически обновляем redirect_uri на myidonsite
+            if application_id:
+                OauthModule._update_redirect_uri(application_id, OauthModule.REDIRECT_URI)
+
             return  # <-- ВАЖНО: выход, если уже есть клиент
         
         # Нет клиента - создаем заявку
@@ -88,11 +94,59 @@ class OauthModule(BaseModule):
         # Определяем redirect_uri
         port = get_global('port', 2000)
         protocol = 'https' if get_global('ssl_context') else 'http'
-        host = 'localhost'
+        host = OauthModule._detect_external_ip()
         OauthModule.REDIRECT_URI = f"{protocol}://{host}:{port}/oauth/callback"
         
         logger.info(f"OAuth configured with MYIDON_URL: {OauthModule.MYIDON_URL}")
         logger.info(f"Redirect URI: {OauthModule.REDIRECT_URI}")
+
+    @staticmethod
+    def _update_redirect_uri(application_id: int, redirect_uri: str):
+        """Обновляет redirect_uri на myidonsite"""
+        try:
+            import requests as req
+            url = f"{OauthModule.MYIDON_URL}/api/applications/{application_id}/redirect"
+            response = req.post(url, json={
+                'port': get_global('port', 2000),
+                'host': redirect_uri.split('://')[1].split(':')[0],
+                'protocol': redirect_uri.split('://')[0],
+            }, headers={'Accept': 'application/json'}, timeout=10)
+            if response.status_code == 200:
+                logger.info(f"Updated redirect_uri on myidonsite: {redirect_uri}")
+            else:
+                logger.warning(f"Failed to update redirect_uri: {response.status_code}")
+        except Exception as e:
+            logger.warning(f"Could not update redirect_uri: {e}")
+
+    @staticmethod
+    def _detect_external_ip() -> str:
+        """Определяет внешний IP-адрес сервера"""
+        import socket
+        import urllib.request
+        # Пробуем через внешний сервис
+        try:
+            response = urllib.request.urlopen('https://api.ipify.org?format=json', timeout=5)
+            data = json.loads(response.read())
+            ip = data.get('ip', '')
+            if ip:
+                logger.info(f"Detected external IP: {ip}")
+                return ip
+        except Exception:
+            pass
+        # Fallback: пробуем через сокет
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            if ip and not ip.startswith('127.'):
+                logger.info(f"Detected IP via socket: {ip}")
+                return ip
+        except Exception:
+            pass
+        # Последний fallback
+        logger.warning("Could not detect external IP, using localhost")
+        return 'localhost'
     
     @staticmethod
     def create_application(env_path: Path, env_vars: Dict) -> bool:
