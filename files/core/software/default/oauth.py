@@ -65,11 +65,9 @@ class OauthModule(BaseModule):
             if application_id:
                 OauthModule._application_id = application_id
 
-            # Определяем redirect_uri
+            # Redirect URI ВСЕГДА localhost (для OAuth callback)
             port = get_global('port', 2000)
-            host = OauthModule._detect_external_ip()
-            protocol = 'https' if get_global('ssl_context') else 'http'
-            OauthModule.REDIRECT_URI = f"{protocol}://{host}:{port}/oauth/callback"
+            OauthModule.REDIRECT_URI = f"https://localhost:{port}/oauth/callback"
 
             logger.info(f"OAuth using existing credentials, redirect_uri={OauthModule.REDIRECT_URI}")
 
@@ -91,11 +89,9 @@ class OauthModule(BaseModule):
         except Exception as e:
             logger.error(f"Application creation error: {e}")
         
-        # Определяем redirect_uri
+        # Redirect URI ВСЕГДА localhost
         port = get_global('port', 2000)
-        protocol = 'https' if get_global('ssl_context') else 'http'
-        host = OauthModule._detect_external_ip()
-        OauthModule.REDIRECT_URI = f"{protocol}://{host}:{port}/oauth/callback"
+        OauthModule.REDIRECT_URI = f"https://localhost:{port}/oauth/callback"
         
         logger.info(f"OAuth configured with MYIDON_URL: {OauthModule.MYIDON_URL}")
         logger.info(f"Redirect URI: {OauthModule.REDIRECT_URI}")

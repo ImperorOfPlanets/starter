@@ -4,6 +4,7 @@ import os
 import time
 from flask import session, url_for, render_template, request
 from files.core.utils.loader_utils import get
+from files.core.utils.globalVars_utils import get_global
 from files.core.utils.log_utils import LogManager
 
 logger = LogManager.get_logger('auth')

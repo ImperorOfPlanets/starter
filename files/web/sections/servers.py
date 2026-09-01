@@ -897,7 +897,6 @@ def start_server(data, session_obj):
     if not server_id:
         return jsonify({'status': 'error', 'message': 'Server ID required'})
 
-    # Ищем сервер в реестре
     registry = get('registry')
     if not registry:
         return jsonify({'status': 'error', 'message': 'Registry not found'})
@@ -925,7 +924,6 @@ def start_server(data, session_obj):
             timeout=120
         )
         if result.returncode == 0:
-            # Обновляем статус в реестре
             server['status'] = 'running'
             registry.save_registry(reg_data)
             return jsonify({'status': 'success', 'message': 'Сервер запущен'})
