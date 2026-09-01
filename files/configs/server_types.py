@@ -267,6 +267,25 @@ SERVER_TYPES = {
             'url': 'https://gitflic.ru/project/imperor/opencode-medical.git',
             'branch': 'master'
         }
+    },
+    'mentoria': {
+        'name': 'Mentoria AI Platform',
+        'description': 'AI-платформа для образования и помощи клиентам: AI-чат, база знаний (RAG), голосовые сообщения, магазин, управление пользователями (Laravel + MariaDB + Qdrant + Redis)',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 80,
+        'order': 16,
+        'can_have_multiple': True,
+        'default_folder': 'mentoria',
+        'docker_compose_path': 'docker/docker-compose.yml',
+        'env_example_path': 'docker/.env.example',
+        'repository': {
+            'name': 'GitFlic',
+            'url': 'https://gitflic.ru/project/imperor/client.git',
+            'branch': 'main'
+        }
     }
 }
 
