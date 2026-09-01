@@ -918,7 +918,7 @@ def start_server(data, session_obj):
 
     try:
         result = subprocess.run(
-            ['docker-compose', 'up', '-d'],
+            ['docker', 'compose', 'up', '-d'],
             cwd=docker_path,
             capture_output=True,
             text=True,
@@ -964,7 +964,7 @@ def stop_server(data, session_obj):
 
     try:
         result = subprocess.run(
-            ['docker-compose', 'down'],
+            ['docker', 'compose', 'down'],
             cwd=docker_path,
             capture_output=True,
             text=True,
