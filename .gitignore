@@ -8,6 +8,17 @@ service.log
 stderr.log
 stdout.log
 
+# Лишние файлы
+.qwenignore
+run.bat
+SERVER_TYPES_GUIDE.md
+STARTER_ARCHITECTURE.md
+test.txt
+service_mode.py
+
+# Папки которые не нужны
+/files/configs
+
 # Игнорируем содержимое директорий backups и extracted
 /backups/*
 /extracted/*
@@ -15,10 +26,8 @@ stdout.log
 /docker/*
 /logs/*
 /.vscode
-# Игнорируем все директории __pycache__, независимо от местоположения
 **/__pycache__/
 
-# Файл логов запуска для предотвращения зацикеливания запуска при обновлении
 /files/logs
 /files/web/ssl
 files/updates
