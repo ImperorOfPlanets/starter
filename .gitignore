@@ -5,6 +5,8 @@ codereaderForAIv2.py
 
 # Лог сервиса
 service.log
+stderr.log
+stdout.log
 
 # Игнорируем содержимое директорий backups и extracted
 /backups/*
@@ -20,6 +22,8 @@ service.log
 /files/logs
 /files/web/ssl
 files/updates
+files/web/sessions/
+files/update_check_state.json
 
 # Файл настроек стартера
 temp.txt
@@ -28,3 +32,7 @@ temp.txt
 
 /venv
 venv8*/
+processes.json
+starter.pid
+fix_remote.py
+fix_update.py
