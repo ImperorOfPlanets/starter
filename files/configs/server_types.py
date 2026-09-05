@@ -148,6 +148,22 @@ SERVER_TYPES = {
             'branch': 'master'
         }
     },
+    'simulator': {
+        'name': 'Симулятор дронов',
+        'description': 'Тестирование полётов в виртуальной среде (Betaflight + Gazebo)',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 8443,
+        'order': 10,
+        'can_have_multiple': True,
+        'default_folder': 'sfera',
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/sfera.git',
+            'branch': 'master'
+        }
+    },
     'fileserver': {
         'name': 'Файловое хранилище',
         'description': 'Хранение и раздача файлов: фото, видео, документы (Laravel)',
