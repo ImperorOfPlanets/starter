@@ -36,7 +36,7 @@ SERVER_TYPES = {
         'repository': {
             'name': 'GitFlic',
             'url': 'https://gitflic.ru/project/imperor/client.git',
-            'branch': 'main'
+            'branch': 'master'
         }
     },
     'embeddings': {
@@ -278,13 +278,32 @@ SERVER_TYPES = {
         'default_port': 80,
         'order': 16,
         'can_have_multiple': True,
-        'default_folder': 'mentoria',
+        'default_folder': 'client',
         'docker_compose_path': 'docker/docker-compose.yml',
         'env_example_path': 'docker/.env.example',
         'repository': {
             'name': 'GitFlic',
             'url': 'https://gitflic.ru/project/imperor/client.git',
-            'branch': 'main'
+            'branch': 'master'
+        }
+    },
+    'wake_word': {
+        'name': 'Обнаружение имён',
+        'description': 'Обучение и использование моделей обнаружения wake words (ключевых фраз/имён)',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 8010,
+        'order': 17,
+        'can_have_multiple': True,
+        'default_folder': 'wake_word',
+        'docker_compose_path': 'docker/docker-compose.yml',
+        'env_example_path': 'docker/.env.example',
+        'repository': {
+            'name': 'GitFlic',
+            'url': 'https://gitflic.ru/project/imperor/wake-word.git',
+            'branch': 'master'
         }
     }
 }

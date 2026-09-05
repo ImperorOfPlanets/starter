@@ -187,5 +187,14 @@ def configure_app() -> Flask:
             return f"500 Internal Server Error: {error}", 500
 
     app.register_blueprint(routes)
+
+    # Регистрируем REST API
+    try:
+        from files.web.api import api as api_blueprint
+        app.register_blueprint(api_blueprint)
+        logger.info("REST API blueprint registered at /api/v1")
+    except Exception as e:
+        logger.error(f"Failed to register API blueprint: {e}")
+
     logger.info("Flask application configured and ready")
     return app
