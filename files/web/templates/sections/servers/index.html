@@ -1,4 +1,5 @@
 <div id="errorModal" class="modal fade" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header bg-danger text-white"><h5 class="modal-title">Ошибка</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body"><pre id="errorModalBody" style="white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;background:#f8f9fa;padding:12px;border-radius:6px;font-size:13px;"></pre></div><div class="modal-footer"><button class="btn btn-outline-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('errorModalBody').textContent)">Копировать</button><button class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button></div></div></div></div>
+<div id="repoInfoModal" class="modal fade" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-info text-white"><h5 class="modal-title"><i class="bi bi-info-circle me-2"></i>Репозиторий</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body" id="repoInfoModalBody">Загрузка...</div><div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button></div></div></div></div>
 <script>function showErrorModal(msg){document.getElementById('errorModalBody').textContent=msg||'Неизвестная ошибка';new bootstrap.Modal(document.getElementById('errorModal')).show();}</script>
 <style>
 .folder-item > div:hover { background: rgba(0,0,0,0.05); border-radius: 4px; }
@@ -70,13 +71,16 @@
                             <i class="bi bi-stop-fill"></i>
                         </button>
                         {% endif %}
-                        {% if server.has_update %}
-                        <button class="btn btn-outline-info btn-sm update-server"
+                        <button class="btn btn-outline-info btn-sm server-repo-info"
                                 data-server-id="{{ server.id }}"
-                                title="Доступно обновление!">
+                                title="Информация о репозитории">
+                            <i class="bi bi-info-circle"></i>
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm update-server"
+                                data-server-id="{{ server.id }}"
+                                title="Обновить (git pull)">
                             <i class="bi bi-arrow-clockwise"></i>
                         </button>
-                        {% endif %}
                         <button class="btn btn-outline-primary btn-sm configure-server"
                                 data-server-id="{{ server.id }}"
                                 data-server-type="{{ server.type }}"
@@ -606,6 +610,38 @@ $(document).on('click', '.update-server', function() {
         else { showErrorModal(res.message || 'Ошибка обновления'); btn.prop('disabled', false).html('<i class="bi bi-arrow-clockwise"></i>'); }
     })
     .catch(function(err) { showErrorModal('Ошибка: ' + err.message); btn.prop('disabled', false).html('<i class="bi bi-arrow-clockwise"></i>'); });
+});
+
+// Информация о репозитории
+$(document).on('click', '.server-repo-info', function() {
+    var btn = $(this);
+    var id = btn.data('server-id');
+    btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i>');
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'server_repo_info', server_id: id})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        btn.prop('disabled', false).html('<i class="bi bi-info-circle"></i>');
+        if (res.status === 'success' && res.repo) {
+            var r = res.repo;
+            var html = '<div class="mb-3"><strong>Репозиторий</strong></div>' +
+                '<table class="table table-sm">' +
+                '<tr><td>URL</td><td><code>' + r.url + '</code></td></tr>' +
+                '<tr><td>Ветка</td><td><code>' + r.branch + '</code></td></tr>' +
+                '<tr><td>Коммит</td><td><code>' + r.commit + '</code></td></tr>' +
+                '<tr><td>Сообщение</td><td>' + r.commit_message + '</td></tr>' +
+                '<tr><td>Дата</td><td>' + r.commit_date + '</td></tr>' +
+                '</table>';
+            document.getElementById('repoInfoModalBody').innerHTML = html;
+            new bootstrap.Modal(document.getElementById('repoInfoModal')).show();
+        } else {
+            showErrorModal(res.message || 'Нет данных о репозитории');
+        }
+    })
+    .catch(function(err) { showErrorModal('Ошибка: ' + err.message); btn.prop('disabled', false).html('<i class="bi bi-info-circle"></i>'); });
 });
 
 // Открыть веб-интерфейс

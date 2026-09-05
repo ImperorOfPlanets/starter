@@ -1033,3 +1033,109 @@ def server_details(data, session_obj):
         return jsonify({'status': 'error', 'message': 'Server not found or access denied'})
 
     return jsonify({'status': 'success', 'server': server})
+
+
+def server_repo_info(data, session_obj):
+    """Получить информацию о репозитории сервера"""
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    server_id = data.get('server_id')
+    if not server_id:
+        return jsonify({'status': 'error', 'message': 'Server ID required'})
+
+    import subprocess
+
+    server_path = Path(server_id)
+    code_path = server_path / 'code'
+
+    if not (code_path / '.git').exists():
+        return jsonify({'status': 'success', 'repo': None, 'message': 'Not a git repository'})
+
+    try:
+        url = subprocess.run(
+            ['git', 'remote', 'get-url', 'origin'],
+            cwd=str(code_path), capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+
+        branch = subprocess.run(
+            ['git', 'branch', '--show-current'],
+            cwd=str(code_path), capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+
+        commit = subprocess.run(
+            ['git', 'log', '-1', '--format=%H'],
+            cwd=str(code_path), capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+
+        commit_msg = subprocess.run(
+            ['git', 'log', '-1', '--format=%s'],
+            cwd=str(code_path), capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+
+        commit_date = subprocess.run(
+            ['git', 'log', '-1', '--format=%ci'],
+            cwd=str(code_path), capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+
+        return jsonify({
+            'status': 'success',
+            'repo': {
+                'url': url,
+                'branch': branch,
+                'commit': commit[:12],
+                'commit_full': commit,
+                'commit_message': commit_msg,
+                'commit_date': commit_date,
+            }
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+
+def update_server(data, session_obj):
+    """Обновить сервер через git pull"""
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    server_id = data.get('server_id')
+    if not server_id:
+        return jsonify({'status': 'error', 'message': 'Server ID required'})
+
+    import subprocess
+
+    server_path = Path(server_id)
+    code_path = server_path / 'code'
+
+    if not (code_path / '.git').exists():
+        return jsonify({'status': 'error', 'message': 'Not a git repository'})
+
+    try:
+        # git pull
+        result = subprocess.run(
+            ['git', 'pull'],
+            cwd=str(code_path), capture_output=True, text=True, timeout=60
+        )
+
+        if result.returncode == 0:
+            # Проверяем есть ли docker-compose и перезапускаем
+            compose_file = server_path / 'docker' / 'docker-compose.yml'
+            if compose_file.exists():
+                docker_result = subprocess.run(
+                    ['docker', 'compose', 'up', '-d'],
+                    cwd=str(server_path / 'docker'),
+                    capture_output=True, text=True, timeout=120
+                )
+                if docker_result.returncode == 0:
+                    return jsonify({'status': 'success', 'message': 'Сервер обновлён и перезапущен'})
+                else:
+                    return jsonify({'status': 'success', 'message': 'Код обновлён, но ошибка перезапуска: ' + docker_result.stderr[:300]})
+            else:
+                return jsonify({'status': 'success', 'message': 'Код обновлён: ' + result.stdout[:200]})
+        else:
+            return jsonify({'status': 'error', 'message': 'Ошибка git pull: ' + result.stderr[:300]})
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
