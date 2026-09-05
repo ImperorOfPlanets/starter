@@ -1039,11 +1039,11 @@ def server_repo_info(data, session_obj):
     """Получить информацию о репозитории сервера"""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+        return {'status': 'error', 'message': 'Unauthorized'}
 
     server_id = data.get('server_id')
     if not server_id:
-        return jsonify({'status': 'error', 'message': 'Server ID required'})
+        return {'status': 'error', 'message': 'Server ID required'}
 
     import subprocess
 
@@ -1051,7 +1051,7 @@ def server_repo_info(data, session_obj):
     code_path = server_path / 'code'
 
     if not (code_path / '.git').exists():
-        return jsonify({'status': 'success', 'repo': None, 'message': 'Not a git repository'})
+        return {'status': 'success', 'repo': None, 'message': 'Not a git repository'}
 
     try:
         url = subprocess.run(
@@ -1079,7 +1079,7 @@ def server_repo_info(data, session_obj):
             cwd=str(code_path), capture_output=True, text=True, timeout=5
         ).stdout.strip()
 
-        return jsonify({
+        return {
             'status': 'success',
             'repo': {
                 'url': url,
@@ -1089,20 +1089,20 @@ def server_repo_info(data, session_obj):
                 'commit_message': commit_msg,
                 'commit_date': commit_date,
             }
-        })
+        }
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return {'status': 'error', 'message': str(e)}
 
 
 def update_server(data, session_obj):
     """Обновить сервер через git pull"""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+        return {'status': 'error', 'message': 'Unauthorized'}
 
     server_id = data.get('server_id')
     if not server_id:
-        return jsonify({'status': 'error', 'message': 'Server ID required'})
+        return {'status': 'error', 'message': 'Server ID required'}
 
     import subprocess
 
@@ -1110,17 +1110,15 @@ def update_server(data, session_obj):
     code_path = server_path / 'code'
 
     if not (code_path / '.git').exists():
-        return jsonify({'status': 'error', 'message': 'Not a git repository'})
+        return {'status': 'error', 'message': 'Not a git repository'}
 
     try:
-        # git pull
         result = subprocess.run(
             ['git', 'pull'],
             cwd=str(code_path), capture_output=True, text=True, timeout=60
         )
 
         if result.returncode == 0:
-            # Проверяем есть ли docker-compose и перезапускаем
             compose_file = server_path / 'docker' / 'docker-compose.yml'
             if compose_file.exists():
                 docker_result = subprocess.run(
@@ -1129,13 +1127,13 @@ def update_server(data, session_obj):
                     capture_output=True, text=True, timeout=120
                 )
                 if docker_result.returncode == 0:
-                    return jsonify({'status': 'success', 'message': 'Сервер обновлён и перезапущен'})
+                    return {'status': 'success', 'message': 'Сервер обновлён и перезапущен'}
                 else:
-                    return jsonify({'status': 'success', 'message': 'Код обновлён, но ошибка перезапуска: ' + docker_result.stderr[:300]})
+                    return {'status': 'success', 'message': 'Код обновлён, но ошибка перезапуска: ' + docker_result.stderr[:300]}
             else:
-                return jsonify({'status': 'success', 'message': 'Код обновлён: ' + result.stdout[:200]})
+                return {'status': 'success', 'message': 'Код обновлён: ' + result.stdout[:200]}
         else:
-            return jsonify({'status': 'error', 'message': 'Ошибка git pull: ' + result.stderr[:300]})
+            return {'status': 'error', 'message': 'Ошибка git pull: ' + result.stderr[:300]}
 
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return {'status': 'error', 'message': str(e)}
