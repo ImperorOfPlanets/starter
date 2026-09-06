@@ -132,6 +132,9 @@ def _get_user_servers(session_obj):
                 type_info = SERVER_TYPES.get(project_type, {})
                 has_web_interface = type_info.get('has_web_interface', False)
 
+                # Проверяем есть ли git
+                has_git = (Path(path) / 'code' / '.git').exists()
+
                 servers.append({
                     'id': path,
                     'name': path.split('\\')[-1] if '\\' in path else path.split('/')[-1] if '/' in path else path,
@@ -141,6 +144,7 @@ def _get_user_servers(session_obj):
                     'port': p.get('port', 0),
                     'subnet_octet': p.get('subnet_octet', 0),
                     'has_web_interface': has_web_interface,
+                    'has_git': has_git,
                 })
             return servers
 
@@ -1254,5 +1258,48 @@ def update_server(data, session_obj):
         else:
             return {'status': 'error', 'message': 'Ошибка git pull: ' + result.stderr[:300]}
 
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
+
+
+def server_git_log(data, session_obj):
+    """Получить последние коммиты сервера"""
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return {'status': 'error', 'message': 'Unauthorized'}
+
+    server_id = data.get('server_id')
+    if not server_id:
+        return {'status': 'error', 'message': 'Server ID required'}
+
+    import subprocess
+
+    server_path = Path(server_id)
+    code_path = server_path / 'code'
+
+    if not (code_path / '.git').exists():
+        return {'status': 'success', 'log': [], 'message': 'Not a git repository'}
+
+    try:
+        kw = _subprocess_kwargs(10)
+        result = subprocess.run(
+            ['git', 'log', '-10', '--format=%H|%h|%s|%ci|%an'],
+            cwd=str(code_path), **kw
+        )
+
+        log = []
+        if result.returncode == 0 and result.stdout.strip():
+            for line in result.stdout.strip().splitlines():
+                parts = line.split('|', 4)
+                if len(parts) >= 5:
+                    log.append({
+                        'hash': parts[0][:12],
+                        'short': parts[1],
+                        'message': parts[2],
+                        'date': parts[3],
+                        'author': parts[4],
+                    })
+
+        return {'status': 'success', 'log': log}
     except Exception as e:
         return {'status': 'error', 'message': str(e)}

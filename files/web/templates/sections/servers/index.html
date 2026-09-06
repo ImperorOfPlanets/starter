@@ -1,5 +1,6 @@
 <div id="errorModal" class="modal fade" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header bg-danger text-white"><h5 class="modal-title">Ошибка</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body"><pre id="errorModalBody" style="white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;background:#f8f9fa;padding:12px;border-radius:6px;font-size:13px;"></pre></div><div class="modal-footer"><button class="btn btn-outline-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('errorModalBody').textContent)">Копировать</button><button class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button></div></div></div></div>
 <div id="repoInfoModal" class="modal fade" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-info text-white"><h5 class="modal-title"><i class="bi bi-info-circle me-2"></i>Репозиторий</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body" id="repoInfoModalBody">Загрузка...</div><div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button></div></div></div></div>
+<div id="updateModal" class="modal fade" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header bg-warning"><h5 class="modal-title"><i class="bi bi-arrow-clockwise me-2"></i>Обновление сервера</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div id="updateModalLog" class="mb-3" style="max-height:200px;overflow-y:auto;background:#f8f9fa;padding:10px;border-radius:6px;font-size:12px;font-family:monospace;">Загрузка лога...</div><div id="updateModalResult" class="d-none"></div></div><div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button><button class="btn btn-warning" id="btnConfirmUpdate"><i class="bi bi-arrow-clockwise me-1"></i>Обновить</button></div></div></div></div>
 <script>function showErrorModal(msg){document.getElementById('errorModalBody').textContent=msg||'Неизвестная ошибка';new bootstrap.Modal(document.getElementById('errorModal')).show();}</script>
 <style>
 .folder-item > div:hover { background: rgba(0,0,0,0.05); border-radius: 4px; }
@@ -76,11 +77,13 @@
                                 title="Информация о репозитории">
                             <i class="bi bi-info-circle"></i>
                         </button>
+                        {% if server.has_git %}
                         <button class="btn btn-outline-secondary btn-sm update-server"
                                 data-server-id="{{ server.id }}"
                                 title="Обновить (git pull)">
                             <i class="bi bi-arrow-clockwise"></i>
                         </button>
+                        {% endif %}
                         <button class="btn btn-outline-primary btn-sm configure-server"
                                 data-server-id="{{ server.id }}"
                                 data-server-type="{{ server.type }}"
@@ -593,23 +596,60 @@ $(document).on('click', '.stop-server', function() {
     .catch(function(err) { showErrorModal('Ошибка: ' + err.message); btn.prop('disabled', false).html('<i class="bi bi-stop-fill"></i>'); });
 });
 
-// Обновление сервера
+// Обновление сервера — модалка с логом
+var updateServerId = null;
 $(document).on('click', '.update-server', function() {
-    var btn = $(this);
-    var id = btn.data('server-id');
-    if (!confirm('Обновить сервер? Git pull + restart docker')) return;
-    btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i>');
+    updateServerId = $(this).data('server-id');
+    // Показываем модалку и загружаем лог
+    $('#updateModalLog').html('<i class="bi bi-hourglass-split"></i> Загрузка лога коммитов...');
+    $('#updateModalResult').addClass('d-none').html('');
+    $('#btnConfirmUpdate').prop('disabled', false).html('<i class="bi bi-arrow-clockwise me-1"></i>Обновить');
+    new bootstrap.Modal(document.getElementById('updateModal')).show();
+    // Загружаем git log
     fetch('/', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
-        body: new URLSearchParams({section: 'servers', action: 'update_server', server_id: id})
+        body: new URLSearchParams({section: 'servers', action: 'server_git_log', server_id: updateServerId})
     })
     .then(function(r) { return r.json(); })
     .then(function(res) {
-        if (res.status === 'success') location.reload();
-        else { showErrorModal(res.message || 'Ошибка обновления'); btn.prop('disabled', false).html('<i class="bi bi-arrow-clockwise"></i>'); }
+        if (res.status === 'success' && res.log && res.log.length) {
+            var html = '<table class="table table-sm table-bordered mb-0" style="font-size:11px">';
+            html += '<thead><tr><th>Коммит</th><th>Сообщение</th><th>Дата</th><th>Автор</th></tr></thead><tbody>';
+            res.log.forEach(function(c) {
+                html += '<tr><td><code>' + c.short + '</code></td><td>' + c.message + '</td><td>' + c.date.substring(0, 16) + '</td><td>' + c.author + '</td></tr>';
+            });
+            html += '</tbody></table>';
+            $('#updateModalLog').html(html);
+        } else {
+            $('#updateModalLog').html('<div class="text-muted">Нет данных о коммитах</div>');
+        }
     })
-    .catch(function(err) { showErrorModal('Ошибка: ' + err.message); btn.prop('disabled', false).html('<i class="bi bi-arrow-clockwise"></i>'); });
+    .catch(function() { $('#updateModalLog').html('<div class="text-muted">Не удалось загрузить лог</div>'); });
+});
+
+// Подтверждение обновления
+$(document).on('click', '#btnConfirmUpdate', function() {
+    var btn = $(this);
+    btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i> Обновление...');
+    $('#updateModalLog').append('<div class="mt-2 text-primary"><i class="bi bi-hourglass-split"></i> Выполняется git pull...</div>');
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'update_server', server_id: updateServerId})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        var cls = res.status === 'success' ? 'success' : 'danger';
+        var icon = res.status === 'success' ? 'check-circle' : 'exclamation-triangle';
+        $('#updateModalResult').removeClass('d-none').html('<div class="alert alert-' + cls + ' mb-0"><i class="bi bi-' + icon + ' me-1"></i> ' + (res.message || 'Готово') + '</div>');
+        btn.prop('disabled', true).html('<i class="bi bi-check-circle me-1"></i>Готово');
+        if (res.status === 'success') setTimeout(function() { location.reload(); }, 1500);
+    })
+    .catch(function(err) {
+        $('#updateModalResult').removeClass('d-none').html('<div class="alert alert-danger mb-0">Ошибка: ' + err.message + '</div>');
+        btn.prop('disabled', false).html('<i class="bi bi-arrow-clockwise me-1"></i>Обновить');
+    });
 });
 
 // Информация о репозитории
