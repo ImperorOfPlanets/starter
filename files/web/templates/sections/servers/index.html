@@ -607,9 +607,9 @@ var updateServerId = null;
 $(document).on('click', '.update-server', function() {
     updateServerId = $(this).data('server-id');
     // Показываем модалку и загружаем лог
-    $('#updateModalLog').html('<i class="bi bi-hourglass-split"></i> Загрузка лога коммитов...');
+    $('#updateModalLog').html('<div class="text-center py-3"><i class="bi bi-hourglass-split"></i> Загрузка лога коммитов...</div>');
     $('#updateModalResult').addClass('d-none').html('');
-    $('#btnConfirmUpdate').prop('disabled', false).html('<i class="bi bi-arrow-clockwise me-1"></i>Обновить');
+    $('#btnConfirmUpdate').prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i>Загрузка...');
     new bootstrap.Modal(document.getElementById('updateModal')).show();
     // Загружаем git log
     fetch('/', {
@@ -619,19 +619,31 @@ $(document).on('click', '.update-server', function() {
     })
     .then(function(r) { return r.json(); })
     .then(function(res) {
+        console.log('Git log response:', res);
         if (res.status === 'success' && res.log && res.log.length) {
-            var html = '<table class="table table-sm table-bordered mb-0" style="font-size:11px">';
+            var html = '';
+            if (res.remote_url) {
+                html += '<div class="mb-2"><small class="text-muted">Remote: <code>' + res.remote_url + '</code> | Branch: <code>' + (res.branch || '?') + '</code></small></div>';
+                html += '<div class="mb-2"><small>Local: <code>' + (res.local_commit || '?') + '</code> → Remote: <code>' + (res.remote_commit || '?') + '</code></small></div>';
+            }
+            html += '<table class="table table-sm table-bordered mb-0" style="font-size:11px">';
             html += '<thead><tr><th>Коммит</th><th>Сообщение</th><th>Дата</th><th>Автор</th></tr></thead><tbody>';
             res.log.forEach(function(c) {
                 html += '<tr><td><code>' + c.short + '</code></td><td>' + c.message + '</td><td>' + c.date.substring(0, 16) + '</td><td>' + c.author + '</td></tr>';
             });
             html += '</tbody></table>';
             $('#updateModalLog').html(html);
+            $('#btnConfirmUpdate').prop('disabled', false).html('<i class="bi bi-arrow-clockwise me-1"></i>Обновить');
         } else {
-            $('#updateModalLog').html('<div class="text-muted">Нет данных о коммитах</div>');
+            $('#updateModalLog').html('<div class="text-muted py-2">' + (res.message || 'Нет данных о коммитах') + '</div>');
+            $('#btnConfirmUpdate').prop('disabled', false).html('<i class="bi bi-arrow-clockwise me-1"></i>Обновить');
         }
     })
-    .catch(function() { $('#updateModalLog').html('<div class="text-muted">Не удалось загрузить лог</div>'); });
+    .catch(function(err) {
+        console.error('Git log error:', err);
+        $('#updateModalLog').html('<div class="text-danger py-2">Ошибка загрузки: ' + err.message + '</div>');
+        $('#btnConfirmUpdate').prop('disabled', false).html('<i class="bi bi-arrow-clockwise me-1"></i>Обновить');
+    });
 });
 
 // Подтверждение обновления
