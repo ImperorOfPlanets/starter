@@ -568,13 +568,31 @@ def install_server(data, session_obj):
             if env_example_src.exists():
                 shutil.copy2(env_example_src, docker_path / '.env.example')
 
-            # Подставляем переменные
+            # Подставляем ВСЕ переменные из .env в docker-compose.yml
             compose_path = docker_path / 'docker-compose.yml'
             content = compose_path.read_text(encoding='utf-8')
+
+            # Обязательные подстановки
             content = content.replace('${PROJECTNAME}', project_name)
             content = content.replace('${DOCKER_NETWORK_PREFIX}', f"172.{subnet_octet}" if subnet_octet > 0 else "")
-            compose_path.write_text(content, encoding='utf-8')
 
+            # Читаем .env и подставляем все переменные
+            env_path = docker_path / '.env'
+            if env_path.exists():
+                env_vars = {}
+                for line in env_path.read_text(encoding='utf-8').splitlines():
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, _, value = line.partition('=')
+                        env_vars[key.strip()] = value.strip()
+
+                for key, value in env_vars.items():
+                    placeholder = '${' + key + '}'
+                    if placeholder in content:
+                        content = content.replace(placeholder, value)
+                        logger.info(f"Substituted {placeholder} = {value[:30]}...")
+
+            compose_path.write_text(content, encoding='utf-8')
             logger.info(f"Copied docker-compose.example from {compose_example}")
         else:
             # НЕТ docker-compose.example — ошибка для продакшена
@@ -811,23 +829,89 @@ def _generate_env_example(server_type, type_info, server_name, subnet_octet=0, p
     """Генерирует .env.example с переменными для docker-compose"""
     port = port or type_info.get('default_port', 8000)
     network_prefix = f"172.{subnet_octet}" if subnet_octet > 0 else ""
+    project_name = server_type.replace('_', '-')
 
     env = f"""# {type_info['name']}
-PROJECTNAME={server_type.replace('_', '-')}
+PROJECTNAME={project_name}
 SERVER_TYPE={server_type}
 SERVER_NAME={server_name}
 SERVER_PORT={port}
 
 # Docker Network
 DOCKER_NETWORK_PREFIX={network_prefix}
+
+# Пути (относительные)
+PATH_APP_DOCKER=./docker
+PATH_APP_DOCKER_LOGS=./docker/logs
+PATH_APP_CODE=../code
+PATH_APP_PROJECT=../code
+
+# Домен
+NGINX_DOMAIN=localhost
+MAX_BODY_SIZE=100M
+
+# VPN
+VPN_REQUIRED=optional
+VPN_USERNAME=
+VPN_PASSWORD=
+
+# PHP
+PHP_UPLOAD_MAX_FILESIZE=50M
+PHP_POST_MAX_SIZE=50M
+PHP_FPM_PM=dynamic
+PHP_FPM_MAX_CHILDREN=50
+PHP_FPM_MEMORY_LIMIT=256M
+
+# App
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=https://localhost
+APP_LOCALE=ru
+CACHE_STORE=database
+QUEUE_CONNECTION=database
+
+# Database
+DB_CONNECTION=mariadb
+DB_HOST=mariadb-{project_name}
+DB_PORT=3306
+DB_DATABASE=temp
+DB_USERNAME=root
+DB_PASSWORD=root
+DB_DATA_PATH=./data/mysql
+
+# Redis
+REDIS_HOST=redis-{project_name}
+REDIS_PORT=6379
+REDIS_PASSWORD=null
+REDIS_DATA_PATH=./db/redis
+
+# Qdrant
+QDRANT_HOST=http://qdrant-{project_name}:6333
+QDRANT_COLLECTION=embeddings
+QDRANT_TIMEOUT=30
+QDRANT_DATA_PATH=./db/qdrant
+
+# Reverb
+REVERB_APP_ID=
+REVERB_APP_KEY=
+REVERB_APP_SECRET=
+REVERB_HOST=
+REVERB_PORT=443
+REVERB_SCHEME=https
+REVERB_DEBUG=true
+REVERB_APP_MAX_MESSAGE_SIZE=1048576
+PORT_REVERB=443
+
+# OAuth
+OAUTH_CLIENT_ID=
+OAUTH_SECRET=
+OAUTH_REDIRECT_URI=
 """
 
-    # Добавляем специфичные переменные для WeCom
+    # Добавляем специфичные переменные
     if server_type == 'wecom':
         env += """
-# WeCom Configuration
-# Получи данные в WeCom Admin Console:
-# https://work.weixin.qq.com/wework_admin/frame
+# WeCom
 WECOM_CORP_ID=your_corp_id
 WECOM_CORP_SECRET=your_corp_secret
 WECOM_AGENT_ID=your_agent_id
