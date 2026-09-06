@@ -24,10 +24,13 @@ class DockerModule(BaseModule):
     @staticmethod
     def check_docker_installed() -> bool:
         try:
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = subprocess.SW_HIDE
-            subprocess.run(['docker', '--version'], capture_output=True, text=True, check=True, startupinfo=startupinfo)
+            kwargs = {}
+            if os.name == 'nt':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+                kwargs['startupinfo'] = startupinfo
+            subprocess.run(['docker', '--version'], capture_output=True, text=True, check=True, **kwargs)
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
@@ -35,17 +38,23 @@ class DockerModule(BaseModule):
     @staticmethod
     def check_docker_compose_installed() -> bool:
         try:
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = subprocess.SW_HIDE
-            subprocess.check_output(["docker", "compose", "version"], stderr=subprocess.DEVNULL, startupinfo=startupinfo)
-            return True
-        except (FileNotFoundError, subprocess.CalledProcessError):
-            try:
+            kwargs = {}
+            if os.name == 'nt':
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                 startupinfo.wShowWindow = subprocess.SW_HIDE
-                subprocess.check_output(["docker-compose", "--version"], stderr=subprocess.DEVNULL, startupinfo=startupinfo)
+                kwargs['startupinfo'] = startupinfo
+            subprocess.check_output(["docker", "compose", "version"], stderr=subprocess.DEVNULL, **kwargs)
+            return True
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            try:
+                kwargs = {}
+                if os.name == 'nt':
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = subprocess.SW_HIDE
+                    kwargs['startupinfo'] = startupinfo
+                subprocess.check_output(["docker-compose", "--version"], stderr=subprocess.DEVNULL, **kwargs)
                 return True
             except (FileNotFoundError, subprocess.CalledProcessError):
                 return False
