@@ -92,10 +92,9 @@
         // Глобальная обработка ошибок AJAX
         $(document).ajaxError(function(event, xhr) {
             if(xhr.status === 401) {
-                alert(translations.unauthorized_access);
-                window.location.reload();
+                console.warn('Unauthorized AJAX');
             } else if(xhr.status === 0) {
-                alert(translations.network_error);
+                console.warn('Network error');
             }
         });
     });
