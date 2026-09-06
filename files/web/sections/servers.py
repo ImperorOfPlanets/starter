@@ -1001,15 +1001,36 @@ def remove_server(data, session_obj):
     if not server_id:
         return jsonify({'status': 'error', 'message': 'Server ID required'})
 
+    # Останавливаем контейнеры если есть docker-compose
+    server_path = Path(server_id)
+    compose_file = server_path / 'docker' / 'docker-compose.yml'
+    if compose_file.exists():
+        try:
+            kw = _subprocess_kwargs(30)
+            subprocess.run(
+                ['docker', 'compose', '-f', str(compose_file), 'down', '-v'],
+                **kw
+            )
+        except Exception:
+            pass
+
     # Удаляем из реестра
     registry = get('registry')
     if registry:
         reg_data = registry.load_registry()
         reg_data['projects'] = [p for p in reg_data['projects'] if p.get('path') != server_id]
         registry.save_registry(reg_data)
-        return jsonify({'status': 'success', 'message': 'Сервер удалён'})
 
-    return jsonify({'status': 'error', 'message': 'Registry not found'})
+    # Удаляем папку сервера
+    import shutil
+    if server_path.exists():
+        try:
+            shutil.rmtree(server_path)
+            return jsonify({'status': 'success', 'message': f'Сервер и папка {server_id} удалены'})
+        except Exception as e:
+            return jsonify({'status': 'success', 'message': f'Сервер удалён из реестра, но папка не удалена: {str(e)}'})
+
+    return jsonify({'status': 'success', 'message': 'Сервер удалён'})
 
 
 def scan_path(data, session_obj):
