@@ -1,8 +1,8 @@
-﻿# files/web/sections/servers.py
+# files/web/sections/servers.py
 """
-РЎРµРєС†РёСЏ СѓРїСЂР°РІР»РµРЅРёСЏ СЃРµСЂРІРµСЂР°РјРё
-- РЈСЃС‚Р°РЅРѕРІРєР° СЃРµСЂРІРµСЂРѕРІ РёР· server_types.py
-- РЈРїСЂР°РІР»РµРЅРёРµ СЃРµСЂРІРµСЂР°РјРё С‡РµСЂРµР· servers.json
+Секция управления серверами
+- Установка серверов из server_types.py
+- Управление серверами через servers.json
 """
 
 import os
@@ -19,7 +19,7 @@ logger = LogManager.get_logger('web-servers')
 
 
 def _subprocess_kwargs(timeout=10):
-    """.kwargs РґР»СЏ subprocess вЂ” СЃРєСЂС‹С‚РёРµ РѕРєРѕРЅ РЅР° Windows"""
+    """.kwargs для subprocess — скрытие окон на Windows"""
     kwargs = {'capture_output': True, 'text': True, 'timeout': timeout}
     if get_global('os') == 'Windows':
         si = subprocess.STARTUPINFO()
@@ -42,12 +42,12 @@ def t(key: str, **kwargs) -> str:
 
 
 def _check_server_status(server_path, project_type):
-    """РџСЂРѕРІРµСЂСЏРµС‚ СЂРµР°Р»СЊРЅС‹Р№ СЃС‚Р°С‚СѓСЃ СЃРµСЂРІРµСЂР° РїРѕ Docker РєРѕРЅС‚РµР№РЅРµСЂР°Рј"""
+    """Проверяет реальный статус сервера по Docker контейнерам"""
     docker_mod = get('docker')
     if not docker_mod:
         return 'unknown'
 
-    # РџСЂРѕРІРµСЂСЏРµРј СѓСЃС‚Р°РЅРѕРІР»РµРЅ Р»Рё Docker (РєРµС€РёСЂСѓРµС‚СЃСЏ С‡РµСЂРµР· set_global РІ РјРѕРґСѓР»Рµ)
+    # Проверяем установлен ли Docker (кешируется через set_global в модуле)
     try:
         docker_installed = docker_mod.check_docker_installed()
     except Exception:
@@ -56,15 +56,15 @@ def _check_server_status(server_path, project_type):
     if not docker_installed:
         return 'no_docker'
 
-    # РџСЂРѕРІРµСЂСЏРµРј РµСЃС‚СЊ Р»Рё docker-compose.yml
+    # Проверяем есть ли docker-compose.yml
     compose_path = Path(server_path) / 'docker' / 'docker-compose.yml'
     if not compose_path.exists():
         return 'no_compose'
 
-    # РћРїСЂРµРґРµР»СЏРµРј РёРјСЏ РєРѕРЅС‚РµР№РЅРµСЂР° РїРѕ С‚РёРїСѓ СЃРµСЂРІРµСЂР°
+    # Определяем имя контейнера по типу сервера
     container_name = project_type.replace('_', '-')
 
-    # РџСЂРѕРІРµСЂСЏРµРј СЃС‚Р°С‚СѓСЃ РєРѕРЅС‚РµР№РЅРµСЂР°
+    # Проверяем статус контейнера
     try:
         status_info = docker_mod.get_container_status(container_name)
         if status_info:
@@ -80,9 +80,9 @@ def _check_server_status(server_path, project_type):
     except Exception:
         pass
 
-    # РљРѕРЅС‚РµР№РЅРµСЂР° РЅРµС‚ вЂ” РїСЂРѕРІРµСЂСЏРµРј РµСЃС‚СЊ Р»Рё РІРѕРѕР±С‰Рµ РєРѕРЅС‚РµР№РЅРµСЂС‹ РІ compose
+    # Контейнера нет — проверяем есть ли вообще контейнеры в compose
     try:
-        # РџСЂРѕРІРµСЂСЏРµРј С‡РµСЂРµР· docker compose ps
+        # Проверяем через docker compose ps
         import subprocess
         kw = _subprocess_kwargs(10)
         result = subprocess.run(
@@ -102,7 +102,7 @@ def _check_server_status(server_path, project_type):
 
 
 def _get_user_servers(session_obj):
-    """РџРѕР»СѓС‡Р°РµС‚ СЃРµСЂРІРµСЂС‹ СѓСЃС‚Р°РЅРѕРІР»РµРЅРЅС‹Рµ С‡РµСЂРµР· СЃС‚Р°СЂС‚РµСЂ СЃ СЂРµР°Р»СЊРЅС‹Рј СЃС‚Р°С‚СѓСЃРѕРј Docker"""
+    """Получает серверы установленные через стартер с реальным статусом Docker"""
     user = session_obj.get('user') or session_obj.get('user_info')
 
     if user:
@@ -113,26 +113,26 @@ def _get_user_servers(session_obj):
             projects = data.get('projects', [])
             servers = []
             for p in projects:
-                # РџРѕРєР°Р·С‹РІР°РµРј С‚РѕР»СЊРєРѕ РїСЂРѕРµРєС‚С‹, СѓСЃС‚Р°РЅРѕРІР»РµРЅРЅС‹Рµ С‡РµСЂРµР· СЃС‚Р°СЂС‚РµСЂ
+                # Показываем только проекты, установленные через стартер
                 if not p.get('installed_by_starter', False):
                     continue
 
                 path = p.get('path', '')
                 project_type = p.get('project_type', 'unknown')
 
-                # РџСЂРѕРІРµСЂСЏРµРј СЂРµР°Р»СЊРЅС‹Р№ СЃС‚Р°С‚СѓСЃ
+                # Проверяем реальный статус
                 real_status = _check_server_status(path, project_type)
 
-                # РћР±РЅРѕРІР»СЏРµРј СЃС‚Р°С‚СѓСЃ РІ СЂРµРµСЃС‚СЂРµ РµСЃР»Рё РёР·РјРµРЅРёР»СЃСЏ
+                # Обновляем статус в реестре если изменился
                 registry_status = p.get('status', 'unknown')
                 if real_status != registry_status and real_status != 'unknown':
                     registry.update_project_status(path, real_status)
 
-                # РџРѕР»СѓС‡Р°РµРј info РёР· server_types
+                # Получаем info из server_types
                 type_info = SERVER_TYPES.get(project_type, {})
                 has_web_interface = type_info.get('has_web_interface', False)
 
-                # РџСЂРѕРІРµСЂСЏРµРј git Рё РѕР±РЅРѕРІР»РµРЅРёСЏ
+                # Проверяем git и обновления
                 has_git = False
                 has_update = False
                 code_path = Path(path) / 'code'
@@ -141,13 +141,13 @@ def _get_user_servers(session_obj):
                     try:
                         import subprocess
                         kw = _subprocess_kwargs(5)
-                        # РџСЂРѕРІРµСЂСЏРµРј remote URL
+                        # Проверяем remote URL
                         remote_url = subprocess.run(
                             ['git', 'remote', 'get-url', 'origin'],
                             cwd=str(code_path), **kw
                         ).stdout.strip()
                         if remote_url:
-                            # Fetch Рё СЃСЂР°РІРЅРёРІР°РµРј РєРѕРјРјРёС‚С‹
+                            # Fetch и сравниваем коммиты
                             subprocess.run(
                                 ['git', 'fetch', '--quiet'],
                                 cwd=str(code_path), **_subprocess_kwargs(10)
@@ -184,23 +184,23 @@ def _get_user_servers(session_obj):
 def index(data, session_obj):
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     servers = _get_user_servers(session_obj)
     logger.info(f"index: user={user}, servers count={len(servers)}")
 
-    # РџРѕР»СѓС‡Р°РµРј РѕР±СЉРµРґРёРЅС‘РЅРЅС‹Р№ СЃРїРёСЃРѕРє СЃРµСЂРІРµСЂРѕРІ (Р»РѕРєР°Р»СЊРЅС‹Рµ + API)
+    # Получаем объединённый список серверов (локальные + API)
     merged_types = _get_merged_server_types(session_obj)
 
     logger.info(f"Merged keys: {list(merged_types.keys())}")
 
-    # РЎРµСЂРІРµСЂС‹ РґРѕСЃС‚СѓРїРЅС‹Рµ Р±РµР· Р·Р°СЏРІРѕРє
+    # Серверы доступные без заявок
     base_keys = set()
     for key, info in merged_types.items():
         if not info.get('requires_auth', False):
             base_keys.add(key)
 
-    # Р•СЃР»Рё Р°РІС‚РѕСЂРёР·РѕРІР°РЅ вЂ” РґРѕР±Р°РІР»СЏРµРј РѕРґРѕР±СЂРµРЅРЅС‹Рµ Р·Р°СЏРІРєРё
+    # Если авторизован — добавляем одобренные заявки
     approved_keys = set()
     if user:
         approved_keys = _get_approved_server_keys(session_obj)
@@ -212,7 +212,7 @@ def index(data, session_obj):
 
     can_manage = True
 
-    # РџСЂРѕРІРµСЂСЏРµРј СЃС‚Р°С‚СѓСЃ reverse-proxy
+    # Проверяем статус reverse-proxy
     reverse_proxy_status = None
     try:
         from files.core.software.default.reverse_proxy import ReverseProxyModule
@@ -234,13 +234,13 @@ def index(data, session_obj):
 def list_servers(data, session_obj):
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
     servers = _get_user_servers(session_obj)
-    return 
+    return jsonify({'status': 'success', 'servers': servers})
 
 
 def _get_approved_server_keys(session_obj):
-    """РџРѕР»СѓС‡Р°РµС‚ РѕРґРѕР±СЂРµРЅРЅС‹Рµ С‚РёРїС‹ СЃРµСЂРІРµСЂРѕРІ РёР· myidon.site РїРѕ Р·Р°СЏРІРєР°Рј РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ"""
+    """Получает одобренные типы серверов из myidon.site по заявкам пользователя"""
     oauth_token = session_obj.get('oauth_token')
     if not oauth_token:
         return set()
@@ -253,7 +253,7 @@ def _get_approved_server_keys(session_obj):
         if not user_servers:
             return set()
 
-        # РЎРѕР±РёСЂР°РµРј slug РёР· user_servers
+        # Собираем slug из user_servers
         keys = set()
         for s in user_servers:
             st = s.get('server_type')
@@ -267,7 +267,7 @@ def _get_approved_server_keys(session_obj):
             elif slug:
                 keys.add(slug)
             else:
-                # РџРѕРїСЂРѕР±РѕРІР°С‚СЊ match РїРѕ РІСЃРµРј РїРѕР»СЏРј
+                # Попробовать match по всем полям
                 search_text = f"{server_name} {desc} {project}".lower().strip()
                 for api_server in available:
                     api_slug = api_server.get('slug', '')
@@ -278,8 +278,8 @@ def _get_approved_server_keys(session_obj):
                         logger.info(f"Matched user server to API slug '{api_slug}'")
                         break
 
-        # Fallback: РµСЃР»Рё РµСЃС‚СЊ Р·Р°СЏРІРєРё РЅРѕ РЅРё РѕРґРЅР° РЅРµ СЃРјСЌС‚С‡РёР»Р°СЃСЊ вЂ”
-        # РїРѕРєР°Р·С‹РІР°РµРј РІСЃРµ СЃРµСЂРІРµСЂС‹ С‚СЂРµР±СѓСЋС‰РёРµ auth (СЂР°Р· СѓР¶ Р·Р°СЏРІРєР° РѕРґРѕР±СЂРµРЅР°)
+        # Fallback: если есть заявки но ни одна не смэтчилась —
+        # показываем все серверы требующие auth (раз уж заявка одобрена)
         if not keys and user_servers and available:
             logger.info(f"No match found, showing all auth-required servers (user has {len(user_servers)} approved)")
             for api_server in available:
@@ -295,12 +295,12 @@ def _get_approved_server_keys(session_obj):
 
 
 def _get_merged_server_types(session_obj):
-    """РџРѕР»СѓС‡Р°РµС‚ РѕР±СЉРµРґРёРЅС‘РЅРЅС‹Р№ СЃРїРёСЃРѕРє СЃРµСЂРІРµСЂРѕРІ: Р»РѕРєР°Р»СЊРЅС‹Р№ + API"""
+    """Получает объединённый список серверов: локальный + API"""
     from files.configs.server_types import SERVER_TYPES, get_sorted_server_types
 
     oauth_token = session_obj.get('oauth_token')
 
-    # Р•СЃР»Рё РЅРµС‚ С‚РѕРєРµРЅР° вЂ” РІРѕР·РІСЂР°С‰Р°РµРј С‚РѕР»СЊРєРѕ Р»РѕРєР°Р»СЊРЅС‹Рµ
+    # Если нет токена — возвращаем только локальные
     if not oauth_token:
         return {k: v for k, v in get_sorted_server_types()}
 
@@ -310,7 +310,7 @@ def _get_merged_server_types(session_obj):
         api_servers = fetch_available_servers(oauth_token)
         user_servers = fetch_user_servers(oauth_token)
 
-        # РЎРѕР±РёСЂР°РµРј approved_keys РР— USER-SERVERS (С‚РµРїРµСЂСЊ С‚Р°Рј slug!)
+        # Собираем approved_keys ИЗ USER-SERVERS (теперь там slug!)
         approved_keys = set()
         for s in user_servers:
             slug = s.get('slug')
@@ -318,18 +318,18 @@ def _get_merged_server_types(session_obj):
                 approved_keys.add(slug)
 
         if api_servers:
-            # API РґРѕСЃС‚СѓРїРµРЅ вЂ” merge СЃ СЂРµРїРѕР·РёС‚РѕСЂРёСЏРјРё
+            # API доступен — merge с репозиториями
             merged = merge_server_types(SERVER_TYPES, api_servers, user_servers, approved_keys)
             logger.info(f"Merged with API: {len(merged)} total, approved={approved_keys}")
             return merged
         elif approved_keys:
-            # API РЅРµРґРѕСЃС‚СѓРїРµРЅ (500), РЅРѕ user-servers РѕС‚РґР°Р» slug'Рё СЃ СЂРµРїРѕР·РёС‚РѕСЂРёСЏРјРё
+            # API недоступен (500), но user-servers отдал slug'и с репозиториями
             logger.info(f"API unavailable, using user-servers slugs: {approved_keys}")
             merged = dict({k: v for k, v in get_sorted_server_types()})
             for s in user_servers:
                 slug = s.get('slug')
                 if slug and slug not in merged:
-                    # Р¤РѕСЂРјРёСЂСѓРµРј repository РёР· user-servers
+                    # Формируем repository из user-servers
                     repos = s.get('repositories', [])
                     repository = None
                     if repos:
@@ -339,7 +339,7 @@ def _get_merged_server_types(session_obj):
                             'branch': repo.get('branch', 'main'),
                             'auth_type': repo.get('auth_type', 'token'),
                             'credentials': repo.get('credentials', ''),
-                            'name': repo.get('name', 'РћСЃРЅРѕРІРЅРѕР№'),
+                            'name': repo.get('name', 'Основной'),
                         }
                         logger.info(f"  Repository for {slug}: {repo.get('url')}, has_creds={bool(repo.get('credentials'))}")
 
@@ -370,16 +370,16 @@ def _get_merged_server_types(session_obj):
 def list_server_types(data, session_obj):
     is_authorized = bool(session_obj.get('user') or session_obj.get('user_info'))
 
-    # РџРѕР»СѓС‡Р°РµРј РѕР±СЉРµРґРёРЅС‘РЅРЅС‹Р№ СЃРїРёСЃРѕРє СЃРµСЂРІРµСЂРѕРІ (Р»РѕРєР°Р»СЊРЅС‹Рµ + API)
+    # Получаем объединённый список серверов (локальные + API)
     merged_types = _get_merged_server_types(session_obj)
 
-    # РЎРµСЂРІРµСЂС‹ РґРѕСЃС‚СѓРїРЅС‹Рµ Р±РµР· Р·Р°СЏРІРѕРє
+    # Серверы доступные без заявок
     base_keys = set()
     for key, info in merged_types.items():
         if not info.get('requires_auth', False):
             base_keys.add(key)
 
-    # Р•СЃР»Рё Р°РІС‚РѕСЂРёР·РѕРІР°РЅ вЂ” РґРѕР±Р°РІР»СЏРµРј РѕРґРѕР±СЂРµРЅРЅС‹Рµ Р·Р°СЏРІРєРё
+    # Если авторизован — добавляем одобренные заявки
     approved_keys = set()
     if is_authorized:
         approved_keys = _get_approved_server_keys(session_obj)
@@ -404,12 +404,12 @@ def list_server_types(data, session_obj):
             'from_api': info.get('from_api', False),
             'repository': info.get('repository'),
         })
-    return 
+    return jsonify({'status': 'success', 'server_types': types})
 
 
 def _clone_repository(repo_url: str, repository: dict, target_dir: Path, logger, log_file_path: str = None) -> dict:
     """
-    РљР»РѕРЅРёСЂСѓРµС‚ СЂРµРїРѕР·РёС‚РѕСЂРёР№ СЃ РїРѕРґРґРµСЂР¶РєРѕР№ Р°РІС‚РѕСЂРёР·Р°С†РёРё Рё РїРѕС‚РѕРєРѕРІС‹Рј РІС‹РІРѕРґРѕРј
+    Клонирует репозиторий с поддержкой авторизации и потоковым выводом
     """
     import subprocess
     import urllib.parse
@@ -418,7 +418,7 @@ def _clone_repository(repo_url: str, repository: dict, target_dir: Path, logger,
     auth_type = repository.get('auth_type', '')
     credentials = repository.get('credentials', '')
 
-    # Р¤РѕСЂРјРёСЂСѓРµРј URL СЃ Р°РІС‚РѕСЂРёР·Р°С†РёРµР№
+    # Формируем URL с авторизацией
     clone_url = repo_url
     if credentials and auth_type == 'token':
         parsed = urllib.parse.urlparse(repo_url)
@@ -498,7 +498,7 @@ def _clone_repository(repo_url: str, repository: dict, target_dir: Path, logger,
 def install_server(data, session_obj):
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     server_type = data.get('server_type', '').strip()
     install_path = data.get('path', '').strip()
@@ -506,26 +506,26 @@ def install_server(data, session_obj):
     force = data.get('force', 'false') == 'true'
 
     if not server_type or not install_path:
-        return 
+        return jsonify({'status': 'error', 'message': 'server_type and path required'})
 
-    # РџРѕР»СѓС‡Р°РµРј РѕР±СЉРµРґРёРЅС‘РЅРЅС‹Р№ СЃРїРёСЃРѕРє СЃРµСЂРІРµСЂРѕРІ (Р»РѕРєР°Р»СЊРЅС‹Рµ + API)
+    # Получаем объединённый список серверов (локальные + API)
     merged_types = _get_merged_server_types(session_obj)
 
     if server_type not in merged_types:
-        return 
+        return jsonify({'status': 'error', 'message': f'Unknown server type: {server_type}'})
 
     type_info = merged_types[server_type]
     server_path = Path(install_path)
     docker_path = server_path / 'docker'
     code_path = server_path / 'code'
 
-    # РџСЂРѕРІРµСЂСЏРµРј РЅРµ РїСѓСЃС‚Р°СЏ Р»Рё РїР°РїРєР°
+    # Проверяем не пустая ли папка
     is_reinstall = False
     if server_path.exists() and list(server_path.iterdir()):
         if not force:
-            return {
+            return jsonify({
                 'status': 'error',
-                'message': f'РџР°РїРєР° {install_path} РЅРµ РїСѓСЃС‚Р°СЏ. Р’РєР»СЋС‡РёС‚Рµ РїРµСЂРµСѓСЃС‚Р°РЅРѕРІРєСѓ.',
+                'message': f'Папка {install_path} не пустая. Включите переустановку.',
                 'code': 'NOT_EMPTY',
                 'need_force': True
             })
@@ -533,7 +533,7 @@ def install_server(data, session_obj):
 
     try:
         if is_reinstall:
-            # РћСЃС‚Р°РЅР°РІР»РёРІР°РµРј РєРѕРЅС‚РµР№РЅРµСЂС‹ РµСЃР»Рё РµСЃС‚СЊ docker-compose
+            # Останавливаем контейнеры если есть docker-compose
             compose_file = docker_path / 'docker-compose.yml'
             if compose_file.exists():
                 import subprocess
@@ -550,25 +550,25 @@ def install_server(data, session_obj):
         docker_path.mkdir(exist_ok=True)
         code_path.mkdir(exist_ok=True)
 
-        # РљР»РѕРЅРёСЂСѓРµРј РёР· СЂРµРїРѕР·РёС‚РѕСЂРёСЏ
+        # Клонируем из репозитория
         repository = type_info.get('repository', {})
         repo_url = repository.get('url', '') if isinstance(repository, dict) else ''
         if repo_url and not repo_url.startswith('https://github.com/your-org'):
             import subprocess
             clone_result = _clone_repository(repo_url, repository, code_path, logger)
             if not clone_result.get('success'):
-                # Р’ РїСЂРѕРґР°РєС€РµРЅРµ вЂ” РѕС€РёР±РєР° РµСЃР»Рё clone РЅРµ СѓРґР°Р»СЃСЏ
-                return {
+                # В продакшене — ошибка если clone не удался
+                return jsonify({
                     'status': 'error', 
-                    'message': f'РћС€РёР±РєР° РєР»РѕРЅРёСЂРѕРІР°РЅРёСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ: {clone_result.get("error", "unknown")}'
+                    'message': f'Ошибка клонирования репозитория: {clone_result.get("error", "unknown")}'
                 })
         else:
-            return {
+            return jsonify({
                 'status': 'error',
-                'message': 'Р РµРїРѕР·РёС‚РѕСЂРёР№ РЅРµ РЅР°СЃС‚СЂРѕРµРЅ РґР»СЏ СЌС‚РѕРіРѕ СЃРµСЂРІРµСЂР°'
+                'message': 'Репозиторий не настроен для этого сервера'
             })
 
-        # Р’С‹РґРµР»СЏРµРј РїРѕРґСЃРµС‚СЊ РµСЃР»Рё РЅСѓР¶РЅР° (РЅРµ РґР»СЏ reverse-proxy)
+        # Выделяем подсеть если нужна (не для reverse-proxy)
         subnet_octet = 0
         if not type_info.get('is_reverse_proxy', False):
             from files.core.oss.default.registry import RegistryModule
@@ -581,8 +581,8 @@ def install_server(data, session_obj):
         port = type_info.get('default_port', 8000)
         project_name = server_type.replace('_', '-')
 
-        # docker-compose.example Р”РћР›Р–Р•Рќ Р±С‹С‚СЊ РІ СЂРµРїРѕР·РёС‚РѕСЂРёРё
-        # РС‰РµРј РІ СЂР°Р·РЅС‹С… РјРµСЃС‚Р°С…: code/docker/, code/, РїСЂРѕСЃС‚Рѕ docker/
+        # docker-compose.example ДОЛЖЕН быть в репозитории
+        # Ищем в разных местах: code/docker/, code/, просто docker/
         compose_example = None
         for candidate in [
             server_path / 'code' / 'docker' / 'docker-compose.example',
@@ -597,20 +597,20 @@ def install_server(data, session_obj):
             import shutil
             shutil.copy2(compose_example, docker_path / 'docker-compose.yml')
 
-            # РљРѕРїРёСЂСѓРµРј .env.example РµСЃР»Рё РµСЃС‚СЊ СЂСЏРґРѕРј
+            # Копируем .env.example если есть рядом
             env_example_src = compose_example.parent / '.env.example'
             if env_example_src.exists():
                 shutil.copy2(env_example_src, docker_path / '.env.example')
 
-            # РџРѕРґСЃС‚Р°РІР»СЏРµРј Р’РЎР• РїРµСЂРµРјРµРЅРЅС‹Рµ РёР· .env РІ docker-compose.yml
+            # Подставляем ВСЕ переменные из .env в docker-compose.yml
             compose_path = docker_path / 'docker-compose.yml'
             content = compose_path.read_text(encoding='utf-8')
 
-            # РћР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ РїРѕРґСЃС‚Р°РЅРѕРІРєРё
+            # Обязательные подстановки
             content = content.replace('${PROJECTNAME}', project_name)
             content = content.replace('${DOCKER_NETWORK_PREFIX}', f"172.{subnet_octet}" if subnet_octet > 0 else "")
 
-            # Р§РёС‚Р°РµРј .env Рё РїРѕРґСЃС‚Р°РІР»СЏРµРј РІСЃРµ РїРµСЂРµРјРµРЅРЅС‹Рµ
+            # Читаем .env и подставляем все переменные
             env_path = docker_path / '.env'
             if env_path.exists():
                 env_vars = {}
@@ -629,14 +629,14 @@ def install_server(data, session_obj):
             compose_path.write_text(content, encoding='utf-8')
             logger.info(f"Copied docker-compose.example from {compose_example}")
         else:
-            # РќР•Рў docker-compose.example вЂ” РѕС€РёР±РєР° РґР»СЏ РїСЂРѕРґР°РєС€РµРЅР°
-            return {
+            # НЕТ docker-compose.example — ошибка для продакшена
+            return jsonify({
                 'status': 'error',
-                'message': 'docker-compose.example РЅРµ РЅР°Р№РґРµРЅ РІ СЂРµРїРѕР·РёС‚РѕСЂРёРё. РџСЂРѕРІРµСЂСЊС‚Рµ СЃС‚СЂСѓРєС‚СѓСЂСѓ РїСЂРѕРµРєС‚Р°.'
+                'message': 'docker-compose.example не найден в репозитории. Проверьте структуру проекта.'
             })
             (docker_path / 'docker-compose.yml').write_text(compose_content, encoding='utf-8')
 
-        # Р“РµРЅРµСЂРёСЂСѓРµРј .env РµСЃР»Рё РЅРµ СЃРєРѕРїРёСЂРѕРІР°РЅ
+        # Генерируем .env если не скопирован
         if not (docker_path / '.env.example').exists():
             env_example = _generate_env_example(server_type, type_info, server_name or type_info['name'], subnet_octet, port, str(server_path))
             (docker_path / '.env.example').write_text(env_example, encoding='utf-8')
@@ -644,7 +644,7 @@ def install_server(data, session_obj):
             env_example = _generate_env_example(server_type, type_info, server_name or type_info['name'], subnet_octet, port, str(server_path))
             (docker_path / '.env').write_text(env_example, encoding='utf-8')
 
-        # РџРѕРґСЃС‚Р°РІР»СЏРµРј СЂРµР°Р»СЊРЅС‹Рµ РїСѓС‚Рё РёР· server_path РІ .env
+        # Подставляем реальные пути из server_path в .env
         env_path = docker_path / '.env'
         if env_path.exists():
             env_content = env_path.read_text(encoding='utf-8')
@@ -654,7 +654,7 @@ def install_server(data, session_obj):
             env_content = env_content.replace('${PATH_APP_PROJECT}', str(server_path / 'code'))
             env_path.write_text(env_content, encoding='utf-8')
 
-        # Р РµРіРёСЃС‚СЂРёСЂСѓРµРј С‡РµСЂРµР· RegistryModule
+        # Регистрируем через RegistryModule
         registry = get('registry')
         if registry:
             registry.register_initializing(str(server_path))
@@ -672,19 +672,19 @@ def install_server(data, session_obj):
             RegistryModule.save_registry(reg)
             logger.info(f"Server {'reinstalled' if is_reinstall else 'registered'}: {server_type} at {install_path} (subnet: {subnet_octet})")
 
-        action = 'РџРµСЂРµСѓСЃС‚Р°РЅРѕРІР»РµРЅ' if is_reinstall else 'РЈСЃС‚Р°РЅРѕРІР»РµРЅ'
-        return 
+        action = 'Переустановлен' if is_reinstall else 'Установлен'
+        return jsonify({'status': 'success', 'message': f'{type_info["name"]} {action} в {install_path}'})
 
     except Exception as e:
         logger.error(f"Install server error: {e}")
-        return 
+        return jsonify({'status': 'error', 'message': str(e)})
 
 
 def list_drives(data, session_obj):
-    """РЎРїРёСЃРѕРє РґРѕСЃС‚СѓРїРЅС‹С… РґРёСЃРєРѕРІ (Windows) РёР»Рё С‚РѕС‡РµРє РјРѕРЅС‚РёСЂРѕРІР°РЅРёСЏ (Linux/Mac)"""
+    """Список доступных дисков (Windows) или точек монтирования (Linux/Mac)"""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     import os
     import shutil
@@ -692,7 +692,7 @@ def list_drives(data, session_obj):
     drives = []
 
     if os.name == 'nt':
-        # Windows - РїРµСЂРµС‡РёСЃР»СЏРµРј РґРёСЃРєРё
+        # Windows - перечисляем диски
         import string
         import ctypes
         bitmask = ctypes.windll.kernel32.GetLogicalDrives()
@@ -706,7 +706,7 @@ def list_drives(data, session_obj):
                         'path': drive_path,
                         'total_gb': round(total / (1024**3), 1),
                         'free_gb': round(free / (1024**3), 1),
-                        'label': f"{letter}: ({round(free / (1024**3), 1)} GB СЃРІРѕР±РѕРґРЅРѕ)"
+                        'label': f"{letter}: ({round(free / (1024**3), 1)} GB свободно)"
                     })
                 except Exception:
                     drives.append({
@@ -718,7 +718,7 @@ def list_drives(data, session_obj):
                     })
             bitmask >>= 1
     else:
-        # Linux/Mac - РїРѕРєР°Р·С‹РІР°РµРј РєРѕСЂРµРЅСЊ Рё С‚РѕС‡РєРё РјРѕРЅС‚РёСЂРѕРІР°РЅРёСЏ
+        # Linux/Mac - показываем корень и точки монтирования
         try:
             total, free = shutil.disk_usage('/')
             drives.append({
@@ -726,7 +726,7 @@ def list_drives(data, session_obj):
                 'path': '/',
                 'total_gb': round(total / (1024**3), 1),
                 'free_gb': round(free / (1024**3), 1),
-                'label': f"/ ({round(free / (1024**3), 1)} GB СЃРІРѕР±РѕРґРЅРѕ)"
+                'label': f"/ ({round(free / (1024**3), 1)} GB свободно)"
             })
         except Exception:
             drives.append({
@@ -737,7 +737,7 @@ def list_drives(data, session_obj):
                 'label': '/'
             })
 
-        # Р”РѕР±Р°РІР»СЏРµРј /home РµСЃР»Рё СЃСѓС‰РµСЃС‚РІСѓРµС‚
+        # Добавляем /home если существует
         home = os.path.expanduser('~')
         if home and home != '/' and os.path.exists(home):
             try:
@@ -752,24 +752,24 @@ def list_drives(data, session_obj):
             except Exception:
                 pass
 
-    return 
+    return jsonify({'status': 'success', 'drives': drives})
 
 
 def list_folders(data, session_obj):
-    """РЎРїРёСЃРѕРє РїР°РїРѕРє РІ РґРёСЂРµРєС‚РѕСЂРёРё"""
+    """Список папок в директории"""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     path = data.get('path', '').strip()
     if not path:
-        return 
+        return jsonify({'status': 'error', 'message': 'Path required'})
 
     import os
 
     p = Path(path)
     if not p.exists():
-        return 
+        return jsonify({'status': 'error', 'message': f'Path not found: {path}'})
 
     folders = []
     try:
@@ -792,51 +792,51 @@ def list_folders(data, session_obj):
                         'writable': False,
                     })
     except PermissionError:
-        return 
+        return jsonify({'status': 'error', 'message': 'Permission denied', 'folders': [], 'current': str(p), 'parent': None})
     except OSError as e:
-        return 
+        return jsonify({'status': 'error', 'message': str(e), 'folders': [], 'current': str(p), 'parent': None})
 
-    # РћРїСЂРµРґРµР»СЏРµРј СЂРѕРґРёС‚РµР»СЊСЃРєСѓСЋ РґРёСЂРµРєС‚РѕСЂРёСЋ
+    # Определяем родительскую директорию
     try:
         parent = str(p.parent) if str(p) != str(p.root) and str(p) != '/' else None
     except Exception:
         parent = None
 
-    return 
+    return jsonify({'status': 'success', 'folders': folders, 'current': str(p), 'parent': parent})
 
 
 def create_folder(data, session_obj):
-    """РЎРѕР·РґР°С‚СЊ РЅРѕРІСѓСЋ РїР°РїРєСѓ"""
+    """Создать новую папку"""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     path = data.get('path', '').strip()
     if not path:
-        return 
+        return jsonify({'status': 'error', 'message': 'Path required'})
 
     p = Path(path)
 
     if p.exists():
-        return 
+        return jsonify({'status': 'error', 'message': 'Папка уже существует'})
 
     try:
         p.mkdir(parents=True, exist_ok=True)
         logger.info(f"Folder created: {path}")
-        return 
+        return jsonify({'status': 'success', 'message': f'Папка создана: {p.name}'})
     except PermissionError:
-        return 
+        return jsonify({'status': 'error', 'message': 'Нет прав на создание папки'})
     except OSError as e:
-        return 
+        return jsonify({'status': 'error', 'message': f'Ошибка: {str(e)}'})
 
 
 def _generate_compose(server_type, type_info, subnet_octet=0, port=None):
-    """Р“РµРЅРµСЂРёСЂСѓРµС‚ docker-compose.yml СЃ СЃРµС‚СЊСЋ Рё РїРѕРґСЃРµС‚СЊСЋ"""
+    """Генерирует docker-compose.yml с сетью и подсетью"""
     name = server_type.replace('_', '-')
     port = port or type_info.get('default_port', 8000)
     network_prefix = f"172.{subnet_octet}" if subnet_octet > 0 else ""
 
-    # Р‘Р°Р·РѕРІС‹Р№ СЃРµСЂРІРёСЃ
+    # Базовый сервис
     services = f"""services:
   {name}:
     image: alpine:latest
@@ -850,7 +850,7 @@ def _generate_compose(server_type, type_info, subnet_octet=0, port=None):
     command: sh -c "echo '{type_info['name']} is running' && sleep infinity"
 """
 
-    # Р”РѕР±Р°РІР»СЏРµРј СЃРµС‚СЊ РµСЃР»Рё РІС‹РґРµР»РµРЅ РѕРєС‚РµС‚
+    # Добавляем сеть если выделен октет
     if subnet_octet > 0:
         services += f"""
     networks:
@@ -873,22 +873,24 @@ def _generate_env_example(server_type, type_info, server_name, subnet_octet=0, p
     """Генерирует .env.example с переменными для docker-compose"""
     port = port or type_info.get('default_port', 8000)
     network_prefix = f"172.{subnet_octet}" if subnet_octet > 0 else ""
-    # Уникальное имя проекта на основе пути установки
-    project_name = Path(server_path).name if server_path else server_type.replace('_', '-')
+    project_name = server_type.replace('_', '-')
 
     env = f"""# {type_info['name']}
 PROJECTNAME={project_name}
+SERVER_TYPE={server_type}
+SERVER_NAME={server_name}
+SERVER_PORT={port}
 
 # Docker Network
 DOCKER_NETWORK_PREFIX={network_prefix}
 
-# РџСѓС‚Рё (РїР»РµР№СЃС…РѕР»РґРµСЂС‹ вЂ” РїРѕРґСЃС‚Р°РІР»СЏСЋС‚СЃСЏ РїСЂРё СѓСЃС‚Р°РЅРѕРІРєРµ)
+# Пути (плейсхолдеры — подставляются при установке)
 PATH_APP_DOCKER=${PATH_APP_DOCKER}
 PATH_APP_DOCKER_LOGS=${PATH_APP_DOCKER_LOGS}
 PATH_APP_CODE=${PATH_APP_CODE}
 PATH_APP_PROJECT=${PATH_APP_PROJECT}
 
-# Р”РѕРјРµРЅ
+# Домен
 NGINX_DOMAIN=localhost
 MAX_BODY_SIZE=100M
 
@@ -950,7 +952,7 @@ OAUTH_SECRET=
 OAUTH_REDIRECT_URI=
 """
 
-    # Р”РѕР±Р°РІР»СЏРµРј СЃРїРµС†РёС„РёС‡РЅС‹Рµ РїРµСЂРµРјРµРЅРЅС‹Рµ
+    # Добавляем специфичные переменные
     if server_type == 'wecom':
         env += """
 # WeCom
@@ -965,12 +967,12 @@ WECOM_ENCODING_AES_KEY=your_encoding_aes_key
 
 
 def _get_server_env_path(server_path):
-    """Р’РѕР·РІСЂР°С‰Р°РµС‚ РїСѓС‚СЊ Рє .env С„Р°Р№Р»Сѓ СЃРµСЂРІРµСЂР°"""
+    """Возвращает путь к .env файлу сервера"""
     return Path(server_path) / 'docker' / '.env'
 
 
 def _read_server_env(server_path):
-    """Р§РёС‚Р°РµС‚ env РїРµСЂРµРјРµРЅРЅС‹Рµ СЃРµСЂРІРµСЂР°"""
+    """Читает env переменные сервера"""
     env_path = _get_server_env_path(server_path)
     if not env_path.exists():
         return {}
@@ -985,7 +987,7 @@ def _read_server_env(server_path):
 
 
 def _write_server_env(server_path, env_vars):
-    """Р—Р°РїРёСЃС‹РІР°РµС‚ env РїРµСЂРµРјРµРЅРЅС‹Рµ СЃРµСЂРІРµСЂР°"""
+    """Записывает env переменные сервера"""
     env_path = _get_server_env_path(server_path)
     with open(env_path, 'w', encoding='utf-8') as f:
         for key, value in env_vars.items():
@@ -993,30 +995,30 @@ def _write_server_env(server_path, env_vars):
 
 
 def get_server_config(data, session_obj):
-    """РџРѕР»СѓС‡РёС‚СЊ РєРѕРЅС„РёРіСѓСЂР°С†РёСЋ (env РїРµСЂРµРјРµРЅРЅС‹Рµ) СЃРµСЂРІРµСЂР°"""
+    """Получить конфигурацию (env переменные) сервера"""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     server_path = data.get('server_id')
     if not server_path:
-        return 
+        return jsonify({'status': 'error', 'message': 'Server ID required'})
 
     env_vars = _read_server_env(server_path)
-    return 
+    return jsonify({'status': 'success', 'env': env_vars})
 
 
 def save_server_config(data, session_obj):
-    """РЎРѕС…СЂР°РЅРёС‚СЊ РєРѕРЅС„РёРіСѓСЂР°С†РёСЋ (env РїРµСЂРµРјРµРЅРЅС‹Рµ) СЃРµСЂРІРµСЂР°"""
+    """Сохранить конфигурацию (env переменные) сервера"""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     server_path = data.get('server_id')
     if not server_path:
-        return 
+        return jsonify({'status': 'error', 'message': 'Server ID required'})
 
-    # РЎРѕР±РёСЂР°РµРј env РїРµСЂРµРјРµРЅРЅС‹Рµ РёР· РґР°РЅРЅС‹С…
+    # Собираем env переменные из данных
     env_vars = {}
     for key, value in data.items():
         if key not in ('server_id', 'action', 'section') and not key.startswith('_'):
@@ -1024,38 +1026,38 @@ def save_server_config(data, session_obj):
 
     if env_vars:
         _write_server_env(server_path, env_vars)
-        return 
-    return 
+        return jsonify({'status': 'success', 'message': 'Конфигурация сохранена'})
+    return jsonify({'status': 'error', 'message': 'Нет данных для сохранения'})
 
 
 def start_server(data, session_obj):
-    """Р—Р°РїСѓСЃС‚РёС‚СЊ СЃРµСЂРІРµСЂ С‡РµСЂРµР· Docker Compose"""
+    """Запустить сервер через Docker Compose"""
     import subprocess
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     server_id = data.get('server_id')
     if not server_id:
-        return 
+        return jsonify({'status': 'error', 'message': 'Server ID required'})
 
     registry = get('registry')
     if not registry:
-        return 
+        return jsonify({'status': 'error', 'message': 'Registry not found'})
 
     reg_data = registry.load_registry()
     server = next((s for s in reg_data.get('projects', []) if s.get('path') == server_id), None)
     if not server:
-        return 
+        return jsonify({'status': 'error', 'message': 'Server not found'})
 
     server_path = server.get('path')
     docker_path = os.path.join(server_path, 'docker')
     if not os.path.exists(docker_path):
-        return 
+        return jsonify({'status': 'error', 'message': 'Docker directory not found'})
 
     compose_file = os.path.join(docker_path, 'docker-compose.yml')
     if not os.path.exists(compose_file):
-        return 
+        return jsonify({'status': 'error', 'message': 'docker-compose.yml not found'})
 
     try:
         kw = _subprocess_kwargs(120)
@@ -1066,39 +1068,39 @@ def start_server(data, session_obj):
         if result.returncode == 0:
             server['status'] = 'running'
             registry.save_registry(reg_data)
-            return 
+            return jsonify({'status': 'success', 'message': 'Сервер запущен'})
         else:
-            return 
+            return jsonify({'status': 'error', 'message': f'Ошибка: {result.stderr[:500]}'})
     except Exception as e:
         logger.error(f"Error starting server: {e}")
-        return 
+        return jsonify({'status': 'error', 'message': f'Ошибка запуска: {str(e)}'})
 
 
 def stop_server(data, session_obj):
-    """РћСЃС‚Р°РЅРѕРІРёС‚СЊ СЃРµСЂРІРµСЂ С‡РµСЂРµР· Docker Compose"""
+    """Остановить сервер через Docker Compose"""
     import subprocess
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     server_id = data.get('server_id')
     if not server_id:
-        return 
+        return jsonify({'status': 'error', 'message': 'Server ID required'})
 
-    # РС‰РµРј СЃРµСЂРІРµСЂ РІ СЂРµРµСЃС‚СЂРµ
+    # Ищем сервер в реестре
     registry = get('registry')
     if not registry:
-        return 
+        return jsonify({'status': 'error', 'message': 'Registry not found'})
 
     reg_data = registry.load_registry()
     server = next((s for s in reg_data.get('projects', []) if s.get('path') == server_id), None)
     if not server:
-        return 
+        return jsonify({'status': 'error', 'message': 'Server not found'})
 
     server_path = server.get('path')
     docker_path = os.path.join(server_path, 'docker')
     if not os.path.exists(docker_path):
-        return 
+        return jsonify({'status': 'error', 'message': 'Docker directory not found'})
 
     try:
         kw = _subprocess_kwargs(60)
@@ -1107,27 +1109,27 @@ def stop_server(data, session_obj):
             cwd=docker_path, **kw
         )
         if result.returncode == 0:
-            # РћР±РЅРѕРІР»СЏРµРј СЃС‚Р°С‚СѓСЃ РІ СЂРµРµСЃС‚СЂРµ
+            # Обновляем статус в реестре
             server['status'] = 'stopped'
             registry.save_registry(reg_data)
-            return 
+            return jsonify({'status': 'success', 'message': 'Сервер остановлен'})
         else:
-            return 
+            return jsonify({'status': 'error', 'message': f'Ошибка: {result.stderr[:500]}'})
     except Exception as e:
         logger.error(f"Error stopping server: {e}")
-        return 
+        return jsonify({'status': 'error', 'message': f'Ошибка остановки: {str(e)}'})
 
 
 def remove_server(data, session_obj):
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     server_id = data.get('server_id')
     if not server_id:
-        return 
+        return jsonify({'status': 'error', 'message': 'Server ID required'})
 
-    # РћСЃС‚Р°РЅР°РІР»РёРІР°РµРј РєРѕРЅС‚РµР№РЅРµСЂС‹ РµСЃР»Рё РµСЃС‚СЊ docker-compose
+    # Останавливаем контейнеры если есть docker-compose
     server_path = Path(server_id)
     compose_file = server_path / 'docker' / 'docker-compose.yml'
     if compose_file.exists():
@@ -1140,62 +1142,62 @@ def remove_server(data, session_obj):
         except Exception:
             pass
 
-    # РЈРґР°Р»СЏРµРј РёР· СЂРµРµСЃС‚СЂР°
+    # Удаляем из реестра
     registry = get('registry')
     if registry:
         reg_data = registry.load_registry()
         reg_data['projects'] = [p for p in reg_data['projects'] if p.get('path') != server_id]
         registry.save_registry(reg_data)
 
-    # РЈРґР°Р»СЏРµРј РїР°РїРєСѓ СЃРµСЂРІРµСЂР°
+    # Удаляем папку сервера
     import shutil
     if server_path.exists():
         try:
             shutil.rmtree(server_path)
-            return 
+            return jsonify({'status': 'success', 'message': f'Сервер и папка {server_id} удалены'})
         except Exception as e:
-            return 
+            return jsonify({'status': 'success', 'message': f'Сервер удалён из реестра, но папка не удалена: {str(e)}'})
 
-    return 
+    return jsonify({'status': 'success', 'message': 'Сервер удалён'})
 
 
 def scan_path(data, session_obj):
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     path = data.get('path', '').strip()
     if not path:
-        return 
+        return jsonify({'status': 'error', 'message': 'Path is required'})
 
     servers_mod = get('servers')
     if not servers_mod:
-        return 
+        return jsonify({'status': 'error', 'message': 'Servers module not found'})
 
     scan = servers_mod.scan_directory(path)
-    return 
+    return jsonify({'status': 'success', 'scan': scan})
 
 
 def server_details(data, session_obj):
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return {'status': 'error', 'message': 'Unauthorized'}), 401
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     server_id = data.get('server_id')
     if not server_id:
-        return 
+        return jsonify({'status': 'error', 'message': 'Server ID required'})
 
     servers = _get_user_servers(session_obj)
     server = next((s for s in servers if str(s.get('id')) == str(server_id)), None)
 
     if not server:
-        return 
+        return jsonify({'status': 'error', 'message': 'Server not found or access denied'})
 
-    return 
+    return jsonify({'status': 'success', 'server': server})
 
 
 def server_repo_info(data, session_obj):
-    """РџРѕР»СѓС‡РёС‚СЊ РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ СЂРµРїРѕР·РёС‚РѕСЂРёРё СЃРµСЂРІРµСЂР°"""
+    """Получить информацию о репозитории сервера"""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
         return {'status': 'error', 'message': 'Unauthorized'}
@@ -1255,7 +1257,7 @@ def server_repo_info(data, session_obj):
 
 
 def update_server(data, session_obj):
-    """РћР±РЅРѕРІРёС‚СЊ СЃРµСЂРІРµСЂ С‡РµСЂРµР· git pull"""
+    """Обновить сервер через git pull"""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
         return {'status': 'error', 'message': 'Unauthorized'}
@@ -1288,20 +1290,20 @@ def update_server(data, session_obj):
                     cwd=str(server_path / 'docker'), **kw2
                 )
                 if docker_result.returncode == 0:
-                    return {'status': 'success', 'message': 'РЎРµСЂРІРµСЂ РѕР±РЅРѕРІР»С‘РЅ Рё РїРµСЂРµР·Р°РїСѓС‰РµРЅ'}
+                    return {'status': 'success', 'message': 'Сервер обновлён и перезапущен'}
                 else:
-                    return {'status': 'success', 'message': 'РљРѕРґ РѕР±РЅРѕРІР»С‘РЅ, РЅРѕ РѕС€РёР±РєР° РїРµСЂРµР·Р°РїСѓСЃРєР°: ' + docker_result.stderr[:300]}
+                    return {'status': 'success', 'message': 'Код обновлён, но ошибка перезапуска: ' + docker_result.stderr[:300]}
             else:
-                return {'status': 'success', 'message': 'РљРѕРґ РѕР±РЅРѕРІР»С‘РЅ: ' + result.stdout[:200]}
+                return {'status': 'success', 'message': 'Код обновлён: ' + result.stdout[:200]}
         else:
-            return {'status': 'error', 'message': 'РћС€РёР±РєР° git pull: ' + result.stderr[:300]}
+            return {'status': 'error', 'message': 'Ошибка git pull: ' + result.stderr[:300]}
 
     except Exception as e:
         return {'status': 'error', 'message': str(e)}
 
 
 def server_git_log(data, session_obj):
-    """РџРѕР»СѓС‡РёС‚СЊ РїРѕСЃР»РµРґРЅРёРµ РєРѕРјРјРёС‚С‹ + СЃС‚Р°С‚СѓСЃ РѕР±РЅРѕРІР»РµРЅРёСЏ РёР· server_types"""
+    """Получить последние коммиты + статус обновления из server_types"""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
         return {'status': 'error', 'message': 'Unauthorized'}
@@ -1322,27 +1324,22 @@ def server_git_log(data, session_obj):
         kw = _subprocess_kwargs(10)
 
         # Получаем URL remote
-        remote_url = subprocess.run(
+        remote_url = (subprocess.run(
             ['git', 'remote', 'get-url', 'origin'],
             cwd=str(code_path), **kw
-        ).stdout.strip() if subprocess.run(
-            ['git', 'remote', 'get-url', 'origin'],
-            cwd=str(code_path), **kw
-        ).stdout else ''
+        ).stdout or b'').decode().strip()
 
         # Получаем текущий коммит
-        local_result = subprocess.run(
+        local_commit = (subprocess.run(
             ['git', 'rev-parse', 'HEAD'],
             cwd=str(code_path), **kw
-        )
-        local_commit = local_result.stdout.strip() if local_result.stdout else ''
+        ).stdout or b'').decode().strip()
 
         # Получаем ветку
-        branch_result = subprocess.run(
+        branch = (subprocess.run(
             ['git', 'branch', '--show-current'],
             cwd=str(code_path), **kw
-        )
-        branch = branch_result.stdout.strip() if branch_result.stdout else ''
+        ).stdout or b'').decode().strip()
 
         # Fetch remote и получаем удалённый коммит
         has_update = False
@@ -1352,14 +1349,13 @@ def server_git_log(data, session_obj):
                 ['git', 'fetch', '--quiet'],
                 cwd=str(code_path), **_subprocess_kwargs(15)
             )
-            remote_result = subprocess.run(
+            remote_commit = (subprocess.run(
                 ['git', 'rev-parse', '@{u}'],
                 cwd=str(code_path), **kw
-            )
-            remote_commit = remote_result.stdout.strip() if remote_result.stdout else ''
+            ).stdout or b'').decode().strip()
             has_update = bool(remote_commit) and local_commit != remote_commit
 
-        # РџРѕР»СѓС‡Р°РµРј РїРѕСЃР»РµРґРЅРёРµ РєРѕРјРјРёС‚С‹
+        # Получаем последние коммиты
         result = subprocess.run(
             ['git', 'log', '-10', '--format=%H|%h|%s|%ci|%an'],
             cwd=str(code_path), **kw
@@ -1389,5 +1385,3 @@ def server_git_log(data, session_obj):
         }
     except Exception as e:
         return {'status': 'error', 'message': str(e), 'log': [], 'has_update': False}
-
-
