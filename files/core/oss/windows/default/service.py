@@ -20,6 +20,17 @@ class ServiceModule(BaseModule):
     SERVICE_NAME = "StarterService"
     
     @staticmethod
+    def _kwargs(**extra):
+        """kwargs для subprocess со startupinfo на Windows"""
+        kwargs = {'capture_output': True, 'text': True}
+        kwargs.update(extra)
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
+        kwargs['startupinfo'] = si
+        return kwargs
+    
+    @staticmethod
     def check() -> bool:
         return sys.platform == 'win32'
     
@@ -35,7 +46,10 @@ class ServiceModule(BaseModule):
     @staticmethod
     def is_service_installed() -> bool:
         try:
-            result = subprocess.run(['sc', 'query', ServiceModule.SERVICE_NAME], capture_output=True, text=True)
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = subprocess.SW_HIDE
+            result = subprocess.run(['sc', 'query', ServiceModule.SERVICE_NAME], capture_output=True, text=True, startupinfo=si)
             return result.returncode == 0
         except:
             return False
@@ -44,7 +58,10 @@ class ServiceModule(BaseModule):
     def get_service_status() -> Dict[str, Any]:
         status = {'installed': False, 'running': False, 'enabled': False, 'os': 'windows'}
         try:
-            result = subprocess.run(['sc', 'query', ServiceModule.SERVICE_NAME], capture_output=True, text=True)
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = subprocess.SW_HIDE
+            result = subprocess.run(['sc', 'query', ServiceModule.SERVICE_NAME], capture_output=True, text=True, startupinfo=si)
             if result.returncode == 0:
                 status['installed'] = True
                 if 'RUNNING' in result.stdout:
