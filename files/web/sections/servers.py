@@ -637,10 +637,10 @@ def install_server(data, session_obj):
 
         # Генерируем .env если не скопирован
         if not (docker_path / '.env.example').exists():
-            env_example = _generate_env_example(server_type, type_info, server_name or type_info['name'], subnet_octet, port)
+            env_example = _generate_env_example(server_type, type_info, server_name or type_info['name'], subnet_octet, port, str(server_path))
             (docker_path / '.env.example').write_text(env_example, encoding='utf-8')
         if not (docker_path / '.env').exists():
-            env_example = _generate_env_example(server_type, type_info, server_name or type_info['name'], subnet_octet, port)
+            env_example = _generate_env_example(server_type, type_info, server_name or type_info['name'], subnet_octet, port, str(server_path))
             (docker_path / '.env').write_text(env_example, encoding='utf-8')
 
         # Регистрируем через RegistryModule
@@ -858,7 +858,7 @@ networks:
     return services
 
 
-def _generate_env_example(server_type, type_info, server_name, subnet_octet=0, port=None):
+def _generate_env_example(server_type, type_info, server_name, subnet_octet=0, port=None, server_path=''):
     """Генерирует .env.example с переменными для docker-compose"""
     port = port or type_info.get('default_port', 8000)
     network_prefix = f"172.{subnet_octet}" if subnet_octet > 0 else ""
@@ -873,11 +873,11 @@ SERVER_PORT={port}
 # Docker Network
 DOCKER_NETWORK_PREFIX={network_prefix}
 
-# Пути (относительные)
-PATH_APP_DOCKER=./docker
-PATH_APP_DOCKER_LOGS=./docker/logs
-PATH_APP_CODE=../code
-PATH_APP_PROJECT=../code
+# Пути (абсолютные для совместимости с Docker)
+PATH_APP_DOCKER={server_path}/docker
+PATH_APP_DOCKER_LOGS={server_path}/docker/logs
+PATH_APP_CODE={server_path}/code
+PATH_APP_PROJECT={server_path}/code
 
 # Домен
 NGINX_DOMAIN=localhost
