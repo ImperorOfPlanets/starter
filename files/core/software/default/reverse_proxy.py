@@ -2,6 +2,7 @@
 Модуль Reverse Proxy — проверка статуса, подключение, регистрация
 """
 import subprocess
+import os
 import requests
 import json
 from typing import Dict, Optional
@@ -66,9 +67,14 @@ class ReverseProxyModule(BaseModule):
         
         # Проверяем запущен ли (контейнеры)
         try:
+            si = None
+            if os.name == 'nt':
+                si = subprocess.STARTUPINFO()
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                si.wShowWindow = subprocess.SW_HIDE
             result = subprocess.run(
                 ['docker', 'ps', '-a', '--filter', 'name=revers-proxy', '--format', '{{.Names}} {{.Status}}'],
-                capture_output=True, text=True, timeout=10
+                capture_output=True, text=True, timeout=10, startupinfo=si
             )
             if result.returncode == 0 and result.stdout.strip():
                 lines = result.stdout.strip().split('\n')
