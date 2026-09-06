@@ -77,11 +77,17 @@
                                 title="Информация о репозитории">
                             <i class="bi bi-info-circle"></i>
                         </button>
-                        {% if server.has_git %}
+                        {% if server.has_git and server.has_update %}
+                        <button class="btn btn-outline-success btn-sm update-server"
+                                data-server-id="{{ server.id }}"
+                                title="Доступно обновление!">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                        {% elif server.has_git %}
                         <button class="btn btn-outline-secondary btn-sm update-server"
                                 data-server-id="{{ server.id }}"
-                                title="Обновить (git pull)">
-                            <i class="bi bi-arrow-clockwise"></i>
+                                title="Уже актуально">
+                            <i class="bi bi-check-circle"></i>
                         </button>
                         {% endif %}
                         <button class="btn btn-outline-primary btn-sm configure-server"

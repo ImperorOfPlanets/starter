@@ -132,8 +132,36 @@ def _get_user_servers(session_obj):
                 type_info = SERVER_TYPES.get(project_type, {})
                 has_web_interface = type_info.get('has_web_interface', False)
 
-                # Проверяем есть ли git
-                has_git = (Path(path) / 'code' / '.git').exists()
+                # Проверяем есть ли git и есть ли обновления
+                has_git = False
+                has_update = False
+                code_path = Path(path) / 'code'
+                if (code_path / '.git').exists():
+                    has_git = True
+                    try:
+                        kw = _subprocess_kwargs(5)
+                        # Проверяем есть ли remote
+                        remote = subprocess.run(
+                            ['git', 'remote', 'get-url', 'origin'],
+                            cwd=str(code_path), **kw
+                        ).stdout.strip()
+                        if remote:
+                            # Fetch и сравниваем с local
+                            subprocess.run(
+                                ['git', 'fetch', '--quiet'],
+                                cwd=str(code_path), **_subprocess_kwargs(10)
+                            )
+                            local = subprocess.run(
+                                ['git', 'rev-parse', 'HEAD'],
+                                cwd=str(code_path), **kw
+                            ).stdout.strip()
+                            remote_hash = subprocess.run(
+                                ['git', 'rev-parse', '@{u}'],
+                                cwd=str(code_path), **kw
+                            ).stdout.strip()
+                            has_update = local != remote_hash and bool(remote_hash)
+                    except Exception:
+                        pass
 
                 servers.append({
                     'id': path,
@@ -145,6 +173,7 @@ def _get_user_servers(session_obj):
                     'subnet_octet': p.get('subnet_octet', 0),
                     'has_web_interface': has_web_interface,
                     'has_git': has_git,
+                    'has_update': has_update,
                 })
             return servers
 
