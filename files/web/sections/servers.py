@@ -1321,25 +1321,30 @@ def server_git_log(data, session_obj):
     try:
         kw = _subprocess_kwargs(10)
 
-        # РџРѕР»СѓС‡Р°РµРј URL remote
-        remote_url = (subprocess.run(
+        # Получаем URL remote
+        remote_url = subprocess.run(
             ['git', 'remote', 'get-url', 'origin'],
             cwd=str(code_path), **kw
-        ).stdout or b'').decode().strip()
+        ).stdout.strip() if subprocess.run(
+            ['git', 'remote', 'get-url', 'origin'],
+            cwd=str(code_path), **kw
+        ).stdout else ''
 
-        # РџРѕР»СѓС‡Р°РµРј С‚РµРєСѓС‰РёР№ РєРѕРјРјРёС‚
-        local_commit = (subprocess.run(
+        # Получаем текущий коммит
+        local_result = subprocess.run(
             ['git', 'rev-parse', 'HEAD'],
             cwd=str(code_path), **kw
-        ).stdout or b'').decode().strip()
+        )
+        local_commit = local_result.stdout.strip() if local_result.stdout else ''
 
-        # РџРѕР»СѓС‡Р°РµРј РІРµС‚РєСѓ
-        branch = (subprocess.run(
+        # Получаем ветку
+        branch_result = subprocess.run(
             ['git', 'branch', '--show-current'],
             cwd=str(code_path), **kw
-        ).stdout or b'').decode().strip()
+        )
+        branch = branch_result.stdout.strip() if branch_result.stdout else ''
 
-        # Fetch remote Рё РїРѕР»СѓС‡Р°РµРј СѓРґР°Р»С‘РЅРЅС‹Р№ РєРѕРјРјРёС‚
+        # Fetch remote и получаем удалённый коммит
         has_update = False
         remote_commit = ''
         if remote_url:
@@ -1347,10 +1352,11 @@ def server_git_log(data, session_obj):
                 ['git', 'fetch', '--quiet'],
                 cwd=str(code_path), **_subprocess_kwargs(15)
             )
-            remote_commit = (subprocess.run(
+            remote_result = subprocess.run(
                 ['git', 'rev-parse', '@{u}'],
                 cwd=str(code_path), **kw
-            ).stdout or b'').decode().strip()
+            )
+            remote_commit = remote_result.stdout.strip() if remote_result.stdout else ''
             has_update = bool(remote_commit) and local_commit != remote_commit
 
         # РџРѕР»СѓС‡Р°РµРј РїРѕСЃР»РµРґРЅРёРµ РєРѕРјРјРёС‚С‹
