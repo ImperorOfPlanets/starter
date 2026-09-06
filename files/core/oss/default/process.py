@@ -82,10 +82,13 @@ class ProcessModule(BaseModule):
     def kill_process(pid: int, force: bool = False) -> Tuple[bool, str]:
         try:
             if platform.system() == 'Windows':
+                si = subprocess.STARTUPINFO()
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                si.wShowWindow = subprocess.SW_HIDE
                 if force:
-                    subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True)
+                    subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True, startupinfo=si)
                 else:
-                    subprocess.run(['taskkill', '/PID', str(pid)], capture_output=True)
+                    subprocess.run(['taskkill', '/PID', str(pid)], capture_output=True, startupinfo=si)
                 msg = f"Process {pid} killed"
             else:
                 if force:
@@ -107,9 +110,12 @@ class ProcessModule(BaseModule):
         current_pid = os.getpid()
         if platform.system() == 'Windows':
             try:
+                si = subprocess.STARTUPINFO()
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                si.wShowWindow = subprocess.SW_HIDE
                 output = subprocess.check_output(
                     ['tasklist', '/FI', 'IMAGENAME eq python.exe', '/FO', 'CSV', '/NH'],
-                    text=True
+                    text=True, startupinfo=si
                 )
                 import re
                 for line in output.split('\n'):
@@ -118,7 +124,7 @@ class ProcessModule(BaseModule):
                         if match:
                             pid = int(match.group(1))
                             if pid != current_pid:
-                                subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True)
+                                subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True, startupinfo=si)
                                 killed.append(pid)
                                 print(f"   ✅ Убит потерянный процесс PID: {pid}")
             except Exception as e:
