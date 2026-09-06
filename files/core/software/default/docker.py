@@ -24,13 +24,7 @@ class DockerModule(BaseModule):
     @staticmethod
     def check_docker_installed() -> bool:
         try:
-            kwargs = {}
-            if os.name == 'nt':
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = subprocess.SW_HIDE
-                kwargs['startupinfo'] = startupinfo
-            subprocess.run(['docker', '--version'], capture_output=True, text=True, check=True, **kwargs)
+            subprocess.run(['docker', '--version'], capture_output=True, text=True, check=True)
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
@@ -38,23 +32,11 @@ class DockerModule(BaseModule):
     @staticmethod
     def check_docker_compose_installed() -> bool:
         try:
-            kwargs = {}
-            if os.name == 'nt':
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = subprocess.SW_HIDE
-                kwargs['startupinfo'] = startupinfo
-            subprocess.check_output(["docker", "compose", "version"], stderr=subprocess.DEVNULL, **kwargs)
+            subprocess.check_output(["docker", "compose", "version"], stderr=subprocess.DEVNULL)
             return True
         except (FileNotFoundError, subprocess.CalledProcessError):
             try:
-                kwargs = {}
-                if os.name == 'nt':
-                    startupinfo = subprocess.STARTUPINFO()
-                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                    startupinfo.wShowWindow = subprocess.SW_HIDE
-                    kwargs['startupinfo'] = startupinfo
-                subprocess.check_output(["docker-compose", "--version"], stderr=subprocess.DEVNULL, **kwargs)
+                subprocess.check_output(["docker-compose", "--version"], stderr=subprocess.DEVNULL)
                 return True
             except (FileNotFoundError, subprocess.CalledProcessError):
                 return False

@@ -1,4 +1,5 @@
 import subprocess
+import os
 import time
 from typing import List, Dict, Any
 from datetime import datetime
@@ -11,6 +12,17 @@ from files.core.utils.log_utils import LogManager
 logger = LogManager.get_logger('docker_windows')
 
 
+def _get_docker_kwargs():
+    """Возвращает kwargs для subprocess скрытия окна Docker Desktop на Windows"""
+    kwargs = {'timeout': 10}
+    if os.name == 'nt':
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        kwargs['startupinfo'] = startupinfo
+    return kwargs
+
+
 class DockerModule(BaseModule):
     """Windows Docker Desktop installation via winget"""
 
@@ -18,7 +30,7 @@ class DockerModule(BaseModule):
     def check_docker_installed() -> bool:
         """Check if Docker is installed on Windows"""
         try:
-            result = subprocess.run(['docker', '--version'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['docker', '--version'], capture_output=True, text=True, **_get_docker_kwargs())
             return result.returncode == 0
         except Exception:
             return False
@@ -27,11 +39,11 @@ class DockerModule(BaseModule):
     def check_docker_compose_installed() -> bool:
         """Check if Docker Compose is installed on Windows"""
         try:
-            result = subprocess.run(['docker', 'compose', 'version'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['docker', 'compose', 'version'], capture_output=True, text=True, **_get_docker_kwargs())
             return result.returncode == 0
         except Exception:
             try:
-                result = subprocess.run(['docker-compose', '--version'], capture_output=True, text=True, timeout=5)
+                result = subprocess.run(['docker-compose', '--version'], capture_output=True, text=True, **_get_docker_kwargs())
                 return result.returncode == 0
             except Exception:
                 return False
