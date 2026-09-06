@@ -17,28 +17,39 @@ from files.core.utils.log_utils import LogManager
 logger = LogManager.get_logger('docker_module')
 
 class DockerModule(BaseModule):
-    """Р РµР°Р»РёР·Р°С†РёСЏ Docker СѓС‚РёР»РёС‚ (РІРєР»СЋС‡Р°СЏ РіРµРЅРµСЂР°С†РёСЋ .env Рё docker-compose.yml)"""
+    """Реализация Docker утилит"""
     # ---------------------------
-    # РџСЂРѕРІРµСЂРєРё СѓСЃС‚Р°РЅРѕРІРєРё Docker
+    # Проверки установки Docker
     # ---------------------------
     @staticmethod
     def check_docker_installed() -> bool:
+        cached = get_global('docker_installed')
+        if cached is not None:
+            return cached
         try:
             subprocess.run(['docker', '--version'], capture_output=True, text=True, check=True)
+            set_global('docker_installed', True)
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
+            set_global('docker_installed', False)
             return False
 
     @staticmethod
     def check_docker_compose_installed() -> bool:
+        cached = get_global('docker_compose_installed')
+        if cached is not None:
+            return cached
         try:
             subprocess.check_output(["docker", "compose", "version"], stderr=subprocess.DEVNULL)
+            set_global('docker_compose_installed', True)
             return True
         except (FileNotFoundError, subprocess.CalledProcessError):
             try:
                 subprocess.check_output(["docker-compose", "--version"], stderr=subprocess.DEVNULL)
+                set_global('docker_compose_installed', True)
                 return True
             except (FileNotFoundError, subprocess.CalledProcessError):
+                set_global('docker_compose_installed', False)
                 return False
 
     # ---------------------------

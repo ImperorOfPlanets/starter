@@ -35,23 +35,11 @@ def _check_server_status(server_path, project_type):
     if not docker_mod:
         return 'unknown'
 
-    # Проверяем установлен ли Docker (с кешем на 60 сек)
-    import time
-    cache_key = '_docker_installed_cache'
-    cache_time_key = '_docker_installed_cache_time'
-    now = time.time()
-    cached_time = getattr(docker_mod, cache_time_key, 0)
-    cached_value = getattr(docker_mod, cache_key, None)
-
-    if cached_value is not None and (now - cached_time) < 60:
-        docker_installed = cached_value
-    else:
-        try:
-            docker_installed = docker_mod.check_docker_installed()
-        except Exception:
-            docker_installed = False
-        setattr(docker_mod, cache_key, docker_installed)
-        setattr(docker_mod, cache_time_key, now)
+    # Проверяем установлен ли Docker (кешируется через set_global в модуле)
+    try:
+        docker_installed = docker_mod.check_docker_installed()
+    except Exception:
+        return 'no_docker'
 
     if not docker_installed:
         return 'no_docker'
