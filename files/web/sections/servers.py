@@ -643,6 +643,16 @@ def install_server(data, session_obj):
             env_example = _generate_env_example(server_type, type_info, server_name or type_info['name'], subnet_octet, port, str(server_path))
             (docker_path / '.env').write_text(env_example, encoding='utf-8')
 
+        # Подставляем реальные пути из server_path в .env
+        env_path = docker_path / '.env'
+        if env_path.exists():
+            env_content = env_path.read_text(encoding='utf-8')
+            env_content = env_content.replace('${PATH_APP_CODE}', str(server_path / 'code'))
+            env_content = env_content.replace('${PATH_APP_DOCKER}', str(server_path / 'docker'))
+            env_content = env_content.replace('${PATH_APP_DOCKER_LOGS}', str(server_path / 'docker' / 'logs'))
+            env_content = env_content.replace('${PATH_APP_PROJECT}', str(server_path / 'code'))
+            env_path.write_text(env_content, encoding='utf-8')
+
         # Регистрируем через RegistryModule
         registry = get('registry')
         if registry:
@@ -873,11 +883,11 @@ SERVER_PORT={port}
 # Docker Network
 DOCKER_NETWORK_PREFIX={network_prefix}
 
-# Пути (абсолютные для совместимости с Docker)
-PATH_APP_DOCKER={server_path}/docker
-PATH_APP_DOCKER_LOGS={server_path}/docker/logs
-PATH_APP_CODE={server_path}/code
-PATH_APP_PROJECT={server_path}/code
+# Пути (плейсхолдеры — подставляются при установке)
+PATH_APP_DOCKER=${PATH_APP_DOCKER}
+PATH_APP_DOCKER_LOGS=${PATH_APP_DOCKER_LOGS}
+PATH_APP_CODE=${PATH_APP_CODE}
+PATH_APP_PROJECT=${PATH_APP_PROJECT}
 
 # Домен
 NGINX_DOMAIN=localhost
