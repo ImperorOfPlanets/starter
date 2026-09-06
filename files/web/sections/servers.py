@@ -870,16 +870,14 @@ networks:
 
 
 def _generate_env_example(server_type, type_info, server_name, subnet_octet=0, port=None, server_path=''):
-    """Р“РµРЅРµСЂРёСЂСѓРµС‚ .env.example СЃ РїРµСЂРµРјРµРЅРЅС‹РјРё РґР»СЏ docker-compose"""
+    """Генерирует .env.example с переменными для docker-compose"""
     port = port or type_info.get('default_port', 8000)
     network_prefix = f"172.{subnet_octet}" if subnet_octet > 0 else ""
-    project_name = server_type.replace('_', '-')
+    # Уникальное имя проекта на основе пути установки
+    project_name = Path(server_path).name if server_path else server_type.replace('_', '-')
 
     env = f"""# {type_info['name']}
 PROJECTNAME={project_name}
-SERVER_TYPE={server_type}
-SERVER_NAME={server_name}
-SERVER_PORT={port}
 
 # Docker Network
 DOCKER_NETWORK_PREFIX={network_prefix}
