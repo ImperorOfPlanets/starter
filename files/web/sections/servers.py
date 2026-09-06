@@ -16,6 +16,17 @@ from files.core.utils.log_utils import LogManager
 
 logger = LogManager.get_logger('web-servers')
 
+
+def _subprocess_kwargs(timeout=10):
+    """.kwargs для subprocess — скрытие окон на Windows"""
+    kwargs = {'capture_output': True, 'text': True, 'timeout': timeout}
+    if get_global('os') == 'Windows':
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
+        kwargs['startupinfo'] = si
+    return kwargs
+
 this_section_in_control_panel = True
 section_icon = "bi-hdd-rack"
 section_name = "Servers"
@@ -72,9 +83,10 @@ def _check_server_status(server_path, project_type):
     try:
         # Проверяем через docker compose ps
         import subprocess
+        kw = _subprocess_kwargs(10)
         result = subprocess.run(
             ['docker', 'compose', '-f', str(compose_path), 'ps', '-a', '--format', '{{.State}}'],
-            capture_output=True, text=True, timeout=10
+            **kw
         )
         if result.returncode == 0 and result.stdout.strip():
             states = result.stdout.strip().splitlines()
@@ -427,9 +439,11 @@ def _clone_repository(repo_url: str, repository: dict, target_dir: Path, logger,
                 log_msg(f"Clone failed with exit code {return_code}")
                 return {'success': False, 'error': f'Exit code {return_code}'}
         else:
+            kw = _subprocess_kwargs(120)
+            kw['env'] = env
             result = subprocess.run(
                 ['git', 'clone', '--branch', branch, '--depth', '1', clone_url, str(target_dir)],
-                capture_output=True, text=True, timeout=120, env=env
+                **kw
             )
             if result.returncode == 0:
                 logger.info(f"Successfully cloned {repo_url}")
@@ -489,9 +503,10 @@ def install_server(data, session_obj):
             if compose_file.exists():
                 import subprocess
                 try:
+                    kw = _subprocess_kwargs(30)
                     subprocess.run(
                         ['docker', 'compose', '-f', str(compose_file), 'down'],
-                        capture_output=True, timeout=30
+                        **kw
                     )
                 except Exception:
                     pass
@@ -916,12 +931,10 @@ def start_server(data, session_obj):
         return jsonify({'status': 'error', 'message': 'docker-compose.yml not found'})
 
     try:
+        kw = _subprocess_kwargs(120)
         result = subprocess.run(
             ['docker', 'compose', 'up', '-d'],
-            cwd=docker_path,
-            capture_output=True,
-            text=True,
-            timeout=120
+            cwd=docker_path, **kw
         )
         if result.returncode == 0:
             server['status'] = 'running'
@@ -961,12 +974,10 @@ def stop_server(data, session_obj):
         return jsonify({'status': 'error', 'message': 'Docker directory not found'})
 
     try:
+        kw = _subprocess_kwargs(60)
         result = subprocess.run(
             ['docker', 'compose', 'down'],
-            cwd=docker_path,
-            capture_output=True,
-            text=True,
-            timeout=60
+            cwd=docker_path, **kw
         )
         if result.returncode == 0:
             # Обновляем статус в реестре
@@ -1054,29 +1065,30 @@ def server_repo_info(data, session_obj):
         return {'status': 'success', 'repo': None, 'message': 'Not a git repository'}
 
     try:
+        kw = _subprocess_kwargs(5)
         url = subprocess.run(
             ['git', 'remote', 'get-url', 'origin'],
-            cwd=str(code_path), capture_output=True, text=True, timeout=5
+            cwd=str(code_path), **kw
         ).stdout.strip()
 
         branch = subprocess.run(
             ['git', 'branch', '--show-current'],
-            cwd=str(code_path), capture_output=True, text=True, timeout=5
+            cwd=str(code_path), **kw
         ).stdout.strip()
 
         commit = subprocess.run(
             ['git', 'log', '-1', '--format=%H'],
-            cwd=str(code_path), capture_output=True, text=True, timeout=5
+            cwd=str(code_path), **kw
         ).stdout.strip()
 
         commit_msg = subprocess.run(
             ['git', 'log', '-1', '--format=%s'],
-            cwd=str(code_path), capture_output=True, text=True, timeout=5
+            cwd=str(code_path), **kw
         ).stdout.strip()
 
         commit_date = subprocess.run(
             ['git', 'log', '-1', '--format=%ci'],
-            cwd=str(code_path), capture_output=True, text=True, timeout=5
+            cwd=str(code_path), **kw
         ).stdout.strip()
 
         return {
@@ -1113,18 +1125,19 @@ def update_server(data, session_obj):
         return {'status': 'error', 'message': 'Not a git repository'}
 
     try:
+        kw = _subprocess_kwargs(60)
         result = subprocess.run(
             ['git', 'pull'],
-            cwd=str(code_path), capture_output=True, text=True, timeout=60
+            cwd=str(code_path), **kw
         )
 
         if result.returncode == 0:
             compose_file = server_path / 'docker' / 'docker-compose.yml'
             if compose_file.exists():
+                kw2 = _subprocess_kwargs(120)
                 docker_result = subprocess.run(
                     ['docker', 'compose', 'up', '-d'],
-                    cwd=str(server_path / 'docker'),
-                    capture_output=True, text=True, timeout=120
+                    cwd=str(server_path / 'docker'), **kw2
                 )
                 if docker_result.returncode == 0:
                     return {'status': 'success', 'message': 'Сервер обновлён и перезапущен'}
