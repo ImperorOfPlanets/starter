@@ -132,21 +132,22 @@ def _get_user_servers(session_obj):
                 type_info = SERVER_TYPES.get(project_type, {})
                 has_web_interface = type_info.get('has_web_interface', False)
 
-                # Проверяем есть ли git и есть ли обновления
+                # Проверяем git и обновления
                 has_git = False
                 has_update = False
                 code_path = Path(path) / 'code'
                 if (code_path / '.git').exists():
                     has_git = True
                     try:
+                        import subprocess
                         kw = _subprocess_kwargs(5)
-                        # Проверяем есть ли remote
-                        remote = subprocess.run(
+                        # Проверяем remote URL
+                        remote_url = subprocess.run(
                             ['git', 'remote', 'get-url', 'origin'],
                             cwd=str(code_path), **kw
                         ).stdout.strip()
-                        if remote:
-                            # Fetch и сравниваем с local
+                        if remote_url:
+                            # Fetch и сравниваем коммиты
                             subprocess.run(
                                 ['git', 'fetch', '--quiet'],
                                 cwd=str(code_path), **_subprocess_kwargs(10)
@@ -159,7 +160,7 @@ def _get_user_servers(session_obj):
                                 ['git', 'rev-parse', '@{u}'],
                                 cwd=str(code_path), **kw
                             ).stdout.strip()
-                            has_update = local != remote_hash and bool(remote_hash)
+                            has_update = bool(remote_hash) and local != remote_hash
                     except Exception:
                         pass
 
@@ -1302,7 +1303,7 @@ def update_server(data, session_obj):
 
 
 def server_git_log(data, session_obj):
-    """Получить последние коммиты сервера"""
+    """Получить последние коммиты + статус обновления из server_types"""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
         return {'status': 'error', 'message': 'Unauthorized'}
@@ -1317,10 +1318,44 @@ def server_git_log(data, session_obj):
     code_path = server_path / 'code'
 
     if not (code_path / '.git').exists():
-        return {'status': 'success', 'log': [], 'message': 'Not a git repository'}
+        return {'status': 'success', 'log': [], 'has_update': False, 'message': 'Not a git repository'}
 
     try:
         kw = _subprocess_kwargs(10)
+
+        # Получаем URL remote
+        remote_url = subprocess.run(
+            ['git', 'remote', 'get-url', 'origin'],
+            cwd=str(code_path), **kw
+        ).stdout.strip()
+
+        # Получаем текущий коммит
+        local_commit = subprocess.run(
+            ['git', 'rev-parse', 'HEAD'],
+            cwd=str(code_path), **kw
+        ).stdout.strip()
+
+        # Получаем ветку
+        branch = subprocess.run(
+            ['git', 'branch', '--show-current'],
+            cwd=str(code_path), **kw
+        ).stdout.strip()
+
+        # Fetch remote и получаем удалённый коммит
+        has_update = False
+        remote_commit = ''
+        if remote_url:
+            subprocess.run(
+                ['git', 'fetch', '--quiet'],
+                cwd=str(code_path), **_subprocess_kwargs(15)
+            )
+            remote_commit = subprocess.run(
+                ['git', 'rev-parse', '@{u}'],
+                cwd=str(code_path), **kw
+            ).stdout.strip()
+            has_update = bool(remote_commit) and local_commit != remote_commit
+
+        # Получаем последние коммиты
         result = subprocess.run(
             ['git', 'log', '-10', '--format=%H|%h|%s|%ci|%an'],
             cwd=str(code_path), **kw
@@ -1339,6 +1374,14 @@ def server_git_log(data, session_obj):
                         'author': parts[4],
                     })
 
-        return {'status': 'success', 'log': log}
+        return {
+            'status': 'success',
+            'log': log,
+            'has_update': has_update,
+            'remote_url': remote_url,
+            'local_commit': local_commit[:12],
+            'remote_commit': remote_commit[:12] if remote_commit else '',
+            'branch': branch,
+        }
     except Exception as e:
-        return {'status': 'error', 'message': str(e)}
+        return {'status': 'error', 'message': str(e), 'log': [], 'has_update': False}
