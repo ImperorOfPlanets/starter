@@ -158,10 +158,12 @@ def install_package(data, session):
     if not package or package not in COMPONENT_CONFIG:
         return jsonify({'status': 'error', 'message': 'Invalid package name'})
     
-    # Убеждаемся что starter_path установлен
+    # Убеждаемся что starter_path установлен в глобальных переменных
     if not get_global('starter_path'):
         from pathlib import Path
-        set_global('starter_path', Path(__file__).resolve().parent.parent.parent.parent.parent.parent)
+        starter = Path(__file__).resolve().parent.parent.parent.parent.parent.parent
+        set_global('starter_path', starter)
+        set_global('venv_path', starter / 'venv')
     
     config = COMPONENT_CONFIG[package]
     
