@@ -159,12 +159,9 @@ def install_package(data, session):
         return jsonify({'status': 'error', 'message': 'Invalid package name'})
     
     # Убеждаемся что starter_path установлен в глобальных переменных
-    if not get_global('starter_path'):
-        from pathlib import Path
-        # dashboard.py лежит в files/web/sections/ → 4 уровня вверх до starter
-        starter = Path(__file__).resolve().parent.parent.parent.parent
-        set_global('starter_path', starter)
-        set_global('venv_path', starter / 'venv')
+    starter = Path(__file__).resolve().parent.parent.parent.parent
+    set_global('starter_path', starter)
+    set_global('venv_path', starter / 'venv')
     
     config = COMPONENT_CONFIG[package]
     
