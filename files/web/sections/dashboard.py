@@ -161,7 +161,7 @@ def install_package(data, session):
     # Убеждаемся что starter_path установлен в глобальных переменных
     if not get_global('starter_path'):
         from pathlib import Path
-        starter = Path(__file__).resolve().parent.parent.parent.parent.parent.parent
+        starter = Path(__file__).resolve().parent.parent.parent.parent
         set_global('starter_path', starter)
         set_global('venv_path', starter / 'venv')
     
