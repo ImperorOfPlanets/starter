@@ -80,8 +80,8 @@ class ServiceModule(BaseModule):
     @staticmethod
     def install_service(log_file_path: str = None) -> Dict[str, Any]:
         result = {'status': 'success', 'message': '', 'logs': []}
-        starter_path = get_global('starter_path')
-        venv_path = get_global('venv_path', starter_path / 'venv')
+        starter_path = get_global('starter_path') or Path(__file__).parent.parent.parent.parent.parent
+        venv_path = get_global('venv_path') or starter_path / 'venv'
         venv_python = venv_path / "Scripts" / "python.exe"
         script_path = starter_path / "starter.py"
         pythonw = venv_path / "Scripts" / "pythonw.exe"
@@ -152,8 +152,8 @@ goto loop
 
     @staticmethod
     def service_action(action: str) -> Dict[str, Any]:
-        starter_path = get_global('starter_path')
-        venv_path = get_global('venv_path', starter_path / 'venv')
+        starter_path = get_global('starter_path') or Path(__file__).parent.parent.parent.parent.parent
+        venv_path = get_global('venv_path') or starter_path / 'venv'
         pythonw = venv_path / "Scripts" / "pythonw.exe"
         script_path = starter_path / "starter.py"
 
