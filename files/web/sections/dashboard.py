@@ -158,6 +158,11 @@ def install_package(data, session):
     if not package or package not in COMPONENT_CONFIG:
         return jsonify({'status': 'error', 'message': 'Invalid package name'})
     
+    # Убеждаемся что starter_path установлен
+    if not get_global('starter_path'):
+        from pathlib import Path
+        set_global('starter_path', Path(__file__).resolve().parent.parent.parent.parent.parent.parent)
+    
     config = COMPONENT_CONFIG[package]
     
     try:
