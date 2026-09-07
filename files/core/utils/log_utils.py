@@ -18,6 +18,9 @@ class LogManager:
         if starter_path:
             log_dir = starter_path / "files" / "logs"
             log_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            log_dir = Path.cwd() / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
         
         # Основной логгер приложения
         main_logger = logging.getLogger('starter')
