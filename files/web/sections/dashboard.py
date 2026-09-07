@@ -161,10 +161,8 @@ def install_package(data, session):
     # Убеждаемся что starter_path установлен в глобальных переменных
     if not get_global('starter_path'):
         from pathlib import Path
-        starter = Path.cwd()
-        # Если cwd не содержит starter.py, ищем в родительских
-        if not (starter / 'starter.py').exists():
-            starter = starter.parent
+        # dashboard.py лежит в files/web/sections/ → 4 уровня вверх до starter
+        starter = Path(__file__).resolve().parent.parent.parent.parent
         set_global('starter_path', starter)
         set_global('venv_path', starter / 'venv')
     

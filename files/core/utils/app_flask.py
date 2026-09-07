@@ -121,9 +121,8 @@ def configure_app() -> Flask:
     def ensure_starter_path():
         """Убеждаемся что starter_path установлен"""
         if not get_global('starter_path'):
-            starter = Path.cwd()
-            if not (starter / 'starter.py').exists():
-                starter = starter.parent
+            # app_flask.py лежит в files/core/utils/ → 4 уровня вверх до starter
+            starter = Path(__file__).resolve().parent.parent.parent.parent
             set_global('starter_path', starter)
             set_global('venv_path', starter / 'venv')
 
