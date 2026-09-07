@@ -49,9 +49,11 @@ class LogManager:
     @classmethod
     def register_log_dir(cls, logger_name, subdirectory):
         """Регистрирует специальную директорию для логгера"""
-        log_dir = get_global('starter_path') / "files" / "logs" / subdirectory
-        log_dir.mkdir(parents=True, exist_ok=True)
-        cls._log_dirs[logger_name] = log_dir
+        starter_path = get_global('starter_path')
+        if starter_path:
+            log_dir = starter_path / "files" / "logs" / subdirectory
+            log_dir.mkdir(parents=True, exist_ok=True)
+            cls._log_dirs[logger_name] = log_dir
     
     @classmethod
     def get_logger(cls, name=None):
