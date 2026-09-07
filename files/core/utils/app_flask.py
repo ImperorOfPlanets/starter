@@ -121,8 +121,11 @@ def configure_app() -> Flask:
     def ensure_starter_path():
         """Убеждаемся что starter_path установлен"""
         if not get_global('starter_path'):
-            set_global('starter_path', Path(__file__).resolve().parent.parent.parent.parent)
-            set_global('venv_path', get_global('starter_path') / 'venv')
+            starter = Path.cwd()
+            if not (starter / 'starter.py').exists():
+                starter = starter.parent
+            set_global('starter_path', starter)
+            set_global('venv_path', starter / 'venv')
 
     @app.before_request
     def initialize_session():
