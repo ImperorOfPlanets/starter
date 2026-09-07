@@ -8,7 +8,7 @@ from flask_session import Session
 from pathlib import Path
 
 from files.core.utils.loader_utils import get
-from files.core.utils.globalVars_utils import get_global
+from files.core.utils.globalVars_utils import get_global, set_global
 from files.web.routes import routes
 
 from files.core.utils.log_utils import LogManager
@@ -117,6 +117,13 @@ def configure_app() -> Flask:
 
     app.session_initialized = False
     
+    @app.before_request
+    def ensure_starter_path():
+        """Убеждаемся что starter_path установлен"""
+        if not get_global('starter_path'):
+            set_global('starter_path', Path(__file__).resolve().parent.parent.parent.parent)
+            set_global('venv_path', get_global('starter_path') / 'venv')
+
     @app.before_request
     def initialize_session():
         if not app.session_initialized:
