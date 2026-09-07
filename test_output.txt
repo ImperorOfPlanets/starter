@@ -1,0 +1,600 @@
+
+============================================================
+🚀 ЗАПУСК СТАРТЕРА СЕРВЕРА
+============================================================
+Текущий PID: 5912
+Python: C:\control\starter\venv\Scripts\python.exe
+ОС: Windows
+
+🔧 ЭТАП 1: SystemModule - сбор информации о системе
+----------------------------------------
+📄 Путь к скрипту (script_path): C:\control\starter\starter.py
+📁 Путь к папке (starter_path): C:\control\starter
+🔧 Режим отладки: ВЫКЛЮЧЕН
+🐳 В Docker: Нет
+   ✅ starter_path: C:\control\starter
+   ✅ starter_path: C:\control\starter
+
+📝 ЭТАП 2: LogManager - инициализация логирования
+----------------------------------------
+   ✅ Логгер создан
+
+📦 ЭТАП 5: Проверка зависимостей и виртуального окружения
+----------------------------------------
+
+   🔍 ПРОВЕРКА УСТАНОВЛЕННЫХ МОДУЛЕЙ:
+      ✅ Flask - установлен
+      ✅ Flask-Session - установлен
+      ✅ python-dotenv - установлен
+      ✅ pyOpenSSL - установлен
+      ✅ psutil - установлен
+      ✅ PyYAML - установлен
+      ✅ requests - установлен
+
+══════════════════════════════════════════════════════════════════════
+🔍 ОТЛАДОЧНАЯ ИНФОРМАЦИЯ DEPENDENCIES
+══════════════════════════════════════════════════════════════════════
+
+📦 ВИРТУАЛЬНОЕ ОКРУЖЕНИЕ:
+   В venv: ✅ Да
+   Путь: C:\control\starter\venv
+   Существует: ✅
+   Python в venv: C:\control\starter\venv\Scripts\python.exe
+
+📦 КРИТИЧЕСКИЕ МОДУЛИ:
+   ✅ Flask
+   ✅ Flask-Session
+   ✅ python-dotenv
+   ✅ pyOpenSSL
+   ✅ psutil
+   ✅ PyYAML
+   ✅ requests
+
+📄 ФАЙЛ ЗАВИСИМОСТЕЙ:
+   Не найден
+══════════════════════════════════════════════════════════════════════
+
+
+══════════════════════════════════════════════════════════════════════
+🔧 ПРОВЕРКА И НАСТРОЙКА ЗАВИСИМОСТЕЙ
+══════════════════════════════════════════════════════════════════════
+✅ Уже в виртуальном окружении
+
+══════════════════════════════════════════════════════════════════════
+🔍 ПОИСК ФАЙЛА ЗАВИСИМОСТЕЙ
+══════════════════════════════════════════════════════════════════════
+📁 Директория поиска: C:\control\starter\files\requirements
+   Существует: ✅
+
+🔍 [DEBUG] ПАРАМЕТРЫ ПОИСКА:
+   reqs_dir = C:\control\starter\files\requirements
+   os_info['name'] = 'windows'
+   os_info['family'] = 'unknown'
+   os_info['version'] = '10.0.26200'
+   os_info['system'] = 'windows'
+
+📁 СОДЕРЖИМОЕ ДИРЕКТОРИИ C:\control\starter\files\requirements:
+--------------------------------------------------
+   📄 ФАЙЛ: default.txt (594 байт)
+   📁 ПАПКА: linux/
+      📄 ФАЙЛ: 8.txt (628 байт)
+      📄 ФАЙЛ: 9.txt (628 байт)
+      📄 ФАЙЛ: default.txt (594 байт)
+      📄 ФАЙЛ: requirements.txt (1258 байт)
+   📁 ПАПКА: windows/
+      📄 ФАЙЛ: default.txt (754 байт)
+--------------------------------------------------
+
+🖥️  ИНФОРМАЦИЯ ОБ ОС:
+   os_name: 'windows'
+   os_family: 'unknown'
+   os_version: '10.0.26200'
+   system: 'windows'
+
+🔎 ПУТИ ДЛЯ ПОИСКА (В ПОРЯДКЕ ПРИОРИТЕТА):
+--------------------------------------------------
+   1. specific_version: windows/10.0.26200.txt
+      Полный путь: C:\control\starter\files\requirements\windows\10.0.26200.txt
+   2. os_name_default: windows/default.txt
+      Полный путь: C:\control\starter\files\requirements\windows\default.txt
+   4. global_default: default.txt
+      Полный путь: C:\control\starter\files\requirements\default.txt
+
+🔎 РЕЗУЛЬТАТЫ ПОИСКА:
+--------------------------------------------------
+   specific_version          -> C:\control\starter\files\requirements\windows\10.0.26200.txt [❌ не найден]
+   os_name_default           -> C:\control\starter\files\requirements\windows\default.txt [✅ НАЙДЕН] (754 байт)
+
+   🎯 ВЫБРАН ФАЙЛ: default.txt
+      Источник: os_name_default
+      Полный путь: C:\control\starter\files\requirements\windows\default.txt
+      Размер: 754 байт
+
+   📄 СОДЕРЖИМОЕ ФАЙЛА default.txt:
+   ----------------------------------------
+    1. # Web Framework
+    2. Flask>=2.0
+    3. Flask-Session>=0.4.0
+    4. Werkzeug>=2.0
+    6. # Environment Configuration
+    7. python-dotenv>=0.19
+    9. # HTTP and Networking
+   10. certifi>=2021.10
+   11. idna>=2.10
+   12. requests>=2.25
+   13. urllib3>=1.26
+   15. # Data Processing and Parsing
+   ... и еще 28 строк
+   ----------------------------------------
+
+📄 ДЕТАЛЬНЫЙ АНАЛИЗ ФАЙЛА: default.txt
+============================================================
+📊 СТАТИСТИКА ФАЙЛА:
+   Размер: 754 байт
+   Всего строк: 43
+   Строк с комментариями: 10
+   Строк с зависимостями: 24
+
+📦 СПИСОК ПАКЕТОВ ИЗ ФАЙЛА:
+    1. Flask
+    2. Flask-Session
+    3. Werkzeug
+    4. python-dotenv
+    5. certifi
+    6. idna
+    7. requests
+    8. urllib3
+    9. chardet
+   10. PyYAML
+   11. python-dateutil
+   12. psutil
+   13. pyOpenSSL
+   14. cryptography
+   15. typing-extensions
+   16. importlib-metadata
+       (условная установка: python_version < '3.8')
+   17. zipfile38
+       (условная установка: python_version < '3.8')
+   18. pywin32
+   19. winshell
+   20. pystray
+   21. Pillow
+   22. plyer
+   23. pywin32
+   24. winshell
+
+🎯 ПРОВЕРКА ПАКЕТОВ ДЛЯ ТРЕЯ:
+   ✅ pystray (иконка в трее)
+   ✅ Pillow (иконка в трее)
+   ✅ plyer (уведомления)
+============================================================
+
+══════════════════════════════════════════════════════════════════════
+📦 ПРОВЕРКА ЗАВИСИМОСТЕЙ ИЗ ФАЙЛА
+══════════════════════════════════════════════════════════════════════
+📄 Файл: C:\control\starter\files\requirements\windows\default.txt
+--------------------------------------------------
+   ❌ Flask - НЕ УСТАНОВЛЕН
+   ❌ Flask-Session - НЕ УСТАНОВЛЕН
+   ❌ Werkzeug - НЕ УСТАНОВЛЕН
+   ❌ python-dotenv - НЕ УСТАНОВЛЕН
+   ✅ certifi - УСТАНОВЛЕН
+   ✅ idna - УСТАНОВЛЕН
+   ✅ requests - УСТАНОВЛЕН
+   ✅ urllib3 - УСТАНОВЛЕН
+   ✅ chardet - УСТАНОВЛЕН
+   ❌ PyYAML - НЕ УСТАНОВЛЕН
+   ❌ python-dateutil - НЕ УСТАНОВЛЕН
+   ✅ psutil - УСТАНОВЛЕН
+   ❌ pyOpenSSL - НЕ УСТАНОВЛЕН
+   ✅ cryptography - УСТАНОВЛЕН
+   ✅ typing-extensions - УСТАНОВЛЕН
+   ✅ importlib-metadata - УСТАНОВЛЕН
+   ✅ zipfile38 - УСТАНОВЛЕН
+   ❌ pywin32 - НЕ УСТАНОВЛЕН
+   ✅ winshell - УСТАНОВЛЕН
+   ✅ pystray - УСТАНОВЛЕН
+   ❌ Pillow - НЕ УСТАНОВЛЕН
+   ✅ plyer - УСТАНОВЛЕН
+   ❌ pywin32 - НЕ УСТАНОВЛЕН
+   ✅ winshell - УСТАНОВЛЕН
+--------------------------------------------------
+📊 ИТОГО: 14/24 установлено
+   ❌ ОТСУТСТВУЮТ: Flask, Flask-Session, Werkzeug, python-dotenv, PyYAML, python-dateutil, pyOpenSSL, pywin32, Pillow, pywin32
+══════════════════════════════════════════════════════════════════════
+
+
+⚠️ Отсутствуют модули: Flask, Flask-Session, Werkzeug, python-dotenv, PyYAML, python-dateutil, pyOpenSSL, pywin32, Pillow, pywin32
+
+📦 Установка отсутствующих модулей: Flask, Flask-Session, Werkzeug, python-dotenv, PyYAML, python-dateutil, pyOpenSSL, pywin32, Pillow, pywin32
+   ✅ Установлены: flask, Flask-Session, werkzeug, python-dotenv, pyyaml, python-dateutil, pyopenssl, pywin32, pillow, pywin32
+✅ Недостающие модули установлены
+   ✅ Зависимости настроены
+
+🔧 ЭТАП 7: Управление процессами
+----------------------------------------
+   🧹 Очистка потерянных процессов...
+
+🧹 ОЧИСТКА ПОТЕРЯННЫХ ПРОЦЕССОВ
+----------------------------------------
+
+🧹 ПОИСК И УБИЙСТВО ПОТЕРЯННЫХ ПРОЦЕССОВ
+--------------------------------------------------
+   ✅ Файлы сессий очищены
+   📝 Регистрация процесса...
+      PID: 5912, is_child: False
+   ⚡ Настройка обработчиков сигналов...
+   🔗 Связывание процессов...
+   ✅ Управление процессами активировано
+
+📦 ЭТАП 8: Загрузка модулей
+----------------------------------------
+
+══════════════════════════════════════════════════════════════════════
+🔍 ЗАГРУЗКА МОДУЛЕЙ
+══════════════════════════════════════════════════════════════════════
+📁 starter_path: C:\control\starter
+🖥️ Текущая ОС: Windows 10.0.26200
+
+
+📂 Категория: OSS
+   Базовая директория: C:\control\starter\files\core\oss
+   Существует: ✅
+
+   Пути поиска (в порядке приоритета):
+      [0] C:\control\starter\files\core\oss\Windows\10.0.26200 [❌ не найден]
+      [1] C:\control\starter\files\core\oss\Windows\default [✅ НАЙДЕН]
+
+   Сканирование файлов в: C:\control\starter\files\core\oss\Windows\default
+      Найдено .py файлов: 4
+
+      📄 Обработка: network.py -> модуль 'network'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'network' загружен (уровень 1, методов: 1)
+
+      📄 Обработка: portmanager.py -> модуль 'portmanager'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'portmanager' загружен (уровень 1, методов: 1)
+
+      📄 Обработка: service.py -> модуль 'service'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'service' загружен (уровень 1, методов: 9)
+
+      📄 Обработка: system.py -> модуль 'system'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'system' загружен (уровень 1, методов: 5)
+      [2] C:\control\starter\files\core\oss\default [✅ НАЙДЕН]
+
+   Сканирование файлов в: C:\control\starter\files\core\oss\default
+      Найдено .py файлов: 22
+
+      📄 Обработка: admin.py -> модуль 'admin'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'admin' загружен (уровень 2, методов: 7)
+
+      📄 Обработка: crypto.py -> модуль 'crypto'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'crypto' загружен (уровень 2, методов: 8)
+
+      📄 Обработка: exception.py -> модуль 'exception'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'exception' загружен (уровень 2, методов: 4)
+
+      📄 Обработка: firewall.py -> модуль 'firewall'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'firewall' загружен (уровень 2, методов: 18)
+
+      📄 Обработка: fs.py -> модуль 'fs'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'fs' загружен (уровень 2, методов: 11)
+
+      📄 Обработка: i18n.py -> модуль 'i18n'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'i18n' загружен (уровень 2, методов: 7)
+
+      📄 Обработка: network.py -> модуль 'network'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'network' загружен (уровень 2, методов: 15)
+
+      📄 Обработка: packages.py -> модуль 'packages'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'packages' загружен (уровень 2, методов: 0)
+
+      📄 Обработка: portmanager.py -> модуль 'portmanager'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'portmanager' загружен (уровень 2, методов: 1)
+
+      📄 Обработка: process.py -> модуль 'process'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'process' загружен (уровень 2, методов: 23)
+
+      📄 Обработка: registry.py -> модуль 'registry'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'registry' загружен (уровень 2, методов: 21)
+
+      📄 Обработка: requirements.py -> модуль 'requirements'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'requirements' загружен (уровень 2, методов: 17)
+
+      📄 Обработка: servers.py -> модуль 'servers'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'servers' загружен (уровень 2, методов: 17)
+
+      📄 Обработка: serverupdates.py -> модуль 'serverupdates'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'serverupdates' загружен (уровень 2, методов: 8)
+
+      📄 Обработка: service.py -> модуль 'service'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'service' загружен (уровень 2, методов: 7)
+
+      📄 Обработка: setup.py -> модуль 'setup'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'setup' загружен (уровень 2, методов: 22)
+
+      📄 Обработка: ssl.py -> модуль 'ssl'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'ssl' загружен (уровень 2, методов: 6)
+
+      📄 Обработка: system.py -> модуль 'system'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'system' загружен (уровень 2, методов: 7)
+
+      📄 Обработка: tray.py -> модуль 'tray'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'tray' загружен (уровень 2, методов: 7)
+
+      📄 Обработка: updates.py -> модуль 'updates'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'updates' загружен (уровень 2, методов: 20)
+
+      📄 Обработка: update_checker.py -> модуль 'update_checker'
+         🔄 Загрузка модуля...
+         ❌ Класс Update_checkerModule не найден в модуле
+            Доступные классы: ['BaseModule', 'CHECK_INTERVAL_SECONDS', 'CHECK_STATE_FILE', 'Dict', 'List', 'LogManager', 'Optional', 'Path', 'UpdateCheckerModule', 'datetime', 'get_global', 'json', 'logger', 'set_global', 'subprocess', 'threading', 'time', 'timedelta']
+         ❌ Не удалось загрузить класс модуля
+
+      📄 Обработка: users.py -> модуль 'users'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'users' загружен (уровень 2, методов: 17)
+
+📂 Категория: SOFTWARE
+   Базовая директория: C:\control\starter\files\core\software
+   Существует: ✅
+
+   Пути поиска (в порядке приоритета):
+      [0] C:\control\starter\files\core\software\Windows\10.0.26200 [❌ не найден]
+      [1] C:\control\starter\files\core\software\Windows\default [✅ НАЙДЕН]
+
+   Сканирование файлов в: C:\control\starter\files\core\software\Windows\default
+      Найдено .py файлов: 4
+
+      📄 Обработка: docker.py -> модуль 'docker'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'docker' загружен (уровень 1, методов: 5)
+
+      📄 Обработка: git.py -> модуль 'git'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'git' загружен (уровень 1, методов: 1)
+
+      📄 Обработка: knocking.py -> модуль 'knocking'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'knocking' загружен (уровень 1, методов: 12)
+
+      📄 Обработка: tailscale.py -> модуль 'tailscale'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'tailscale' загружен (уровень 1, методов: 2)
+      [2] C:\control\starter\files\core\software\default [✅ НАЙДЕН]
+
+   Сканирование файлов в: C:\control\starter\files\core\software\default
+      Найдено .py файлов: 12
+
+      📄 Обработка: docker.py -> модуль 'docker'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'docker' загружен (уровень 2, методов: 43)
+
+      📄 Обработка: env.py -> модуль 'env'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'env' загружен (уровень 2, методов: 9)
+
+      📄 Обработка: git.py -> модуль 'git'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'git' загружен (уровень 2, методов: 7)
+
+      📄 Обработка: git_service.py -> модуль 'git_service'
+         🔄 Загрузка модуля...
+         ❌ Класс Git_serviceModule не найден в модуле
+            Доступные классы: ['Dict', 'GitService', 'Optional', 'subprocess', 'urllib']
+         ❌ Не удалось загрузить класс модуля
+
+      📄 Обработка: knocking.py -> модуль 'knocking'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'knocking' загружен (уровень 2, методов: 8)
+
+      📄 Обработка: notification.py -> модуль 'notification'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'notification' загружен (уровень 2, методов: 7)
+
+      📄 Обработка: oauth.py -> модуль 'oauth'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'oauth' загружен (уровень 2, методов: 14)
+
+      📄 Обработка: reverse_proxy.py -> модуль 'reverse_proxy'
+         🔄 Загрузка модуля...
+         ❌ Класс Reverse_proxyModule не найден в модуле
+            Доступные классы: ['BaseModule', 'Dict', 'LogManager', 'Optional', 'Path', 'ReverseProxyModule', 'get_global', 'json', 'logger', 'os', 'requests', 'set_global', 'subprocess']
+         ❌ Не удалось загрузить класс модуля
+
+      📄 Обработка: serverapi.py -> модуль 'serverapi'
+         🔄 Загрузка модуля...
+         ❌ Класс ServerapiModule не найден в модуле
+            Доступные классы: ['CACHE_TTL', 'Dict', 'List', 'LogManager', 'Optional', 'check_server_access', 'clear_cache', 'fetch_available_servers', 'fetch_user_servers', 'get_myidon_url', 'logger', 'merge_server_types', 'requests', 'time']
+         ❌ Не удалось загрузить класс модуля
+
+      📄 Обработка: servertype.py -> модуль 'servertype'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'servertype' загружен (уровень 2, методов: 7)
+
+      📄 Обработка: settings.py -> модуль 'settings'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'settings' загружен (уровень 2, методов: 3)
+
+      📄 Обработка: tailscale.py -> модуль 'tailscale'
+         🔄 Загрузка модуля...
+         ✅ Модуль 'tailscale' загружен (уровень 2, методов: 9)
+
+══════════════════════════════════════════════════════════════════════
+📊 ИТОГИ ЗАГРУЗКИ МОДУЛЕЙ
+══════════════════════════════════════════════════════════════════════
+   ✅ Всего загружено модулей: 34
+
+   📋 Список загруженных модулей:
+      - admin (1 реализаций)
+          └─ [GLOBAL_DEFAULT] admin.py
+      - crypto (1 реализаций)
+          └─ [GLOBAL_DEFAULT] crypto.py
+      - docker (2 реализаций)
+          └─ [OS_DEFAULT] docker.py
+          └─ [GLOBAL_DEFAULT] docker.py
+      - env (1 реализаций)
+          └─ [GLOBAL_DEFAULT] env.py
+      - exception (1 реализаций)
+          └─ [GLOBAL_DEFAULT] exception.py
+      - firewall (1 реализаций)
+          └─ [GLOBAL_DEFAULT] firewall.py
+      - fs (1 реализаций)
+          └─ [GLOBAL_DEFAULT] fs.py
+      - git (2 реализаций)
+          └─ [OS_DEFAULT] git.py
+          └─ [GLOBAL_DEFAULT] git.py
+      - git_service (0 реализаций)
+      - i18n (1 реализаций)
+          └─ [GLOBAL_DEFAULT] i18n.py
+      - knocking (2 реализаций)
+          └─ [OS_DEFAULT] knocking.py
+          └─ [GLOBAL_DEFAULT] knocking.py
+      - network (2 реализаций)
+          └─ [OS_DEFAULT] network.py
+          └─ [GLOBAL_DEFAULT] network.py
+      - notification (1 реализаций)
+          └─ [GLOBAL_DEFAULT] notification.py
+      - oauth (1 реализаций)
+          └─ [GLOBAL_DEFAULT] oauth.py
+      - packages (1 реализаций)
+          └─ [GLOBAL_DEFAULT] packages.py
+      - portmanager (2 реализаций)
+          └─ [OS_DEFAULT] portmanager.py
+          └─ [GLOBAL_DEFAULT] portmanager.py
+      - process (1 реализаций)
+          └─ [GLOBAL_DEFAULT] process.py
+      - registry (1 реализаций)
+          └─ [GLOBAL_DEFAULT] registry.py
+      - requirements (1 реализаций)
+          └─ [GLOBAL_DEFAULT] requirements.py
+      - reverse_proxy (0 реализаций)
+      - serverapi (0 реализаций)
+      - servers (1 реализаций)
+          └─ [GLOBAL_DEFAULT] servers.py
+      - servertype (1 реализаций)
+          └─ [GLOBAL_DEFAULT] servertype.py
+      - serverupdates (1 реализаций)
+          └─ [GLOBAL_DEFAULT] serverupdates.py
+      - service (2 реализаций)
+          └─ [OS_DEFAULT] service.py
+          └─ [GLOBAL_DEFAULT] service.py
+      - settings (1 реализаций)
+          └─ [GLOBAL_DEFAULT] settings.py
+      - setup (1 реализаций)
+          └─ [GLOBAL_DEFAULT] setup.py
+      - ssl (1 реализаций)
+          └─ [GLOBAL_DEFAULT] ssl.py
+      - system (2 реализаций)
+          └─ [OS_DEFAULT] system.py
+          └─ [GLOBAL_DEFAULT] system.py
+      - tailscale (2 реализаций)
+          └─ [OS_DEFAULT] tailscale.py
+          └─ [GLOBAL_DEFAULT] tailscale.py
+      - tray (1 реализаций)
+          └─ [GLOBAL_DEFAULT] tray.py
+      - update_checker (0 реализаций)
+      - updates (1 реализаций)
+          └─ [GLOBAL_DEFAULT] updates.py
+      - users (1 реализаций)
+          └─ [GLOBAL_DEFAULT] users.py
+══════════════════════════════════════════════════════════════════════
+
+   ✅ Загружено 34 модулей
+
+══════════════════════════════════════════════════════════════════════
+🔧 ИНИЦИАЛИЗАЦИЯ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ МОДУЛЕЙ
+══════════════════════════════════════════════════════════════════════
+
+   Порядок инициализации (от общего к специфичному):
+      🟢 GLOBAL_DEFAULT - service
+      🟢 GLOBAL_DEFAULT - admin
+      🟢 GLOBAL_DEFAULT - crypto
+      🟢 GLOBAL_DEFAULT - exception
+      🟢 GLOBAL_DEFAULT - fs
+      🟢 GLOBAL_DEFAULT - i18n
+      🟢 GLOBAL_DEFAULT - process
+      🟢 GLOBAL_DEFAULT - registry
+      🟢 GLOBAL_DEFAULT - requirements
+      🟢 GLOBAL_DEFAULT - servers
+      🟢 GLOBAL_DEFAULT - setup
+      🟢 GLOBAL_DEFAULT - ssl
+      🟢 GLOBAL_DEFAULT - tray
+      🟢 GLOBAL_DEFAULT - users
+      🟢 GLOBAL_DEFAULT - docker
+🔍 get(docker, check_docker_installed) - найдено 2 реализаций
+🔍 get(docker, check_docker_compose_installed) - найдено 2 реализаций
+      🟢 GLOBAL_DEFAULT - git
+      🟢 GLOBAL_DEFAULT - knocking
+🔍 get(knocking, is_knocking_installed) - найдено 2 реализаций
+      🟢 GLOBAL_DEFAULT - tailscale
+🔍 get(tailscale, check_tailscale_installed) - найдено 2 реализаций
+🔍 get(tailscale, get_tailscale_status) - найдено 2 реализаций
+      🟢 GLOBAL_DEFAULT - env
+      🟢 GLOBAL_DEFAULT - notification
+      🟢 GLOBAL_DEFAULT - oauth
+      🟡 OS_DEFAULT - service
+      🟡 OS_DEFAULT - system
+      🟡 OS_DEFAULT - docker
+      🟡 OS_DEFAULT - knocking
+
+   📊 Результат: инициализировано 25 модулей, ошибок: 0
+══════════════════════════════════════════════════════════════════════
+
+
+🔄 ЭТАП 8.05: Фоновая проверка обновлений
+----------------------------------------
+   ✅ Фоновая проверка обновлений запущена (раз в сутки)
+
+👥 ЭТАП 8.1: Серверы и пользователи
+----------------------------------------
+   ✅ Серверов в реестре: 0
+   ✅ Admin login настроен в .env
+
+📋 ЭТАП 10: Состояние реестра проектов
+----------------------------------------
+   📁 Файл реестра: C:\ProgramData\starter-registry.json
+   📌 Найдено проектов: 15
+   Проект #1: starter | октет: 0 | порт: 0 | статус: no_compose
+   Проект #2: mentoria | октет: 0 | порт: 0 | статус: not_deployed
+   Проект #3: yolo | октет: 0 | порт: 0 | статус: no_compose
+   Проект #4: browser | октет: 0 | порт: 0 | статус: not_deployed
+   Проект #5: assistia | октет: 0 | порт: 0 | статус: no_compose
+   Проект #6: sfera | октет: 0 | порт: 0 | статус: not_deployed
+   Проект #7: starter | октет: 0 | порт: 0 | статус: no_compose
+   Проект #8: phone | октет: 0 | порт: 0 | статус: no_compose
+   Проект #9: core | октет: 20 | порт: 2000 | статус: not_deployed
+   Проект #10: revers-proxy | октет: 0 | порт: 2000 | статус: no_compose
+   Проект #11: streams | октет: 2 | порт: 8000 | статус: running
+   Проект #12: core | октет: 3 | порт: 8000 | статус: not_deployed
+   Проект #13: opencode | октет: 4 | порт: 2002 | статус: not_deployed
+   Проект #14: word | октет: 5 | порт: 8010 | статус: not_deployed
+   Проект #15: m1 | октет: 6 | порт: 80 | статус: not_deployed
+
+🌐 ЭТАП 11: Проверка порта стартера
+----------------------------------------
+   ❌ Порт 2000 уже занят!
+   🛑 Остановите占用此端口的 процесс или измените PORT в .env
