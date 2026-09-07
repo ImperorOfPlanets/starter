@@ -498,7 +498,7 @@ def _clone_repository(repo_url: str, repository: dict, target_dir: Path, logger,
 def install_server(data, session_obj):
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+        return {'status': 'error', 'message': 'Unauthorized'}
 
     server_type = data.get('server_type', '').strip()
     install_path = data.get('path', '').strip()
@@ -506,13 +506,13 @@ def install_server(data, session_obj):
     force = data.get('force', 'false') == 'true'
 
     if not server_type or not install_path:
-        return jsonify({'status': 'error', 'message': 'server_type and path required'})
+        return {'status': 'error', 'message': 'server_type and path required'}
 
     # Получаем объединённый список серверов (локальные + API)
     merged_types = _get_merged_server_types(session_obj)
 
     if server_type not in merged_types:
-        return jsonify({'status': 'error', 'message': f'Unknown server type: {server_type}'})
+        return {'status': 'error', 'message': f'Unknown server type: {server_type}'}
 
     type_info = merged_types[server_type]
     server_path = Path(install_path)
@@ -523,12 +523,12 @@ def install_server(data, session_obj):
     is_reinstall = False
     if server_path.exists() and list(server_path.iterdir()):
         if not force:
-            return jsonify({
+            return {
                 'status': 'error',
                 'message': f'Папка {install_path} не пустая. Включите переустановку.',
                 'code': 'NOT_EMPTY',
                 'need_force': True
-            })
+            }
         is_reinstall = True
 
     try:
@@ -558,15 +558,15 @@ def install_server(data, session_obj):
             clone_result = _clone_repository(repo_url, repository, code_path, logger)
             if not clone_result.get('success'):
                 # В продакшене — ошибка если clone не удался
-                return jsonify({
+                return {
                     'status': 'error', 
                     'message': f'Ошибка клонирования репозитория: {clone_result.get("error", "unknown")}'
-                })
+                }
         else:
-            return jsonify({
+            return {
                 'status': 'error',
                 'message': 'Репозиторий не настроен для этого сервера'
-            })
+            }
 
         # Выделяем подсеть если нужна (не для reverse-proxy)
         subnet_octet = 0
@@ -630,10 +630,10 @@ def install_server(data, session_obj):
             logger.info(f"Copied docker-compose.example from {compose_example}")
         else:
             # НЕТ docker-compose.example — ошибка для продакшена
-            return jsonify({
+            return {
                 'status': 'error',
                 'message': 'docker-compose.example не найден в репозитории. Проверьте структуру проекта.'
-            })
+            }
             (docker_path / 'docker-compose.yml').write_text(compose_content, encoding='utf-8')
 
         # Генерируем .env если не скопирован
@@ -673,10 +673,11 @@ def install_server(data, session_obj):
             logger.info(f"Server {'reinstalled' if is_reinstall else 'registered'}: {server_type} at {install_path} (subnet: {subnet_octet})")
 
         action = 'Переустановлен' if is_reinstall else 'Установлен'
-        return jsonify({'status': 'success', 'message': f'{type_info["name"]} {action} в {install_path}'})
+        return {'status': 'success', 'message': f'{type_info["name"]} {action} в {install_path}'}
 
     except Exception as e:
         logger.error(f"Install server error: {e}")
+        return {'status': 'error', 'message': str(e)}
         return jsonify({'status': 'error', 'message': str(e)})
 
 
