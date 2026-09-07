@@ -123,6 +123,10 @@ def index(data, session):
             'service_installed': get_global('service_installed', False),
             'service_status': get_global('service_status', 'unknown')
         },
+        'service':{
+            'service_installed': get_global('service_installed', False),
+            'service_status': get_global('service_status', 'unknown')
+        },
         'tailscale': {
             'tailscale_installed': get_global('tailscale_installed', False),
             'tailscale_active': get_global('tailscale_active', False),
