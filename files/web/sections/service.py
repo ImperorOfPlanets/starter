@@ -62,7 +62,12 @@ def service_action(data, session):
 def install_service(data, session):
     """Установка сервиса"""
     try:
-        log_file_path = get_global('path_log_install') / f"install_service_{SERVICE_NAME}.log"
+        log_dir = get_global('path_log_install')
+        if not log_dir:
+            from pathlib import Path
+            log_dir = Path(__file__).resolve().parent.parent.parent.parent / 'files' / 'logs' / 'install'
+            log_dir.mkdir(parents=True, exist_ok=True)
+        log_file_path = log_dir / f"install_service_{SERVICE_NAME}.log"
         result = get('service', 'install_service', str(log_file_path))
         return jsonify(result)
     except Exception as e:
