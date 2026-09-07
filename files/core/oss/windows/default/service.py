@@ -80,7 +80,16 @@ class ServiceModule(BaseModule):
     @staticmethod
     def install_service(log_file_path: str = None) -> Dict[str, Any]:
         result = {'status': 'success', 'message': '', 'logs': []}
-        starter_path = get_global('starter_path') or Path.cwd()
+        starter_path = get_global('starter_path')
+        if not starter_path:
+            # Ищем starter.py от текущей директории
+            cwd = Path.cwd()
+            if (cwd / 'starter.py').exists():
+                starter_path = cwd
+            elif (cwd.parent / 'starter.py').exists():
+                starter_path = cwd.parent
+            else:
+                starter_path = cwd
         venv_path = get_global('venv_path') or starter_path / 'venv'
         venv_python = venv_path / "Scripts" / "python.exe"
         script_path = starter_path / "starter.py"
@@ -152,7 +161,15 @@ goto loop
 
     @staticmethod
     def service_action(action: str) -> Dict[str, Any]:
-        starter_path = get_global('starter_path') or Path.cwd()
+        starter_path = get_global('starter_path')
+        if not starter_path:
+            cwd = Path.cwd()
+            if (cwd / 'starter.py').exists():
+                starter_path = cwd
+            elif (cwd.parent / 'starter.py').exists():
+                starter_path = cwd.parent
+            else:
+                starter_path = cwd
         venv_path = get_global('venv_path') or starter_path / 'venv'
         pythonw = venv_path / "Scripts" / "pythonw.exe"
         script_path = starter_path / "starter.py"
