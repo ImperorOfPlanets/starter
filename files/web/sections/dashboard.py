@@ -5,6 +5,7 @@ import socket
 import sys
 import uuid
 import threading
+from pathlib import Path
 
 from datetime import datetime, timedelta
 from flask import render_template, jsonify
@@ -67,9 +68,9 @@ COMPONENT_CONFIG = {
 }
 
 # Путь к директории логов установки
-INSTALL_LOGS_DIR = get_global('path_log_install')
-if INSTALL_LOGS_DIR:
-    INSTALL_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+_install_dir = get_global('path_log_install')
+INSTALL_LOGS_DIR = Path(_install_dir) if _install_dir else Path(__file__).resolve().parent.parent.parent.parent / 'files' / 'logs' / 'install'
+INSTALL_LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 def index(data, session):
     # Get system info from global variables with proper fallbacks

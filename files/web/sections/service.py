@@ -1,5 +1,7 @@
+import os
 import platform
 import subprocess
+from pathlib import Path
 from flask import render_template, jsonify
 from files.core.utils.loader_utils import get
 from files.core.utils.log_utils import LogManager
@@ -63,8 +65,9 @@ def install_service(data, session):
     """Установка сервиса"""
     try:
         log_dir = get_global('path_log_install')
-        if not log_dir:
-            from pathlib import Path
+        if log_dir:
+            log_dir = Path(log_dir)
+        else:
             log_dir = Path(__file__).resolve().parent.parent.parent.parent / 'files' / 'logs' / 'install'
             log_dir.mkdir(parents=True, exist_ok=True)
         log_file_path = log_dir / f"install_service_{SERVICE_NAME}.log"
@@ -77,7 +80,13 @@ def install_service(data, session):
 def uninstall_service(data, session):
     """Удаление сервиса"""
     try:
-        log_file_path = get_global('path_log_install') / f"uninstall_service_{SERVICE_NAME}.log"
+        log_dir = get_global('path_log_install')
+        if log_dir:
+            log_dir = Path(log_dir)
+        else:
+            log_dir = Path(__file__).resolve().parent.parent.parent.parent / 'files' / 'logs' / 'install'
+            log_dir.mkdir(parents=True, exist_ok=True)
+        log_file_path = log_dir / f"uninstall_service_{SERVICE_NAME}.log"
         result = get('service', 'uninstall_service', str(log_file_path))
         return jsonify(result)
     except Exception as e:
