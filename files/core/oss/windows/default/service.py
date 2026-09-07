@@ -24,7 +24,7 @@ class ServiceModule(BaseModule):
     @staticmethod
     def _kwargs(**extra):
         """kwargs для subprocess со startupinfo на Windows"""
-        kwargs = {'capture_output': True, 'text': True}
+        kwargs = {'capture_output': True}
         kwargs.update(extra)
         si = subprocess.STARTUPINFO()
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -84,124 +84,89 @@ class ServiceModule(BaseModule):
         venv_path = get_global('venv_path', starter_path / 'venv')
         venv_python = venv_path / "Scripts" / "python.exe"
         script_path = starter_path / "starter.py"
-        task_name = ServiceModule.TASK_NAME
-        si = ServiceModule._kwargs().get('startupinfo')
+        pythonw = venv_path / "Scripts" / "pythonw.exe"
 
         print("\n" + "=" * 60)
-        print("🔧 УСТАНОВКА СЕРВИСА STARTER (Task Scheduler)")
+        print("🔧 УСТАНОВКА СЕРВИСА STARTER (Startup + Watchdog)")
         print("=" * 60)
         print(f"   Python: {venv_python}")
         print(f"   Скрипт: {script_path}")
 
-        if not venv_python.exists():
+        if not pythonw.exists():
             result['status'] = 'error'
-            result['message'] = f'Python not found: {venv_python}'
+            result['message'] = f'pythonw.exe not found: {pythonw}'
             return result
 
-        if not script_path.exists():
-            result['status'] = 'error'
-            result['message'] = f'starter.py not found: {script_path}'
-            return result
+        # Startup папка
+        startup_dir = Path(os.environ['APPDATA']) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+        startup_dir.mkdir(parents=True, exist_ok=True)
 
-        # Удаляем старую задачу
-        subprocess.run(['schtasks', '/Delete', '/TN', task_name, '/F'], capture_output=True, startupinfo=si)
+        # Создаём bat для запуска
+        bat_content = f'@echo off\ncd /d {starter_path}\nstart /MIN "" "{pythonw}" "{script_path}"\n'
+        bat_path = startup_dir / "StarterService.bat"
+        bat_path.write_text(bat_content, encoding='utf-8')
+        print(f"   ✅ Автозапуск: {bat_path}")
 
-        # Создаём XML
-        log_dir = starter_path / "files" / "logs" / "service"
-        log_dir.mkdir(parents=True, exist_ok=True)
+        # Создаём watchdog
+        watchdog_content = f"""@echo off
+cd /d {starter_path}
+:loop
+tasklist /FI "IMAGENAME eq pythonw.exe" 2>nul | find /I "pythonw" >nul
+if %errorlevel% neq 0 (
+    start /MIN "" "{pythonw}" "{script_path}"
+)
+timeout /t 30 /nobreak >nul
+goto loop
+"""
+        watchdog_path = startup_dir / "StarterWatchdog.bat"
+        watchdog_path.write_text(watchdog_content, encoding='utf-8')
+        print(f"   ✅ Watchdog: {watchdog_path}")
 
-        xml = f"""<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo>
-    <Description>Starter Server - AI Server Manager</Description>
-  </RegistrationInfo>
-  <Triggers>
-    <LogonTrigger><Enabled>true</Enabled></LogonTrigger>
-  </Triggers>
-  <Principals>
-    <Principal id="Author">
-      <LogonType>InteractiveToken</LogonType>
-      <RunLevel>HighestAvailable</RunLevel>
-    </Principal>
-  </Principals>
-  <Settings>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
-    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-    <AllowHardTerminate>true</AllowHardTerminate>
-    <StartWhenAvailable>true</StartWhenAvailable>
-    <Enabled>true</Enabled>
-    <Hidden>false</Hidden>
-    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
-    <RestartOnFailure><Interval>PT1M</Interval><Count>999</Count></RestartOnFailure>
-  </Settings>
-  <Actions Context="Author">
-    <Exec>
-      <Command>{venv_python}</Command>
-      <Arguments>{script_path}</Arguments>
-      <WorkingDirectory>{starter_path}</WorkingDirectory>
-    </Exec>
-  </Actions>
-</Task>"""
+        # Запускаем сейчас
+        subprocess.run(['start', '/B', str(pythonw), str(script_path)], shell=True)
+        print("   🚀 Сервис запущен")
 
-        xml_path = log_dir / "task.xml"
-        xml_path.write_text(xml, encoding='utf-16')
-
-        proc = subprocess.run(
-            ['schtasks', '/Create', '/TN', task_name, '/XML', str(xml_path), '/F'],
-            **ServiceModule._kwargs()
-        )
-
-        if proc.returncode != 0:
-            result['status'] = 'error'
-            result['message'] = f'Ошибка: {proc.stderr}'
-            return result
-
-        # Запускаем
-        subprocess.run(['schtasks', '/Run', '/TN', task_name], capture_output=True, startupinfo=si)
-
-        result['message'] = f'Сервис установлен: {task_name} (автозапуск + перезапуск)'
-        print(f"\n   ✅ Сервис установлен: {task_name}")
+        result['message'] = 'Сервис установлен: Startup + Watchdog (перезапуск каждые 30 сек)'
+        print(f"\n   ✅ Сервис установлен!")
         return result
 
     @staticmethod
     def uninstall_service(log_file_path: str = None) -> Dict[str, Any]:
         result = {'status': 'success', 'message': '', 'logs': []}
-        task_name = ServiceModule.TASK_NAME
 
         print("\n" + "=" * 60)
         print("🔧 УДАЛЕНИЕ СЕРВИСА STARTER")
         print("=" * 60)
 
-        if not ServiceModule.is_service_installed():
-            result['message'] = "Сервис не установлен"
-            return result
+        # Удаляем из Startup
+        startup_dir = Path(os.environ['APPDATA']) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+        for f in ["StarterService.bat", "StarterWatchdog.bat"]:
+            p = startup_dir / f
+            if p.exists():
+                p.unlink()
+                print(f"   ✅ Удалён: {p.name}")
 
-        subprocess.run(['schtasks', '/End', '/TN', task_name], capture_output=True,
-                       startupinfo=ServiceModule._kwargs().get('startupinfo'))
-        time.sleep(1)
-        subprocess.run(['schtasks', '/Delete', '/TN', task_name, '/F'], capture_output=True,
-                       startupinfo=ServiceModule._kwargs().get('startupinfo'))
-
-        result['message'] = 'Сервис удалён'
+        result['message'] = 'Сервис удалён (autostart + watchdog)'
         print("   ✅ Сервис удалён")
         return result
 
     @staticmethod
     def service_action(action: str) -> Dict[str, Any]:
-        task_name = ServiceModule.TASK_NAME
-        si = ServiceModule._kwargs().get('startupinfo')
+        starter_path = get_global('starter_path')
+        venv_path = get_global('venv_path', starter_path / 'venv')
+        pythonw = venv_path / "Scripts" / "pythonw.exe"
+        script_path = starter_path / "starter.py"
 
         if action == 'start':
-            subprocess.run(['schtasks', '/Run', '/TN', task_name], capture_output=True, startupinfo=si)
+            subprocess.run(['start', '/B', str(pythonw), str(script_path)], shell=True)
             return {'status': 'success', 'message': 'Сервис запущен'}
         elif action == 'stop':
-            subprocess.run(['schtasks', '/End', '/TN', task_name], capture_output=True, startupinfo=si)
+            subprocess.run(['taskkill', '/F', '/IM', 'pythonw.exe'], capture_output=True)
             return {'status': 'success', 'message': 'Сервис остановлен'}
         elif action == 'restart':
-            subprocess.run(['schtasks', '/End', '/TN', task_name], capture_output=True, startupinfo=si)
+            subprocess.run(['taskkill', '/F', '/IM', 'pythonw.exe'], capture_output=True)
             time.sleep(2)
-            subprocess.run(['schtasks', '/Run', '/TN', task_name], capture_output=True, startupinfo=si)
+            subprocess.run(['start', '/B', str(pythonw), str(script_path)], shell=True)
             return {'status': 'success', 'message': 'Сервис перезапущен'}
         elif action == 'status':
             return ServiceModule.get_service_status()
