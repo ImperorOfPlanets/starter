@@ -79,6 +79,7 @@ class ServiceModule(BaseModule):
 
     @staticmethod
     def install_service(log_file_path: str = None) -> Dict[str, Any]:
+        from pathlib import Path
         result = {'status': 'success', 'message': '', 'logs': []}
         starter_path = get_global('starter_path')
         if not starter_path:
@@ -160,6 +161,7 @@ goto loop
 
     @staticmethod
     def service_action(action: str) -> Dict[str, Any]:
+        from pathlib import Path
         starter_path = get_global('starter_path')
         if not starter_path:
             cwd = Path.cwd()
