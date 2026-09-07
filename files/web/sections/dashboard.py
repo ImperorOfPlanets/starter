@@ -9,7 +9,7 @@ import threading
 from datetime import datetime, timedelta
 from flask import render_template, jsonify
 
-from files.core.utils.globalVars_utils import get_global
+from files.core.utils.globalVars_utils import get_global, set_global
 from files.core.utils.loader_utils import get
 from files.core.utils.log_utils import LogManager
 
