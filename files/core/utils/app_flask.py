@@ -91,7 +91,10 @@ def configure_app() -> Flask:
         'SESSION_FILE_DIR': str(session_dir),
         'SESSION_PERMANENT': True,
         'SESSION_COOKIE_SECURE': False,
+        'SESSION_COOKIE_HTTPONLY': True,
         'SESSION_COOKIE_SAMESITE': 'Lax',
+        'SESSION_COOKIE_NAME': 'starter_session',
+        'SESSION_COOKIE_DOMAIN': None,
         'PERMANENT_SESSION_LIFETIME': timedelta(days=30),
         'PREFERRED_URL_SCHEME': 'https'
     })
