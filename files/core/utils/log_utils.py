@@ -58,7 +58,7 @@ class LogManager:
     @classmethod
     def get_logger(cls, name=None):
         if not cls._initialized:
-            raise RuntimeError("Logger not initialized. Call LogManager.initialize() first.")
+            cls.initialize()
         
         # Если имя не указано, используем имя вызывающего модуля
         if not name:
