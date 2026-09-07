@@ -82,11 +82,10 @@ class ServiceModule(BaseModule):
         result = {'status': 'success', 'message': '', 'logs': []}
         starter_path = get_global('starter_path')
         if not starter_path:
-            # Ищем starter.py от текущей директории
             cwd = Path.cwd()
-            if (cwd / 'starter.py').exists():
+            if os.path.exists(str(cwd / 'starter.py')):
                 starter_path = cwd
-            elif (cwd.parent / 'starter.py').exists():
+            elif os.path.exists(str(cwd.parent / 'starter.py')):
                 starter_path = cwd.parent
             else:
                 starter_path = cwd
