@@ -229,6 +229,15 @@ function loadServerTypes() {
 }
 
 function loadServers() {
+    // Показываем кеш если есть
+    var cached = localStorage.getItem('servers_cache');
+    if (cached) {
+        try {
+            renderServers(JSON.parse(cached));
+        } catch(e) {}
+    }
+
+    // Загружаем свежие данные в фоне
     fetch('/', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
@@ -237,13 +246,12 @@ function loadServers() {
     .then(function(r) { return r.json(); })
     .then(function(res) {
         if (res.status === 'success' && res.servers) {
+            localStorage.setItem('servers_cache', JSON.stringify(res.servers));
             renderServers(res.servers);
-        } else {
-            document.getElementById('serversList').innerHTML = '<div class="text-center text-muted py-3 mb-4"><i class="bi bi-inbox" style="font-size: 2rem;"></i><p class="mt-2 mb-0">Серверы не установлены</p></div>';
         }
     })
     .catch(function(err) {
-        document.getElementById('serversList').innerHTML = '<div class="text-danger p-3">Ошибка: ' + err.message + '</div>';
+        console.error('Ошибка загрузки серверов:', err);
     });
 }
 
@@ -257,11 +265,12 @@ function renderServers(servers) {
     servers.forEach(function(s) {
         var statusClass = s.status === 'running' ? 'bg-success' : s.status === 'stopped' ? 'bg-danger' : 'bg-warning text-dark';
         var statusText = s.status === 'running' ? '🟢 Работает' : s.status === 'stopped' ? '🔴 Остановлен' : '📦 Не развёрнут';
-        html += '<div class="card mb-2"><div class="card-body py-2"><div class="d-flex justify-content-between align-items-center">';
+        html += '<div class="card mb-2" data-server-id="' + s.id + '">';
+        html += '<div class="card-body py-2"><div class="d-flex justify-content-between align-items-center">';
         html += '<div><strong>' + s.name + '</strong> <small class="text-muted">' + s.path + '</small> ';
         html += '<span class="badge bg-info ms-1">' + s.type + '</span> ';
-        html += '<span class="badge ' + statusClass + ' ms-1">' + statusText + '</span></div>';
-        html += '<div class="d-flex gap-1">';
+        html += '<span class="badge ' + statusClass + ' ms-1 status-badge">' + statusText + '</span></div>';
+        html += '<div class="d-flex gap-1 buttons">';
         if (s.status === 'stopped' || s.status === 'not_deployed') {
             html += '<button class="btn btn-outline-success btn-sm start-server" data-server-id="' + s.id + '" title="Запустить"><i class="bi bi-play-fill"></i></button>';
         } else if (s.status === 'running') {
