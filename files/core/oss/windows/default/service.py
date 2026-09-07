@@ -35,6 +35,11 @@ class ServiceModule(BaseModule):
         return sys.platform == 'win32'
     
     @staticmethod
+    def has_systemd() -> bool:
+        """На Windows нет systemd"""
+        return False
+    
+    @staticmethod
     def set_globals():
         starter_path = get_global('starter_path')
         if starter_path:

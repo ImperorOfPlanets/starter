@@ -24,8 +24,13 @@
     <!-- Установленные серверы -->
     <h6 class="text-muted mb-2">Установленные</h6>
     <div id="serversList">
-        {% if servers %}
-        {% for server in servers %}
+        <div class="text-center py-3">
+            <div class="spinner-border spinner-border-sm text-primary" role="status">
+                <span class="visually-hidden">Загрузка...</span>
+            </div>
+            <span class="ms-2 text-muted">Загрузка серверов...</span>
+        </div>
+    </div>
         <div class="card mb-2">
             <div class="card-body py-2">
                 <div class="d-flex justify-content-between align-items-center">
@@ -223,6 +228,56 @@ function loadServerTypes() {
     });
 }
 
+function loadServers() {
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'list_servers'})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.status === 'success' && res.servers) {
+            renderServers(res.servers);
+        } else {
+            document.getElementById('serversList').innerHTML = '<div class="text-center text-muted py-3 mb-4"><i class="bi bi-inbox" style="font-size: 2rem;"></i><p class="mt-2 mb-0">Серверы не установлены</p></div>';
+        }
+    })
+    .catch(function(err) {
+        document.getElementById('serversList').innerHTML = '<div class="text-danger p-3">Ошибка: ' + err.message + '</div>';
+    });
+}
+
+function renderServers(servers) {
+    var container = document.getElementById('serversList');
+    if (!servers.length) {
+        container.innerHTML = '<div class="text-center text-muted py-3 mb-4"><i class="bi bi-inbox" style="font-size: 2rem;"></i><p class="mt-2 mb-0">Серверы не установлены</p></div>';
+        return;
+    }
+    var html = '';
+    servers.forEach(function(s) {
+        var statusClass = s.status === 'running' ? 'bg-success' : s.status === 'stopped' ? 'bg-danger' : 'bg-warning text-dark';
+        var statusText = s.status === 'running' ? '🟢 Работает' : s.status === 'stopped' ? '🔴 Остановлен' : '📦 Не развёрнут';
+        html += '<div class="card mb-2"><div class="card-body py-2"><div class="d-flex justify-content-between align-items-center">';
+        html += '<div><strong>' + s.name + '</strong> <small class="text-muted">' + s.path + '</small> ';
+        html += '<span class="badge bg-info ms-1">' + s.type + '</span> ';
+        html += '<span class="badge ' + statusClass + ' ms-1">' + statusText + '</span></div>';
+        html += '<div class="d-flex gap-1">';
+        if (s.status === 'stopped' || s.status === 'not_deployed') {
+            html += '<button class="btn btn-outline-success btn-sm start-server" data-server-id="' + s.id + '" title="Запустить"><i class="bi bi-play-fill"></i></button>';
+        } else if (s.status === 'running') {
+            html += '<button class="btn btn-outline-warning btn-sm stop-server" data-server-id="' + s.id + '" title="Остановить"><i class="bi bi-stop-fill"></i></button>';
+        }
+        html += '<button class="btn btn-outline-info btn-sm server-repo-info" data-server-id="' + s.id + '" title="Инфо"><i class="bi bi-info-circle"></i></button>';
+        if (s.has_git) {
+            html += '<button class="btn btn-outline-secondary btn-sm update-server" data-server-id="' + s.id + '" title="Обновить"><i class="bi bi-arrow-clockwise"></i></button>';
+        }
+        html += '<button class="btn btn-outline-primary btn-sm configure-server" data-server-id="' + s.id + '" title="Настроить"><i class="bi bi-gear"></i></button>';
+        html += '<button class="btn btn-outline-danger btn-sm delete-server" data-server-id="' + s.id + '" title="Удалить"><i class="bi bi-trash"></i></button>';
+        html += '</div></div></div>';
+    });
+    container.innerHTML = html;
+}
+
 function renderServerTypes(types) {
     var container = document.getElementById('serverTypesList');
     var apiContainer = document.getElementById('serverTypesApiList');
@@ -294,6 +349,7 @@ function renderInstallSelect(types) {
 }
 
 // Загружаем при открытии страницы
+loadServers();
 loadServerTypes();
 
 // Загружаем диски при открытии модалки
