@@ -93,7 +93,7 @@ def uninstall_service(data, session):
         logger.error(f"Error uninstalling service: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)})
 
-def get_service_status():
+def get_service_status(data=None, session=None):
     """Получение статуса сервиса"""
     try:
         return get('service', 'get_service_status')
