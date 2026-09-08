@@ -345,12 +345,12 @@
                     </label>
 
                     <!-- Starter Service -->
-                    <label class="list-group-item d-flex justify-content-between align-items-center {% if sys_info.systemd.service_installed %}list-group-item-success{% endif %}">
+                    <label class="list-group-item d-flex justify-content-between align-items-center {% if sys_info.service.service_installed %}list-group-item-success{% endif %}">
                         <div>
                             <input class="form-check-input me-2 auto-install-check" type="checkbox" value="starter-service"
-                                   data-checkable="true" data-installed="{{ sys_info.systemd.service_installed|lower }}">
+                                   data-checkable="true" data-installed="{{ sys_info.service.service_installed|lower }}">
                             <i class="bi bi-gear me-2"></i> <strong>Starter Service</strong>
-                            {% if sys_info.systemd.service_installed %}
+                            {% if sys_info.service.service_installed %}
                                 <span class="badge bg-success ms-2">{{ t('installed') }}</span>
                             {% else %}
                                 <span class="badge bg-danger ms-2">{{ t('not_installed') }}</span>

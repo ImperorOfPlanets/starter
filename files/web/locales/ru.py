@@ -12,7 +12,9 @@ translations = {
         "this_error_invalid_section": "[{lang}] Некорректный модуль: sections['{section}'] не является словарём",
         "this_error_missing_main": "[{lang}] Отсутствует перевод: main['{section}']['{key}']",
         "this_error_missing_main_section": "[{lang}] Отсутствует раздел: main['{section}'] не существует",
-        "this_error_invalid_key": "[{lang}] Некорректный ключ: '{key}' (ожидается section_key или section_file_key)"
+        "this_error_invalid_key": "[{lang}] Некорректный ключ: '{key}' (ожидается section_key или section_file_key)",
+        "package_already_installed": "{package} уже установлен",
+        "installation_check_failed": "Ошибка проверки установки: {error}"
     },
 
     # ==================== ПЕРЕМЕННЫЕ ОСНОВНОГО ШАБЛОНА (Файлы находящиеся в папке templates) ====================

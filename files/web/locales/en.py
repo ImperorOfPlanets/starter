@@ -12,7 +12,9 @@ translations = {
         "this_error_invalid_section": "[{lang}] Invalid module: sections['{section}'] is not a dictionary",
         "this_error_missing_main": "[{lang}] Translation missing: main['{section}']['{key}']",
         "this_error_missing_main_section": "[{lang}] Section missing: main['{section}'] does not exist",
-        "this_error_invalid_key": "[{lang}] Invalid key: '{key}' (expected section_key or section_file_key)"
+        "this_error_invalid_key": "[{lang}] Invalid key: '{key}' (expected section_key or section_file_key)",
+        "package_already_installed": "{package} already installed",
+        "installation_check_failed": "Installation check failed: {error}"
     },
 
     # ==================== MAIN TEMPLATE VARIABLES (Files in templates folder) ====================

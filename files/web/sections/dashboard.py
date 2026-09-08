@@ -170,10 +170,10 @@ def install_package(data, session):
         # Проверка установлен ли компонент
         check = get(config['module'], config['check'])
         if check:
-            return jsonify({'status': 'info', 'message': f'{package} is already installed'})
+            return jsonify({'status': 'info', 'message': t('package_already_installed', package=package)})
     except Exception as e:
         logger.error(f"Component check failed: {str(e)}")
-        return jsonify({'status': 'error', 'message': f'Installation check failed: {str(e)}'})
+        return jsonify({'status': 'error', 'message': t('installation_check_failed', error=str(e))})
     
     # Создание уникального ID установки
     install_id = str(uuid.uuid4())

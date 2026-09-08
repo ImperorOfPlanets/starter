@@ -45,6 +45,9 @@ class ServiceModule(BaseModule):
             service_dir = os.path.join(str(starter_path), "files", "service")
             os.makedirs(service_dir, exist_ok=True)
             set_global('service_dir', service_dir)
+        set_global('service_installed', ServiceModule.is_service_installed())
+        status = ServiceModule.get_service_status()
+        set_global('service_status', 'running' if status.get('running') else ('installed' if status.get('installed') else 'unknown'))
 
     @staticmethod
     def is_service_installed() -> bool:
