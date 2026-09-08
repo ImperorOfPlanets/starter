@@ -12,7 +12,9 @@ translations = {
         "this_error_invalid_section": "[{lang}] 无效模块：sections['{section}'] 不是字典",
         "this_error_missing_main": "[{lang}] 翻译缺失：main['{section}']['{key}']",
         "this_error_missing_main_section": "[{lang}] 部分缺失：main['{section}'] 不存在",
-        "this_error_invalid_key": "[{lang}] 无效键：'{key}'（期望 section_key 或 section_file_key）"
+        "this_error_invalid_key": "[{lang}] 无效键：'{key}'（期望 section_key 或 section_file_key）",
+        "package_already_installed": "{package} 已安装",
+        "installation_check_failed": "安装检查失败：{error}"
     },
 
     # ==================== 主要模板变量（templates 文件夹中的文件） ====================
