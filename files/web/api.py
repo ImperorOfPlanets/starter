@@ -43,6 +43,9 @@ def _load_or_create_api_key() -> str:
     return key
 
 
+API_SESSION = {'logged_in': True, 'user': {'id': 'api', 'name': 'API'}}
+
+
 def require_api_key(f):
     """Декоратор проверки API ключа"""
     @wraps(f)
@@ -157,9 +160,7 @@ def install_server():
             'force': 'true' if force else 'false',
         }
 
-        # API авторизован через ключ — передаём фейковую сессию
-        api_session = {'logged_in': True}
-        result = do_install(form_data, api_session)
+        result = do_install(form_data, API_SESSION)
 
         if isinstance(result, tuple):
             result, status = result
@@ -179,7 +180,7 @@ def start_server(server_id):
     try:
         from files.web.sections.servers import start_server as do_start
 
-        result = do_start({'server_id': server_id}, {'logged_in': True})
+        result = do_start({'server_id': server_id}, API_SESSION)
 
         if isinstance(result, tuple):
             result, status = result
@@ -199,7 +200,7 @@ def stop_server(server_id):
     try:
         from files.web.sections.servers import stop_server as do_stop
 
-        result = do_stop({'server_id': server_id}, {'logged_in': True})
+        result = do_stop({'server_id': server_id}, API_SESSION)
 
         if isinstance(result, tuple):
             result, status = result
@@ -219,7 +220,7 @@ def remove_server(server_id):
     try:
         from files.web.sections.servers import remove_server as do_remove
 
-        result = do_remove({'server_id': server_id}, {'logged_in': True})
+        result = do_remove({'server_id': server_id}, API_SESSION)
 
         if isinstance(result, tuple):
             result, status = result
@@ -355,7 +356,7 @@ def list_drives():
     """Список доступных дисков"""
     try:
         from files.web.sections.servers import list_drives as do_list_drives
-        result = do_list_drives({}, {'logged_in': True})
+        result = do_list_drives({}, API_SESSION)
         if isinstance(result, tuple):
             result, status = result
             return result, status
@@ -371,7 +372,7 @@ def list_folders():
     try:
         path = request.args.get('path', '')
         from files.web.sections.servers import list_folders as do_list_folders
-        result = do_list_folders({'path': path}, {'logged_in': True})
+        result = do_list_folders({'path': path}, API_SESSION)
         if isinstance(result, tuple):
             result, status = result
             return result, status
