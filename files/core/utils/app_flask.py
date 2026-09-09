@@ -3,8 +3,6 @@ import os
 
 from datetime import timedelta
 from flask import Flask, render_template, request, session
-from flask_session import Session
-from cachelib.file import FileSystemCache
 from pathlib import Path
 
 from files.core.utils.loader_utils import get
@@ -14,7 +12,6 @@ from files.web.routes import routes
 from files.core.utils.log_utils import LogManager
 
 
-# Вспомогательные функции для шаблонов
 def get_current_language() -> str:
     i18n_module = get('i18n')
     if i18n_module and hasattr(i18n_module, 'get_current_language'):
@@ -37,10 +34,6 @@ def t(key: str, _section=None, _file=None, **kwargs) -> str:
 
 
 def configure_app() -> Flask:
-    """
-    Создает и настраивает экземпляр Flask приложения
-    """
-    # Получаем абсолютный путь к директории с шаблонами
     templates_path = str(get_global('starter_path') / 'files' / 'web' / 'templates')
     static_path = str(get_global('starter_path') / 'files' / 'web' / 'public')
 
@@ -53,10 +46,8 @@ def configure_app() -> Flask:
     LogManager.initialize(debug_mode=app.debug)
     logger = LogManager.get_logger('flask_app')
 
-    # Получаем модуль env для работы с .env файлами
     env_module = get('env')
     if not env_module:
-        logger.error("Env module not found!")
         env_vars = {}
         env_path = get_global('starter_env_path')
         if env_path and env_path.exists():
@@ -68,12 +59,9 @@ def configure_app() -> Flask:
     else:
         env_path = get_global('starter_env_path')
         env_vars = env_module.read_env_file(env_path) if env_path else {}
-    
-    # Секретный ключ — ЧИТАЕМ ИЗ os.environ (load_dotenv уже загрузил)
-    # НИКОГДА не генерируем рандомный — иначе сессии ломаются при рестарте
+
     app_secret = os.environ.get('APP_SECRET_KEY')
     if not app_secret:
-        # Fallback: читаем из .env файла вручную
         env_path = get_global('starter_env_path')
         if env_path and env_path.exists():
             with open(env_path, 'r', encoding='utf-8') as f:
@@ -82,45 +70,28 @@ def configure_app() -> Flask:
                         app_secret = line.strip().split('=', 1)[1]
                         break
     if not app_secret:
-        # Совсем fallback — читаем из .env.example
-        example_path = get_global('starter_path') / '.env' if get_global('starter_path') else None
-        if example_path and example_path.exists():
-            with open(example_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    if line.strip().startswith('APP_SECRET_KEY='):
-                        app_secret = line.strip().split('=', 1)[1]
-                        break
-    if not app_secret:
-        logger.warning("APP_SECRET_KEY not found! Sessions will not persist across restarts!")
         app_secret = 'fallback-key-change-me'
-    
+
     app.secret_key = app_secret
-    logger.info(f"Секретный ключ установлен: {app.secret_key[:10]}...")
 
-    # ========== БЕРЕМ ПОРТ ИЗ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ ==========
-    # Это важно! Порт мог быть изменен после выделения сети
-    port = get_global('port', 2000)
-    logger.info(f"Порт из глобальных переменных: {port}")
+    sessions_dir = get_global('starter_path') / "files" / "web" / "sessions"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
 
-    # Настройка папки сессий
-    session_dir = get_global('starter_path') / "files" / "web" / "sessions"
-    logger.info(f"Папка сессий: {session_dir}")
-    
-    session_dir.mkdir(parents=True, exist_ok=True)
+    from cachelib.file import FileSystemCache
+    from flask_session import Session
 
-    # FileSystemCache с threshold=0 — НИКОГДА не удаляет файлы сессий
     session_cache = FileSystemCache(
-        cache_dir=str(session_dir),
+        cache_dir=str(sessions_dir),
         threshold=0,
         mode=0o600
     )
 
-    # Настройки сессии через SESSION_CLIENT (современный способ Flask-Session 0.8)
     app.config.update({
-        'SECRET_KEY': app.secret_key,
+        'SECRET_KEY': app_secret,
         'SESSION_TYPE': 'cachelib',
         'SESSION_CACHELIB': session_cache,
         'SESSION_PERMANENT': True,
+        'SESSION_USE_SIGNER': True,
         'SESSION_COOKIE_SECURE': False,
         'SESSION_COOKIE_HTTPONLY': True,
         'SESSION_COOKIE_SAMESITE': 'Lax',
@@ -128,15 +99,13 @@ def configure_app() -> Flask:
         'SESSION_COOKIE_DOMAIN': None,
         'PERMANENT_SESSION_LIFETIME': timedelta(days=30),
         'PREFERRED_URL_SCHEME': 'https',
-        'SESSION_REFRESH_EACH_REQUEST': True,
+        'SESSION_REFRESH_EACH_REQUEST': False,
     })
 
     Session(app)
 
-    # Глобальные переменные для всех шаблонов
     @app.context_processor
     def inject_global_vars():
-        """Добавляет глобальные переменные во все шаблоны"""
         return {
             'logged_in': session.get('logged_in', False),
             'current_language': get_current_language(),
@@ -144,44 +113,16 @@ def configure_app() -> Flask:
             't': t
         }
 
-    # Отключаем кеш
     app.jinja_env.cache = {}
 
-    app.session_initialized = False
-    
     @app.before_request
     def ensure_starter_path():
-        """Убеждаемся что starter_path установлен"""
         if not get_global('starter_path'):
-            # app_flask.py лежит в files/core/utils/ → 4 уровня вверх до starter
             starter = Path(__file__).resolve().parent.parent.parent.parent
             set_global('starter_path', starter)
             set_global('venv_path', starter / 'venv')
 
-    @app.before_request
-    def initialize_session():
-        if not app.session_initialized:
-            session.setdefault('initialized', True)
-            session.modified = True
-            app.session_initialized = True
-            logger.info("Session system initialized")
-            
-            try:
-                sid = session.sid if hasattr(session, 'sid') else 'not_set'
-                logger.debug(f"Initial session ID: {sid}")
-            except Exception as e:
-                logger.debug(f"Could not get session ID: {e}")
-
-    @app.after_request
-    def add_header(response):
-        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-        response.headers['Pragma'] = 'no-cache'
-        response.headers['Expires'] = '0'
-        return response
-
-    # Настройка логирования Werkzeug
     werkzeug_logger = logging.getLogger('werkzeug')
-    
     if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
         werkzeug_logger.setLevel(logging.ERROR)
         werkzeug_logger.handlers.clear()
@@ -191,39 +132,17 @@ def configure_app() -> Flask:
         werkzeug_logger.setLevel(logging.WARNING)
 
     @app.after_request
-    def log_request(response):
-        if request.path.startswith('/public/'):
-            return response
-            
-        log_data = {
-            'method': request.method,
-            'path': request.path,
-            'status': response.status_code,
-            'ip': request.remote_addr,
-            'user_agent': request.user_agent.string if request.user_agent else 'unknown',
-            'response_size': len(response.get_data()),
-        }
-        
-        if request.method == 'POST':
-            try:
-                form_data = {}
-                sensitive_fields = ['password', 'secret', 'token', 'key']
-                for key, value in request.form.items():
-                    if not any(field in key.lower() for field in sensitive_fields):
-                        form_data[key] = str(value)[:100] if len(str(value)) > 100 else str(value)
-                if form_data:
-                    log_data['form_data'] = form_data
-            except Exception as e:
-                logger.warning(f"Failed to log form data: {e}")
-        
-        logger.info(f"Request: {log_data}")
+    def add_header(response):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
         return response
 
     @app.errorhandler(500)
     def internal_error(error):
         logger.exception(f"500 Internal Server Error: {error}")
         try:
-            return render_template('error.html', 
+            return render_template('error.html',
                                  error_message="Internal Server Error",
                                  error_details=str(error)), 500
         except Exception as template_error:
@@ -232,13 +151,10 @@ def configure_app() -> Flask:
 
     app.register_blueprint(routes)
 
-    # Регистрируем REST API
     try:
         from files.web.api import api as api_blueprint
         app.register_blueprint(api_blueprint)
-        logger.info("REST API blueprint registered at /api/v1")
     except Exception as e:
         logger.error(f"Failed to register API blueprint: {e}")
 
-    logger.info("Flask application configured and ready")
     return app
