@@ -328,17 +328,6 @@ class ProcessModule(BaseModule):
                     json.dump(alive_processes, f, indent=2, ensure_ascii=False)
             except Exception as e:
                 logger.error(f"Error cleaning processes file: {e}")
-        # Очистка сессий
-        starter_path = get_global('starter_path')
-        if starter_path:
-            session_dir = starter_path / "files" / "web" / "sessions"
-            if session_dir.exists():
-                for f in session_dir.glob("*"):
-                    try:
-                        f.unlink()
-                    except:
-                        pass
-                print("   ✅ Файлы сессий очищены")
         return result
     
     @staticmethod
