@@ -1,6 +1,5 @@
 import logging
 import os
-import secrets
 
 from datetime import timedelta
 from flask import Flask, render_template, request, session
@@ -69,8 +68,32 @@ def configure_app() -> Flask:
         env_path = get_global('starter_env_path')
         env_vars = env_module.read_env_file(env_path) if env_path else {}
     
-    # Секретный ключ
-    app.secret_key = env_vars.get('APP_SECRET_KEY', secrets.token_hex(32))
+    # Секретный ключ — ЧИТАЕМ ИЗ os.environ (load_dotenv уже загрузил)
+    # НИКОГДА не генерируем рандомный — иначе сессии ломаются при рестарте
+    app_secret = os.environ.get('APP_SECRET_KEY')
+    if not app_secret:
+        # Fallback: читаем из .env файла вручную
+        env_path = get_global('starter_env_path')
+        if env_path and env_path.exists():
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip().startswith('APP_SECRET_KEY='):
+                        app_secret = line.strip().split('=', 1)[1]
+                        break
+    if not app_secret:
+        # Совсем fallback — читаем из .env.example
+        example_path = get_global('starter_path') / '.env' if get_global('starter_path') else None
+        if example_path and example_path.exists():
+            with open(example_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip().startswith('APP_SECRET_KEY='):
+                        app_secret = line.strip().split('=', 1)[1]
+                        break
+    if not app_secret:
+        logger.warning("APP_SECRET_KEY not found! Sessions will not persist across restarts!")
+        app_secret = 'fallback-key-change-me'
+    
+    app.secret_key = app_secret
     logger.info(f"Секретный ключ установлен: {app.secret_key[:10]}...")
 
     # ========== БЕРЕМ ПОРТ ИЗ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ ==========
