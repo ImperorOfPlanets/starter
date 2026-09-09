@@ -46,3 +46,4 @@ starter.pid
 fix_remote.py
 fix_update.py
 files/crypto/.api_key
+files/tasks/

@@ -1,9 +1,0 @@
-[2026-09-09T06:33:29.769338] check_service_status — success (5.02s)
-  Result: {"status": "success", "service": {"installed": true, "running": false, "enabled": true, "os": "windows"}}
----
-[2026-09-09T06:34:49.615594] check_service_status — success (5.01s)
-  Result: {"status": "success", "service": {"installed": true, "running": false, "enabled": true, "os": "windows"}}
----
-[2026-09-09T06:36:19.811741] check_service_status — success (15.19s)
-  Result: {"status": "success", "service": {"installed": true, "running": false, "enabled": true, "os": "windows"}}
----
