@@ -4,6 +4,7 @@ import os
 from datetime import timedelta
 from flask import Flask, render_template, request, session
 from flask_session import Session
+from cachelib.file import FileSystemCache
 from pathlib import Path
 
 from files.core.utils.loader_utils import get
@@ -107,11 +108,18 @@ def configure_app() -> Flask:
     
     session_dir.mkdir(parents=True, exist_ok=True)
 
-    # Настройки сессии — Flask-Session filesystem, БЕЗ chmod (на Windows ломает права)
+    # FileSystemCache с threshold=0 — НИКОГДА не удаляет файлы сессий
+    session_cache = FileSystemCache(
+        cache_dir=str(session_dir),
+        threshold=0,
+        mode=0o600
+    )
+
+    # Настройки сессии через SESSION_CLIENT (современный способ Flask-Session 0.8)
     app.config.update({
         'SECRET_KEY': app.secret_key,
-        'SESSION_TYPE': 'filesystem',
-        'SESSION_FILE_DIR': str(session_dir),
+        'SESSION_TYPE': 'cachelib',
+        'SESSION_CACHELIB': session_cache,
         'SESSION_PERMANENT': True,
         'SESSION_COOKIE_SECURE': False,
         'SESSION_COOKIE_HTTPONLY': True,
@@ -120,8 +128,7 @@ def configure_app() -> Flask:
         'SESSION_COOKIE_DOMAIN': None,
         'PERMANENT_SESSION_LIFETIME': timedelta(days=30),
         'PREFERRED_URL_SCHEME': 'https',
-        'SESSION_THRESHOLD': 0,
-        'SESSION_FILE_MODE': 0o600
+        'SESSION_REFRESH_EACH_REQUEST': True,
     })
 
     Session(app)
