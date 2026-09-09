@@ -113,38 +113,165 @@
         </div>
     </div>
 
-    <!-- Таблица для управления периодическими задачами -->
+    <!-- КОНСТРУКТОР ПЕРИОДИЧЕСКИХ ЗАДАЧ -->
     <div class="row mt-4">
         <div class="col-12">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-clock me-2"></i> {{ t('scheduled_tasks') }}</span>
-                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
-                        <i class="bi bi-plus-circle"></i> {{ t('add_task') }}
-                    </button>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover" id="tasksTable">
-                            <thead>
-                                <tr>
-                                    <th>{{ t('task_name') }}</th>
-                                    <th>{{ t('task_schedule') }}</th>
-                                    <th>{{ t('task_command') }}</th>
-                                    <th>{{ t('task_status') }}</th>
-                                    <th>{{ t('actions') }}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td colspan="5" class="text-center">
-                                        {{ t('no_tasks_configured') }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <span><i class="bi bi-clock-history me-2"></i> {{ t('task_scheduler') }}</span>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary me-1" data-action="refreshTasks">
+                            <i class="bi bi-arrow-repeat"></i>
+                        </button>
+                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+                            <i class="bi bi-plus-circle"></i> {{ t('add_task') }}
+                        </button>
                     </div>
                 </div>
+                <div class="card-body">
+                    <div id="tasksList">
+                        <div class="text-center py-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                            <span class="ms-2">{{ t('loading') }}...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно добавления/редактирования задачи -->
+<div class="modal fade" id="addTaskModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i> {{ t('add_task') }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addTaskForm">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ t('task_name') }}</label>
+                            <input type="text" class="form-control" id="taskName" required 
+                                   placeholder="my_task_name">
+                            <div class="form-text">{{ t('task_name_help') }}</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ t('task_category') }}</label>
+                            <select class="form-select" id="taskCategory">
+                                <option value="system">{{ t('category_system') }}</option>
+                                <option value="monitoring">{{ t('category_monitoring') }}</option>
+                                <option value="maintenance">{{ t('category_maintenance') }}</option>
+                                <option value="custom">{{ t('category_custom') }}</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t('task_description') }}</label>
+                        <input type="text" class="form-control" id="taskDescription" 
+                               placeholder="{{ t('task_description_placeholder') }}">
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ t('task_schedule') }}</label>
+                            <select class="form-select" id="taskSchedule" required>
+                                <option value="every_5min">{{ t('every_5min') }}</option>
+                                <option value="every_30min">{{ t('every_30min') }}</option>
+                                <option value="hourly" selected>{{ t('hourly') }}</option>
+                                <option value="every_6h">{{ t('every_6h') }}</option>
+                                <option value="daily">{{ t('daily') }}</option>
+                                <option value="weekly">{{ t('weekly') }}</option>
+                                <option value="monthly">{{ t('monthly') }}</option>
+                                <option value="custom">{{ t('custom') }}</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3" id="customScheduleGroup" style="display: none;">
+                            <label class="form-label">{{ t('custom_schedule') }}</label>
+                            <input type="text" class="form-control" id="customSchedule" 
+                                   placeholder="*/30 * * * *">
+                            <div class="form-text">{{ t('cron_format_help') }}</div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ t('task_module') }}</label>
+                            <select class="form-select" id="taskModule">
+                                <option value="">— {{ t('builtin') }} —</option>
+                                <option value="updates">{{ t('module_updates') }}</option>
+                                <option value="service">{{ t('module_service') }}</option>
+                                <option value="docker">{{ t('module_docker') }}</option>
+                                <option value="portmanager">{{ t('module_ports') }}</option>
+                                <option value="network">{{ t('module_network') }}</option>
+                                <option value="servers">{{ t('module_servers') }}</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ t('task_function') }}</label>
+                            <input type="text" class="form-control" id="taskFunc" 
+                                   placeholder="check_updates">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t('task_params_json') }}</label>
+                        <textarea class="form-control font-monospace" id="taskParams" rows="3" 
+                                  placeholder='{"max_days": 30}'></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ t('task_events') }}</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="evtOnSchedule" value="on_schedule" checked>
+                                <label class="form-check-label" for="evtOnSchedule">{{ t('event_on_schedule') }}</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="evtOnStartup" value="on_startup">
+                                <label class="form-check-label" for="evtOnStartup">{{ t('event_on_startup') }}</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="evtOnUpdate" value="on_update">
+                                <label class="form-check-label" for="evtOnUpdate">{{ t('event_on_update') }}</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="evtOnDemand" value="on_demand">
+                                <label class="form-check-label" for="evtOnDemand">{{ t('event_on_demand') }}</label>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('cancel') }}</button>
+                <button type="button" class="btn btn-primary" id="saveTaskBtn">
+                    <i class="bi bi-check-lg me-1"></i> {{ t('save_task') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно лога задачи -->
+<div class="modal fade" id="taskLogModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="bi bi-terminal me-2"></i> {{ t('task_log') }}: <span id="taskLogName"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre class="bg-dark text-white p-3" style="max-height: 60vh; overflow-y: auto; font-size: 0.85em;"><code id="taskLogContent"></code></pre>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-warning btn-sm" data-action="clearTaskLog">
+                    <i class="bi bi-trash me-1"></i> {{ t('clear_log') }}
+                </button>
+                <button class="btn btn-secondary" data-bs-dismiss="modal">{{ t('close') }}</button>
             </div>
         </div>
     </div>
@@ -164,18 +291,9 @@
                         <span class="visually-hidden">{{ t('loading') }}...</span>
                     </div>
                 </div>
-                
-                <div class="alert alert-info" id="diagnoseStatus">
-                    {{ t('diagnosing_service') }}
-                </div>
-                
+                <div class="alert alert-info" id="diagnoseStatus">{{ t('diagnosing_service') }}</div>
                 <div class="card">
-                    <div class="card-header">
-                        {{ t('diagnosis_results') }}
-                        <button class="btn btn-sm btn-outline-secondary float-end" id="refreshDiagnosisBtn">
-                            <i class="bi bi-arrow-repeat"></i> {{ t('refresh') }}
-                        </button>
-                    </div>
+                    <div class="card-header">{{ t('diagnosis_results') }}</div>
                     <div class="card-body" style="max-height: 60vh; overflow-y: auto;">
                         <div id="diagnoseResults"></div>
                     </div>
@@ -183,54 +301,6 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('close') }}</button>
-                <button type="button" class="btn btn-primary" id="copyDiagnosisBtn">
-                    <i class="bi bi-clipboard"></i> {{ t('copy_to_clipboard') }}
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Модальное окно добавления задачи -->
-<div class="modal fade" id="addTaskModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">{{ t('add_scheduled_task') }}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <form id="addTaskForm">
-                    <div class="mb-3">
-                        <label for="taskName" class="form-label">{{ t('task_name') }}</label>
-                        <input type="text" class="form-control" id="taskName" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="taskSchedule" class="form-label">{{ t('task_schedule') }}</label>
-                        <select class="form-select" id="taskSchedule" required>
-                            <option value="hourly">{{ t('hourly') }}</option>
-                            <option value="daily">{{ t('daily') }}</option>
-                            <option value="weekly">{{ t('weekly') }}</option>
-                            <option value="monthly">{{ t('monthly') }}</option>
-                            <option value="custom">{{ t('custom') }}</option>
-                        </select>
-                    </div>
-                    <div class="mb-3" id="customScheduleGroup" style="display: none;">
-                        <label for="customSchedule" class="form-label">{{ t('custom_schedule') }}</label>
-                        <input type="text" class="form-control" id="customSchedule" 
-                               placeholder="0 * * * * (каждый час)">
-                        <div class="form-text">{{ t('cron_format_help') }}</div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="taskCommand" class="form-label">{{ t('task_command') }}</label>
-                        <textarea class="form-control" id="taskCommand" rows="3" required 
-                                  placeholder="python /path/to/script.py --task"></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('cancel') }}</button>
-                <button type="button" class="btn btn-primary" id="saveTaskBtn">{{ t('save_task') }}</button>
             </div>
         </div>
     </div>
@@ -238,284 +308,265 @@
 
 <script>
 $(document).ready(function() {
-    // Обработчик диагностики сервиса
-    $('[data-action="diagnoseService"]').on('click', function() {
-        $('#diagnoseModal').modal('show');
-        runServiceDiagnosis();
-    });
+    let currentLogTask = null;
 
-    // Функция запуска диагностики
-    function runServiceDiagnosis() {
-        $('#diagnoseSpinner').show();
-        $('#diagnoseStatus').removeClass('alert-danger alert-success').addClass('alert-info')
-                        .text('{{ t("diagnosing_service") }}');
-        $('#diagnoseResults').empty();
-
-        $.post('/', {
-            section: 'service',
-            action: 'diagnose_service'
-        }, function(response) {
-            $('#diagnoseSpinner').hide();
-            
-            if (response.status === 'success') {
-                $('#diagnoseStatus').removeClass('alert-info').addClass('alert-success')
-                                .text('{{ t("diagnosis_completed") }}');
-                displayDiagnosisResults(response);
-            } else {
-                $('#diagnoseStatus').removeClass('alert-info').addClass('alert-danger')
-                                .text('{{ t("diagnosis_failed") }}: ' + (response.message || 'Unknown error'));
+    // ===== ЗАГРУЗКА ЗАДАЧ =====
+    function loadTasks() {
+        $.post('/', {section: 'scheduler', action: 'get_tasks'}, function(resp) {
+            if (resp.status === 'success') {
+                renderTasks(resp.tasks);
             }
-        }).fail(function() {
-            $('#diagnoseSpinner').hide();
-            $('#diagnoseStatus').removeClass('alert-info').addClass('alert-danger')
-                            .text('{{ t("request_failed") }}');
         });
     }
 
-    // Функция отображения результатов диагностики
-    function displayDiagnosisResults(data) {
-        const $results = $('#diagnoseResults');
-        $results.empty();
+    function renderTasks(tasks) {
+        const $list = $('#tasksList');
+        $list.empty();
 
-        // Основная информация о статусе
-        if (data.status_info) {
-            $results.append('<h5>{{ t("service_status") }}</h5>');
-            const status = data.status_info;
-            $results.append(`
-                <div class="table-responsive">
-                    <table class="table table-sm">
-                        <tr><td><strong>{{ t("installed") }}</strong></td><td>${status.installed ? '✅' : '❌'}</td></tr>
-                        <tr><td><strong>{{ t("running") }}</strong></td><td>${status.running ? '✅' : '❌'}</td></tr>
-                        <tr><td><strong>{{ t("enabled") }}</strong></td><td>${status.enabled ? '✅' : '❌'}</td></tr>
-                        <tr><td><strong>OS</strong></td><td>${status.os}</td></tr>
-                    </table>
-                </div>
-            `);
+        if (!tasks || tasks.length === 0) {
+            $list.html('<div class="text-center text-muted py-4"><i class="bi bi-inbox" style="font-size:2rem"></i><br>{{ t("no_tasks_configured") }}</div>');
+            return;
         }
 
-        // Проблемы
-        if (data.problems && data.problems.length > 0) {
-            $results.append('<h5 class="text-danger">{{ t("problems_detected") }}</h5>');
-            data.problems.forEach(problem => {
-                $results.append(`<div class="alert alert-danger">❌ ${problem}</div>`);
+        const categories = {system: [], monitoring: [], maintenance: [], custom: []};
+        tasks.forEach(t => {
+            const cat = t.category || 'custom';
+            if (!categories[cat]) categories[cat] = [];
+            categories[cat].push(t);
+        });
+
+        const catNames = {
+            system: '{{ t("category_system") }}',
+            monitoring: '{{ t("category_monitoring") }}',
+            maintenance: '{{ t("category_maintenance") }}',
+            custom: '{{ t("category_custom") }}'
+        };
+        const catIcons = {system: 'bi-gear', monitoring: 'bi-activity', maintenance: 'bi-brush', custom: 'bi-tools'};
+        const catColors = {system: 'primary', monitoring: 'info', maintenance: 'warning', custom: 'secondary'};
+
+        for (const [cat, catTasks] of Object.entries(categories)) {
+            if (catTasks.length === 0) continue;
+
+            let html = `<div class="mb-3">
+                <h6 class="text-muted mb-2"><i class="bi ${catIcons[cat] || 'bi-circle'} me-1"></i> ${catNames[cat] || cat}</h6>`;
+
+            catTasks.forEach(task => {
+                const desc = typeof task.description === 'object' ? 
+                    (task.description.ru || task.description.en || task.name) : 
+                    (task.description || task.name);
+                const statusBadge = task.enabled ? 
+                    '<span class="badge bg-success">{{ t("active") }}</span>' : 
+                    '<span class="badge bg-secondary">{{ t("disabled") }}</span>';
+
+                const lastRun = task.last_run ? new Date(task.last_run).toLocaleString() : '—';
+                const lastStatus = task.last_status === 'success' ? '<span class="text-success">✓</span>' :
+                                   task.last_status === 'error' ? '<span class="text-danger">✗</span>' : '—';
+                const runCount = task.run_count || 0;
+
+                html += `<div class="card mb-2 border-start border-${task.enabled ? 'success' : 'secondary'} border-3">
+                    <div class="card-body py-2 px-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input task-toggle" type="checkbox" 
+                                           data-task="${task.name}" ${task.enabled ? 'checked' : ''}>
+                                </div>
+                                <div>
+                                    <strong>${task.name}</strong> ${statusBadge}
+                                    <br><small class="text-muted">${desc}</small>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-3">
+                                <small class="text-muted d-none d-md-block">
+                                    <i class="bi bi-clock"></i> ${task.schedule} &nbsp;
+                                    <i class="bi bi-check2-all"></i> ${runCount} &nbsp;
+                                    <i class="bi bi-calendar"></i> ${lastRun} ${lastStatus}
+                                </small>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-success task-run" data-task="${task.name}" 
+                                            title="{{ t('run_now') }}">
+                                        <i class="bi bi-play-fill"></i>
+                                    </button>
+                                    <button class="btn btn-outline-info task-log" data-task="${task.name}"
+                                            title="{{ t('view_log') }}">
+                                        <i class="bi bi-terminal"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger task-delete" data-task="${task.name}"
+                                            title="{{ t('delete_task') }}">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            html += '</div>';
+            $list.append(html);
+        }
+
+        // Bind events
+        $('.task-toggle').on('change', function() {
+            const name = $(this).data('task');
+            $.post('/', {section: 'scheduler', action: 'toggle_task', name: name}, function() {
+                loadTasks();
+            });
+        });
+
+        $('.task-run').on('click', function() {
+            const name = $(this).data('task');
+            $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
+            $.post('/', {section: 'scheduler', action: 'run_task_now', name: name}, function(resp) {
+                alert(resp.message || resp.status);
+                loadTasks();
+            }).fail(function() { loadTasks(); });
+        });
+
+        $('.task-log').on('click', function() {
+            const name = $(this).data('task');
+            currentLogTask = name;
+            $('#taskLogName').text(name);
+            $.post('/', {section: 'scheduler', action: 'get_task_log', name: name}, function(resp) {
+                $('#taskLogContent').text(resp.log || '(empty)');
+                $('#taskLogModal').modal('show');
+            });
+        });
+
+        $('.task-delete').on('click', function() {
+            const name = $(this).data('task');
+            if (confirm('{{ t("confirm_delete_task") }} ' + name + '?')) {
+                $.post('/', {section: 'scheduler', action: 'delete_task', name: name}, function() {
+                    loadTasks();
+                });
+            }
+        });
+    }
+
+    // ===== ДОБАВЛЕНИЕ ЗАДАЧИ =====
+    $('#saveTaskBtn').on('click', function() {
+        let params = {};
+        try {
+            const raw = $('#taskParams').val().trim();
+            if (raw) params = JSON.parse(raw);
+        } catch(e) {
+            alert('{{ t("invalid_json") }}: ' + e.message);
+            return;
+        }
+
+        const events = [];
+        $('#addTaskForm input[type=checkbox]:checked').each(function() {
+            if ($(this).val()) events.push($(this).val());
+        });
+
+        const data = {
+            name: $('#taskName').val().trim(),
+            description: $('#taskDescription').val().trim(),
+            category: $('#taskCategory').val(),
+            schedule: $('#taskSchedule').val(),
+            custom_schedule: $('#customSchedule').val() || null,
+            module: $('#taskModule').val() || null,
+            func: $('#taskFunc').val().trim() || null,
+            params: params,
+            events: events,
+            enabled: true
+        };
+
+        if (!data.name) {
+            alert('{{ t("task_name_required") }}');
+            return;
+        }
+
+        $.post('/', {section: 'scheduler', action: 'add_task', ...data}, function(resp) {
+            if (resp.status === 'success') {
+                $('#addTaskModal').modal('hide');
+                $('#addTaskForm')[0].reset();
+                loadTasks();
+            } else {
+                alert(resp.message);
+            }
+        });
+    });
+
+    // ===== ОЧИСТКА ЛОГА =====
+    $('[data-action="clearTaskLog"]').on('click', function() {
+        if (currentLogTask) {
+            $.post('/', {section: 'scheduler', action: 'clear_task_log', name: currentLogTask}, function() {
+                $('#taskLogContent').text('');
             });
         }
-
-        // Детальный статус
-        if (data.detailed_status) {
-            $results.append('<h5>{{ t("detailed_status") }}</h5>');
-            $results.append(`<pre class="bg-light p-3">${escapeHtml(data.detailed_status)}</pre>`);
-        }
-
-        // Логи журнала
-        if (data.journal_logs) {
-            $results.append('<h5>{{ t("journal_logs") }}</h5>');
-            $results.append(`<pre class="bg-dark text-light p-3">${escapeHtml(data.journal_logs)}</pre>`);
-        }
-
-        // Конфигурация сервиса
-        if (data.service_config) {
-            $results.append('<h5>{{ t("service_configuration") }}</h5>');
-            $results.append(`<pre class="bg-light p-3">${escapeHtml(data.service_config)}</pre>`);
-        }
-
-        // Права доступа
-        if (data.service_permissions) {
-            $results.append('<h5>{{ t("permissions") }}</h5>');
-            $results.append(`<p>${data.service_permissions}</p>`);
-        }
-
-        // Пути
-        if (data.paths) {
-            $results.append('<h5>{{ t("paths") }}</h5>');
-            $results.append(`
-                <div class="table-responsive">
-                    <table class="table table-sm">
-                        ${Object.entries(data.paths).map(([key, value]) => `
-                            <tr>
-                                <td><strong>${key}</strong></td>
-                                <td>${typeof value === 'boolean' ? (value ? '✅' : '❌') : value}</td>
-                            </tr>
-                        `).join('')}
-                    </table>
-                </div>
-            `);
-        }
-
-        // Ошибки
-        if (data.error) {
-            $results.append('<h5 class="text-danger">{{ t("errors") }}</h5>');
-            $results.append(`<div class="alert alert-danger">${escapeHtml(data.error)}</div>`);
-        }
-    }
-
-    // Вспомогательная функция для экранирования HTML
-    function escapeHtml(text) {
-        return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
-
-    // Кнопка обновления диагностики
-    $('#refreshDiagnosisBtn').on('click', runServiceDiagnosis);
-
-    // Кнопка копирования в буфер обмена
-    $('#copyDiagnosisBtn').on('click', function() {
-        const diagnosisText = $('#diagnoseResults').text();
-        navigator.clipboard.writeText(diagnosisText).then(() => {
-            alert('{{ t("copied_to_clipboard") }}');
-        }).catch(() => {
-            alert('{{ t("copy_failed") }}');
-        });
     });
 
-    // Обработчик кнопки обновления статуса
+    // ===== ПОКАЗАТЬ/СКРЫТЬ CUSTOM SCHEDULE =====
+    $('#taskSchedule').on('change', function() {
+        $('#customScheduleGroup').toggle($(this).val() === 'custom');
+    });
+
+    // ===== ОБНОВЛЕНИЕ =====
+    $('[data-action="refreshTasks"]').on('click', loadTasks);
     $('[data-action="refreshStatus"]').on('click', function() {
         $('#mainMenu a[data-section="service"]').click();
     });
 
-    // Обработчик установки сервиса
+    // ===== ДИАГНОСТИКА =====
+    $('[data-action="diagnoseService"]').on('click', function() {
+        $('#diagnoseModal').modal('show');
+        $.post('/', {section: 'service', action: 'diagnose_service'}, function(resp) {
+            $('#diagnoseSpinner').hide();
+            if (resp.status === 'success') {
+                $('#diagnoseStatus').removeClass('alert-info').addClass('alert-success').text('{{ t("diagnosis_completed") }}');
+                let html = '<pre class="bg-light p-3">' + JSON.stringify(resp, null, 2) + '</pre>';
+                $('#diagnoseResults').html(html);
+            } else {
+                $('#diagnoseStatus').removeClass('alert-info').addClass('alert-danger').text(resp.message || 'Error');
+            }
+        }).fail(function() {
+            $('#diagnoseSpinner').hide();
+            $('#diagnoseStatus').removeClass('alert-info').addClass('alert-danger').text('{{ t("request_failed") }}');
+        });
+    });
+
+    // ===== УСТАНОВКА/УДАЛЕНИЕ СЕРВИСА =====
     $('[data-action="installService"]').on('click', function() {
         if (confirm('{{ t("confirm_install_service") }}')) {
-            $.post('/', {
-                section: 'service',
-                action: 'install_service'
-            }, function(response) {
-                if (response.status === 'success') {
+            $.post('/', {section: 'service', action: 'install_service'}, function(resp) {
+                if (resp.status === 'success') {
                     alert('{{ t("service_installed_successfully") }}');
-                    $('#mainMenu a[data-section="service"]').click();
+                    location.reload();
                 } else {
-                    alert('{{ t("service_installation_failed") }}: ' + response.message);
+                    alert('{{ t("service_installation_failed") }}: ' + resp.message);
                 }
-            }).fail(function() {
-                alert('{{ t("request_failed") }}');
             });
         }
     });
 
-    // Обработчик удаления сервиса
     $('[data-action="uninstallService"]').on('click', function() {
         if (confirm('{{ t("confirm_uninstall_service") }}')) {
-            $.post('/', {
-                section: 'service',
-                action: 'uninstall_service'
-            }, function(response) {
-                if (response.status === 'success') {
+            $.post('/', {section: 'service', action: 'uninstall_service'}, function(resp) {
+                if (resp.status === 'success') {
                     alert('{{ t("service_uninstalled_successfully") }}');
-                    $('#mainMenu a[data-section="service"]').click();
+                    location.reload();
                 } else {
-                    alert('{{ t("service_uninstallation_failed") }}: ' + response.message);
+                    alert('{{ t("service_uninstallation_failed") }}: ' + resp.message);
                 }
-            }).fail(function() {
-                alert('{{ t("request_failed") }}');
             });
         }
     });
 
-    // Обработчик действий с сервисом (старт, стоп и т.д.)
+    // ===== ДЕЙСТВИЯ С СЕРВИСОМ =====
     $('[data-action="serviceAction"]').on('click', function() {
-        const actionData = $(this).data('data');
-        $.post('/', {
-            section: 'service',
-            action: 'service_action',
-            ...actionData
-        }, function(response) {
-            if (response.status === 'success') {
+        const d = $(this).data('data');
+        $.post('/', {section: 'service', action: 'service_action', ...d}, function(resp) {
+            if (resp.status === 'success') {
                 alert('{{ t("action_completed_successfully") }}');
-                $('#mainMenu a[data-section="service"]').click();
+                location.reload();
             } else {
-                alert('{{ t("action_failed") }}: ' + response.message);
+                alert('{{ t("action_failed") }}: ' + (resp.message || ''));
             }
-        }).fail(function() {
-            alert('{{ t("request_failed") }}');
-        });
+        }).fail(function() { alert('{{ t("request_failed") }}'); });
     });
 
-    // Показать/скрыть поле для кастомного расписания
-    $('#taskSchedule').on('change', function() {
-        if ($(this).val() === 'custom') {
-            $('#customScheduleGroup').show();
-        } else {
-            $('#customScheduleGroup').hide();
-        }
-    });
-
-    // Обработчик сохранения задачи
-    $('#saveTaskBtn').on('click', function() {
-        const taskData = {
-            task_name: $('#taskName').val(),
-            task_schedule: $('#taskSchedule').val(),
-            task_command: $('#taskCommand').val()
-        };
-
-        if (taskData.task_schedule === 'custom') {
-            taskData.custom_schedule = $('#customSchedule').val();
-        }
-
-        $.post('/', {
-            section: 'service',
-            action: 'add_scheduled_task',
-            ...taskData
-        }, function(response) {
-            if (response.status === 'success') {
-                alert('{{ t("task_added_successfully") }}');
-                $('#addTaskModal').modal('hide');
-                // Обновить таблицу задач
-                loadScheduledTasks();
-            } else {
-                alert('{{ t("task_addition_failed") }}: ' + response.message);
-            }
-        }).fail(function() {
-            alert('{{ t("request_failed") }}');
-        });
-    });
-
-    // Функция загрузки списка задач
-    function loadScheduledTasks() {
-        $.post('/', {
-            section: 'service',
-            action: 'get_scheduled_tasks'
-        }, function(response) {
-            if (response.status === 'success') {
-                // Обработать и отобразить задачи в таблице
-                updateTasksTable(response.tasks);
-            } else {
-                console.error('Failed to load tasks:', response.message);
-            }
-        }).fail(function() {
-            console.error('Request failed');
-        });
-    }
-
-    // Функция обновления таблицы задач
-    function updateTasksTable(tasks) {
-        const $tableBody = $('#tasksTable tbody');
-        $tableBody.empty();
-
-        if (tasks.length === 0) {
-            $tableBody.append('<tr><td colspan="5" class="text-center">{{ t("no_tasks_configured") }}</td></tr>');
-            return;
-        }
-
-        tasks.forEach(task => {
-            const $row = $('<tr>');
-            $row.append($('<td>').text(task.name));
-            $row.append($('<td>').text(task.schedule));
-            $row.append($('<td>').text(task.command));
-            $row.append($('<td>').html('<span class="badge bg-success">{{ t("active") }}</span>'));
-            
-            const $actions = $('<td>');
-            $actions.append('<button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>');
-            $row.append($actions);
-            
-            $tableBody.append($row);
-        });
-    }
-
-    // Загрузить задачи при открытии страницы
-    loadScheduledTasks();
+    // Initial load
+    loadTasks();
 });
 </script>

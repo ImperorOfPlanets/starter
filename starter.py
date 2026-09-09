@@ -26,6 +26,8 @@ def parse_args():
     parser.add_argument('--install-service', action='store_true', help='Установить системный сервис')
     parser.add_argument('--uninstall-service', action='store_true', help='Удалить системный сервис')
     parser.add_argument('--install-cron', action='store_true', help='Установить CRON задачу')
+    parser.add_argument('--task', type=str, help='Выполнить задачу (отдельный процесс)')
+    parser.add_argument('--task-params', type=str, help='JSON параметры для задачи')
     return parser.parse_args()
 
 
@@ -229,6 +231,29 @@ def main():
     print("-" * 40)
     SystemModule.collect_basic_system_info()
     print(f"   ✅ starter_path: {get_global('starter_path')}")
+
+    # ============================================================
+    # ОБРАБОТКА --task (автономное выполнение задачи)
+    # Задача выполняется в ОТДЕЛЬНОМ процессе — если упадёт, стартер выживет
+    # ============================================================
+    if args.task:
+        print(f"\n📋 Выполнение задачи: {args.task}")
+        params = {}
+        if args.task_params:
+            try:
+                import json
+                params = json.loads(args.task_params)
+            except Exception as e:
+                print(f"   ❌ Ошибка парсинга параметров: {e}")
+
+        # Minimal init for task execution
+        LogManager.initialize(debug_mode=False)
+
+        from files.core.oss.default.scheduler import SchedulerModule
+        SchedulerModule.set_globals()
+        result = SchedulerModule.execute_task(args.task, params)
+        print(f"\n📋 Результат: {json.dumps(result, ensure_ascii=False, indent=2)}")
+        sys.exit(0 if result.get('status') == 'success' else 1)
 
     # ============================================================
     # ПРОВЕРКА НА ДОЧЕРНИЙ ПРОЦЕСС WERKZEUG
