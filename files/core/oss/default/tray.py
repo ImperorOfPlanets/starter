@@ -139,7 +139,7 @@ class TrayModule(BaseModule):
                                 try:
                                     import psutil
                                     psutil.Process(proc['pid']).terminate()
-                                except:
+                                except (psutil.NoSuchProcess, psutil.AccessDenied):
                                     pass
                     time.sleep(1)
                     update_menu(icon)
@@ -168,7 +168,7 @@ class TrayModule(BaseModule):
                     time.sleep(5)
                     try:
                         update_menu(icon)
-                    except:
+                    except Exception:
                         pass
 
             menu = pystray.Menu(
@@ -251,6 +251,6 @@ class TrayModule(BaseModule):
         if TrayModule._icon:
             try:
                 TrayModule._icon.stop()
-            except:
+            except Exception:
                 pass
         logger.info("Tray icon stopped")

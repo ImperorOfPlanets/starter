@@ -136,14 +136,14 @@ def start_interactive_mode():
     env_path = get_global('starter_env_path')
     if env_path and env_path.exists():
         load_dotenv(env_path, override=True)
-        print(f"[DEBUG] Переменные окружения загружены из {env_path}")
+        logger.info(f"Переменные окружения загружены из {env_path}")
     else:
         print(f"[WARNING] Файл .env не найден")
     
     port_from_env = os.environ.get('PORT')
     if port_from_env:
         set_global('port', int(port_from_env))
-        print(f"[DEBUG] Порт из .env: {port_from_env}")
+        logger.info(f"Порт из .env: {port_from_env}")
     
     ssl_module = get('ssl')
     network_module = get('network')
@@ -601,7 +601,7 @@ def main():
 
         if result == 0:
             print(f"   ❌ Порт {starter_port} уже занят!")
-            print(f"   🛑 Остановите占用此端口的 процесс или измените PORT в .env")
+            print(f"   🛑 Остановите процесс, занимающий этот порт, или измените PORT в .env")
             logger.error(f"Port {starter_port} is already in use")
             sys.exit(1)
         else:

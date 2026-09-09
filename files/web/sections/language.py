@@ -24,11 +24,13 @@ def changeLanguage(data, session):
     
     if lang in languages:
         if not ENV_PATH.exists():
-            from files.web.routes import create_env_with_defaults
-            create_env_with_defaults(lang)
+            ENV_PATH.write_text(f'LANGUAGE={lang}\n', encoding='utf-8')
         else:
             current_env = ENV_PATH.read_text(encoding='utf-8')
-            updated_env = re.sub(r'LANGUAGE=.*', f'LANGUAGE={lang}', current_env)
+            if 'LANGUAGE=' in current_env:
+                updated_env = re.sub(r'LANGUAGE=.*', f'LANGUAGE={lang}', current_env)
+            else:
+                updated_env = current_env.rstrip() + f'\nLANGUAGE={lang}\n'
             ENV_PATH.write_text(updated_env, encoding='utf-8')
         
         set_language(lang)

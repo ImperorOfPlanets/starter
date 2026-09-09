@@ -113,7 +113,7 @@ class RequirementsModule(BaseModule):
         print(f"   Существует: {'✅' if reqs_dir.exists() else '❌ НЕТ!'}")
         
         # ========== ПОДРОБНОЕ ЛОГИРОВАНИЕ ==========
-        print(f"\n🔍 [DEBUG] ПАРАМЕТРЫ ПОИСКА:")
+        logger.info(f"\n🔍 ПАРАМЕТРЫ ПОИСКА:")
         print(f"   reqs_dir = {reqs_dir}")
         print(f"   os_info['name'] = '{os_info['name']}'")
         print(f"   os_info['family'] = '{os_info['family']}'")

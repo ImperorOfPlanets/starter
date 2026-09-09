@@ -32,7 +32,7 @@ translations = {
 
         # ==================== FOOTER ====================
         "footer":{
-            "copyright": "© 2025 MyIDon.SITE. All rights reserved."
+            "copyright": "© 2026 MyIDon.SITE. All rights reserved."
         },
 
         # ==================== AUTHENTICATION ====================

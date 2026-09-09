@@ -75,7 +75,7 @@ class ProcessModule(BaseModule):
             else:
                 os.kill(pid, 0)
                 return True
-        except:
+        except (OSError, ProcessLookupError):
             return False
     
     @staticmethod
@@ -141,7 +141,7 @@ class ProcessModule(BaseModule):
                                 proc.kill()
                                 killed.append(pid)
                                 print(f"   ✅ Убит потерянный процесс PID: {pid}")
-                    except:
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
                         pass
             except ImportError:
                 os.system('pkill -f starter.py')

@@ -152,13 +152,20 @@ def handle_sections():
     section_name = request.form.get('section')
     action_name = request.form.get('action')
     
-    logger.info(f"=== HANDLE SECTIONS ===")
-    logger.info(f"Section: {section_name}, Action: {action_name}")
-    logger.info(f"Session logged_in: {session.get('logged_in', False)}")
-    logger.info(f"Form data: {dict(request.form)}")
-    
     if not section_name or not action_name:
         return jsonify({'status': 'error', 'message': 'Section and action required'}), 400
+    
+    # Разрешённые секции без авторизации
+    PUBLIC_SECTIONS = {'auth'}
+    PUBLIC_ACTIONS_AUTH = {'login', 'login_page', 'login_with_myidon', 'oauth_callback'}
+    
+    # Проверка авторизации
+    is_public = section_name in PUBLIC_SECTIONS and action_name in PUBLIC_ACTIONS_AUTH
+    if not is_public and not session.get('logged_in'):
+        logger.warning(f"Unauthorized POST: {section_name}.{action_name}")
+        return jsonify({'status': 'error', 'message': 'Unauthorized', 'auth_form': True}), 401
+    
+    logger.info(f"Section: {section_name}, Action: {action_name}")
     
     # Сохраняем в глобальном контексте
     g.current_section = section_name

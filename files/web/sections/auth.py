@@ -9,15 +9,18 @@ from files.core.utils.log_utils import LogManager
 
 logger = LogManager.get_logger('auth')
 
-LOGIN_LOCKOUT_SECONDS = 5
+LOGIN_LOCKOUT_BASE = 60
+MAX_LOCKOUT = 600
 _failed_attempts = {}
 
 
 def _check_lockout(ip):
     if ip in _failed_attempts:
-        elapsed = time.time() - _failed_attempts[ip]
-        if elapsed < LOGIN_LOCKOUT_SECONDS:
-            remaining = int(LOGIN_LOCKOUT_SECONDS - elapsed)
+        attempts, first_failure = _failed_attempts[ip]
+        lockout = min(LOGIN_LOCKOUT_BASE * attempts, MAX_LOCKOUT)
+        elapsed = time.time() - first_failure
+        if elapsed < lockout:
+            remaining = int(lockout - elapsed)
             return True, remaining
         else:
             del _failed_attempts[ip]
@@ -25,7 +28,11 @@ def _check_lockout(ip):
 
 
 def _record_failure(ip):
-    _failed_attempts[ip] = time.time()
+    if ip in _failed_attempts:
+        attempts, first = _failed_attempts[ip]
+        _failed_attempts[ip] = (attempts + 1, first)
+    else:
+        _failed_attempts[ip] = (1, time.time())
 
 
 def _clear_failures(ip):
