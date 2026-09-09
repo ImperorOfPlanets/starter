@@ -1328,19 +1328,19 @@ def server_git_log(data, session_obj):
         remote_url = (subprocess.run(
             ['git', 'remote', 'get-url', 'origin'],
             cwd=str(code_path), **kw
-        ).stdout or b'').decode().strip()
+        ).stdout or '').strip()
 
         # Получаем текущий коммит
         local_commit = (subprocess.run(
             ['git', 'rev-parse', 'HEAD'],
             cwd=str(code_path), **kw
-        ).stdout or b'').decode().strip()
+        ).stdout or '').strip()
 
         # Получаем ветку
         branch = (subprocess.run(
             ['git', 'branch', '--show-current'],
             cwd=str(code_path), **kw
-        ).stdout or b'').decode().strip()
+        ).stdout or '').strip()
 
         # Fetch remote и получаем удалённый коммит
         has_update = False
@@ -1353,7 +1353,7 @@ def server_git_log(data, session_obj):
             remote_commit = (subprocess.run(
                 ['git', 'rev-parse', '@{u}'],
                 cwd=str(code_path), **kw
-            ).stdout or b'').decode().strip()
+            ).stdout or '').strip()
             has_update = bool(remote_commit) and local_commit != remote_commit
 
         # Получаем последние коммиты
