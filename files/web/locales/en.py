@@ -261,19 +261,11 @@ translations = {
                 "installation_completed_warning": "Installation completed with warnings",
                 "installation_failed": "Installation failed",
                 "start_project":"Start project",
-                # New translations for project start modal
                 "project_start_logs": "Project start logs",
                 "starting_project": "Starting project...",
                 "startup_logs": "Startup logs",
                 "project_start_completed": "Project started successfully",
                 "project_start_failed": "Project start failed",
-                "download_logs": "Download logs",
-                "log_request_failed": "Log request failed",
-                "close": "Close",
-                "finish": "Finish",
-                "loading": "Loading",
-                "refresh": "Refresh",
-                # New translations for history table
                 "launch_history": "Launch history",
                 "date_time": "Date and time",
                 "log_file": "Log file",
@@ -304,11 +296,7 @@ translations = {
                 "confirm_delete_log": "Are you sure you want to delete this log file?",
                 "log_deleted_success": "Log file deleted successfully",
                 "log_deleted_error": "Error deleting log file",
-                "open_logs": "Open logs",
-                "copy_name": "Copy name",
-                "delete_log": "Delete log",
                 "view_logs": "View logs",
-                "download_logs": "Download logs",
                 "log_content": "Log content",
                 "close": "Close"
             },
@@ -485,14 +473,6 @@ translations = {
                 "logs_how_to_use": "How to use:",
                 "logs_step1": "Select log type from the list on the left",
                 "logs_step2": "Select specific log file",
-                "logs_step3": "Use filters to search for specific entries",
-                "logs_types": "Log types",
-                "logs_info": "Log information",
-                "logs_about": "About system logs",
-                "logs_description": "Here you can view and analyze system, application, and service logs.",
-                "logs_how_to_use": "How to use:",
-                "logs_step1": "Select log type from the list on the left",
-                "logs_step2": "Select specific log file",
                 "logs_step3": "Use filters to search for specific entries"
             },
             "view": {
@@ -578,34 +558,88 @@ translations = {
         'updates': {
             'basic': {
                 'title': 'Updates',
-                'description': 'Update information'
+                'description': 'System and server update management'
             },
-            'index':{
+            'index': {
+                # Main headers
                 'updates_status_title': 'Update status',
-                'check_updates': 'Check for updates',
-                'update_status': 'Update status',
-                'project': 'Project',
-                'last_update': 'Last update',
-                'status': 'Status',
-                'actions': 'Actions',
-                'never_updated': 'Never updated',
-                'update_now': 'Update now',
-                'checking': 'Checking...',
-                'updating': 'Updating...',
+                'starter_updates': 'Starter updates',
+                'server_updates': 'Server updates',
+                'check_all_updates': 'Check all updates',
+                'updates_check_started': 'Updates check started',
+                
+                # Update statuses
                 'up_to_date': 'Up to date',
                 'recently_updated': 'Recently updated',
                 'update_available': 'Update available',
-                'updates_check_success': 'Updates checked successfully',
-                'project_not_found': 'Project not found',
-                'update_started': 'Update started',
-                'view_history': 'History',
-                'no_projects_configured': 'No projects configured',
-                'configure_projects_in_config': 'Configure projects in configuration',
-                'check_all_updates': 'Check all updates',
-                'updates_check_started': 'Updates check started'
+                'update_strongly_recommended': 'Urgent update recommended',
+                'never_updated': 'Never updated',
+                'current_status': 'Current status',
+                'last_update': 'Last update',
+                
+                # Actions
+                'check_updates': 'Check for updates',
+                'update_now': 'Update now',
+                'check': 'Check',
+                'update': 'Update',
+                'history': 'History',
+                'settings': 'Settings',
+                'refresh': 'Refresh',
+                'checking': 'Checking...',
+                'updating': 'Updating...',
+                
+                # Starter section
+                'current_repository': 'Current repository',
+                'available_repositories': 'Available repositories',
+                'switch': 'Switch',
+                'current': 'Current',
+                
+                # Update settings
+                'update_settings': 'Update settings',
+                'auto_update': 'Auto update',
+                'notifications': 'Notifications',
+                'check_interval': 'Check interval',
+                'minutes': 'minutes',
+                'hours': 'hours',
+                'enabled': 'Enabled',
+                'disabled': 'Disabled',
+                
+                # Server section
+                'server_updates_info': 'Server update information',
+                'server_updates_coming_soon': 'Server project updates will be available in upcoming versions',
+                'no_servers_configured': 'No servers configured',
+                'loading_servers_status': 'Loading server status...',
+                'server_update_history': 'Server update history',
+                'starter_update_history': 'Starter update history',
+                
+                # History and logs
+                'view_history': 'View history',
+                'view_log': 'View log',
+                'download_log': 'Download log',
+                'no_update_history': 'No update history',
+                
+                # Settings
+                'enable_auto_update': 'Enable automatic updates',
+                'auto_update_description': 'Automatically check for and install updates',
+                'enable_notifications': 'Enable notifications',
+                'notifications_description': 'Notify about available updates',
+                'check_interval_description': 'Interval for checking new updates',
+                'save_settings': 'Save settings',
+                'cancel': 'Cancel',
+                
+                # Modals
+                'update_progress': 'Update progress',
+                'update_logs': 'Update logs',
+                'update_completed': 'Update completed',
+                'update_failed': 'Update failed',
+                
+                # History statuses
+                'completed': 'Completed',
+                'error': 'Error',
+                'in_progress': 'In progress'
             }
         },
-    
+   
         # ==================== SERVICE ====================
         'service': {
             'basic': {
@@ -775,7 +809,7 @@ translations = {
                 "actions": "Actions",
                 "add_variable": "Add variable",
                 "save_env": "Save .env",
-                "generate_docker_compose": "Generate Docker Compose",
+                "generate_docker_compose": "Generate docker-compose.yml",
                 "env_saved_successfully": "File .env saved successfully",
                 "env_save_failed": "Error saving .env file",
                 "docker_env_editor": "Docker Environment Editor"

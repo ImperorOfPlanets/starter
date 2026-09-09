@@ -261,19 +261,11 @@ translations = {
                 "installation_completed_warning": "安装完成但有警告",
                 "installation_failed": "安装失败",
                 "start_project":"启动项目",
-                # 项目启动模态框的新翻译
                 "project_start_logs": "项目启动日志",
                 "starting_project": "启动项目...",
                 "startup_logs": "启动日志",
                 "project_start_completed": "项目启动成功",
                 "project_start_failed": "项目启动失败",
-                "download_logs": "下载日志",
-                "log_request_failed": "日志请求失败",
-                "close": "关闭",
-                "finish": "完成",
-                "loading": "加载",
-                "refresh": "刷新",
-                # 历史表的新翻译
                 "launch_history": "启动历史",
                 "date_time": "日期和时间",
                 "log_file": "日志文件",
@@ -304,11 +296,7 @@ translations = {
                 "confirm_delete_log": "确定要删除此日志文件吗？",
                 "log_deleted_success": "日志文件删除成功",
                 "log_deleted_error": "删除日志文件时出错",
-                "open_logs": "打开日志",
-                "copy_name": "复制名称",
-                "delete_log": "删除日志",
                 "view_logs": "查看日志",
-                "download_logs": "下载日志",
                 "log_content": "日志内容",
                 "close": "关闭"
             },
@@ -485,14 +473,6 @@ translations = {
                 "logs_how_to_use": "如何使用：",
                 "logs_step1": "从左侧列表中选择日志类型",
                 "logs_step2": "选择特定的日志文件",
-                "logs_step3": "使用过滤器搜索特定条目",
-                "logs_types": "日志类型",
-                "logs_info": "日志信息",
-                "logs_about": "关于系统日志",
-                "logs_description": "在这里您可以查看和分析系统、应用程序和服务日志。",
-                "logs_how_to_use": "如何使用：",
-                "logs_step1": "从左侧列表中选择日志类型",
-                "logs_step2": "选择特定的日志文件",
                 "logs_step3": "使用过滤器搜索特定条目"
             },
             "view": {
@@ -578,34 +558,88 @@ translations = {
         'updates': {
             'basic': {
                 'title': '更新',
-                'description': '更新信息'
+                'description': '系统和服务器更新管理'
             },
-            'index':{
+            'index': {
+                # 主要标题
                 'updates_status_title': '更新状态',
-                'check_updates': '检查更新',
-                'update_status': '更新状态',
-                'project': '项目',
-                'last_update': '最后更新',
-                'status': '状态',
-                'actions': '操作',
-                'never_updated': '从未更新',
-                'update_now': '立即更新',
-                'checking': '检查中...',
-                'updating': '更新中...',
+                'starter_updates': '启动器更新',
+                'server_updates': '服务器更新',
+                'check_all_updates': '检查所有更新',
+                'updates_check_started': '更新检查已开始',
+                
+                # 更新状态
                 'up_to_date': '最新',
                 'recently_updated': '最近更新',
                 'update_available': '有可用更新',
-                'updates_check_success': '更新检查成功',
-                'project_not_found': '未找到项目',
-                'update_started': '更新已开始',
-                'view_history': '历史',
-                'no_projects_configured': '未配置项目',
-                'configure_projects_in_config': '在配置中配置项目',
-                'check_all_updates': '检查所有更新',
-                'updates_check_started': '更新检查已开始'
+                'update_strongly_recommended': '建议紧急更新',
+                'never_updated': '从未更新',
+                'current_status': '当前状态',
+                'last_update': '最后更新',
+                
+                # 操作
+                'check_updates': '检查更新',
+                'update_now': '立即更新',
+                'check': '检查',
+                'update': '更新',
+                'history': '历史',
+                'settings': '设置',
+                'refresh': '刷新',
+                'checking': '检查中...',
+                'updating': '更新中...',
+                
+                # 启动器部分
+                'current_repository': '当前仓库',
+                'available_repositories': '可用仓库',
+                'switch': '切换',
+                'current': '当前',
+                
+                # 更新设置
+                'update_settings': '更新设置',
+                'auto_update': '自动更新',
+                'notifications': '通知',
+                'check_interval': '检查间隔',
+                'minutes': '分钟',
+                'hours': '小时',
+                'enabled': '已启用',
+                'disabled': '已禁用',
+                
+                # 服务器部分
+                'server_updates_info': '服务器更新信息',
+                'server_updates_coming_soon': '服务器项目更新将在即将发布的版本中提供',
+                'no_servers_configured': '未配置服务器',
+                'loading_servers_status': '加载服务器状态...',
+                'server_update_history': '服务器更新历史',
+                'starter_update_history': '启动器更新历史',
+                
+                # 历史和日志
+                'view_history': '查看历史',
+                'view_log': '查看日志',
+                'download_log': '下载日志',
+                'no_update_history': '没有更新历史',
+                
+                # 设置
+                'enable_auto_update': '启用自动更新',
+                'auto_update_description': '自动检查并安装更新',
+                'enable_notifications': '启用通知',
+                'notifications_description': '通知可用的更新',
+                'check_interval_description': '检查新更新的间隔',
+                'save_settings': '保存设置',
+                'cancel': '取消',
+                
+                # 模态框
+                'update_progress': '更新进度',
+                'update_logs': '更新日志',
+                'update_completed': '更新完成',
+                'update_failed': '更新失败',
+                
+                # 历史状态
+                'completed': '已完成',
+                'error': '错误',
+                'in_progress': '进行中'
             }
         },
-    
+   
         # ==================== SERVICE ====================
         'service': {
             'basic': {
@@ -775,7 +809,7 @@ translations = {
                 "actions": "操作",
                 "add_variable": "添加变量",
                 "save_env": "保存 .env",
-                "generate_docker_compose": "生成 Docker Compose",
+                "generate_docker_compose": "生成 docker-compose.yml",
                 "env_saved_successfully": "文件 .env 保存成功",
                 "env_save_failed": "保存 .env 文件时出错",
                 "docker_env_editor": "Docker 环境变量编辑器"
