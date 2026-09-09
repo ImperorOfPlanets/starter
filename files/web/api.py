@@ -157,8 +157,9 @@ def install_server():
             'force': 'true' if force else 'false',
         }
 
-        # Вызываем с пустой сессией (API авторизован через ключ)
-        result = do_install(form_data, {})
+        # API авторизован через ключ — передаём фейковую сессию
+        api_session = {'logged_in': True}
+        result = do_install(form_data, api_session)
 
         if isinstance(result, tuple):
             result, status = result
@@ -178,7 +179,7 @@ def start_server(server_id):
     try:
         from files.web.sections.servers import start_server as do_start
 
-        result = do_start({'server_id': server_id}, {})
+        result = do_start({'server_id': server_id}, {'logged_in': True})
 
         if isinstance(result, tuple):
             result, status = result
@@ -198,7 +199,7 @@ def stop_server(server_id):
     try:
         from files.web.sections.servers import stop_server as do_stop
 
-        result = do_stop({'server_id': server_id}, {})
+        result = do_stop({'server_id': server_id}, {'logged_in': True})
 
         if isinstance(result, tuple):
             result, status = result
@@ -218,7 +219,7 @@ def remove_server(server_id):
     try:
         from files.web.sections.servers import remove_server as do_remove
 
-        result = do_remove({'server_id': server_id}, {})
+        result = do_remove({'server_id': server_id}, {'logged_in': True})
 
         if isinstance(result, tuple):
             result, status = result
@@ -354,7 +355,7 @@ def list_drives():
     """Список доступных дисков"""
     try:
         from files.web.sections.servers import list_drives as do_list_drives
-        result = do_list_drives({}, {})
+        result = do_list_drives({}, {'logged_in': True})
         if isinstance(result, tuple):
             result, status = result
             return result, status
@@ -370,7 +371,7 @@ def list_folders():
     try:
         path = request.args.get('path', '')
         from files.web.sections.servers import list_folders as do_list_folders
-        result = do_list_folders({'path': path}, {})
+        result = do_list_folders({'path': path}, {'logged_in': True})
         if isinstance(result, tuple):
             result, status = result
             return result, status
