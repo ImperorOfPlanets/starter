@@ -3,7 +3,6 @@ import os
 
 from datetime import timedelta
 from flask import Flask, render_template, request, session
-from flask_session import Session
 from pathlib import Path
 
 from files.core.utils.loader_utils import get
@@ -106,12 +105,11 @@ def configure_app() -> Flask:
     logger.info(f"Папка сессий: {session_dir}")
     
     session_dir.mkdir(parents=True, exist_ok=True)
-    session_dir.chmod(0o755)
 
-    # Настройки сессии
+    # Настройки сессии — без Session(app), используем встроенные cookie-сессии Flask
+    # Они хранятся в браузере, подписываются secret_key, НЕ зависят от файловой системы
     app.config.update({
-        'SESSION_TYPE': 'filesystem',
-        'SESSION_FILE_DIR': str(session_dir),
+        'SECRET_KEY': app.secret_key,
         'SESSION_PERMANENT': True,
         'SESSION_COOKIE_SECURE': False,
         'SESSION_COOKIE_HTTPONLY': True,
@@ -121,8 +119,6 @@ def configure_app() -> Flask:
         'PERMANENT_SESSION_LIFETIME': timedelta(days=30),
         'PREFERRED_URL_SCHEME': 'https'
     })
-
-    Session(app)
 
     # Глобальные переменные для всех шаблонов
     @app.context_processor
