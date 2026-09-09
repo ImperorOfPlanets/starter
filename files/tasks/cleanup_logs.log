@@ -1,0 +1,3 @@
+[2026-09-09T06:36:30.665455] cleanup_logs — success (0.0s)
+  Result: {"status": "success", "removed_files": 0, "freed_bytes": 0, "freed_mb": 0.0}
+---

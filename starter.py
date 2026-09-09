@@ -1,5 +1,6 @@
 # starter.py
 import argparse
+import json
 import os
 import platform
 import sys
@@ -241,7 +242,6 @@ def main():
         params = {}
         if args.task_params:
             try:
-                import json
                 params = json.loads(args.task_params)
             except Exception as e:
                 print(f"   ❌ Ошибка парсинга параметров: {e}")
@@ -553,7 +553,6 @@ def main():
     print("-" * 40)
     try:
         from files.core.oss.default.registry import RegistryModule
-        import json
         registry_path = RegistryModule.get_registry_path()
         print(f"   📁 Файл реестра: {registry_path}")
         

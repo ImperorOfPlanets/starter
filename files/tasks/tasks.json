@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "name": "check_updates",
+      "enabled": true,
+      "schedule": "daily",
+      "module": "updates",
+      "func": "check_updates",
+      "params": {},
+      "category": "system",
+      "description": {
+        "ru": "Проверка обновлений стартера",
+        "en": "Check starter updates",
+        "cn": "检查启动器更新"
+      },
+      "last_run": null,
+      "last_status": null,
+      "last_duration": null,
+      "run_count": 0,
+      "events": [
+        "on_startup",
+        "on_schedule"
+      ]
+    },
+    {
+      "name": "check_service_status",
+      "enabled": true,
+      "schedule": "hourly",
+      "module": "service",
+      "func": "get_service_status",
+      "params": {},
+      "category": "monitoring",
+      "description": {
+        "ru": "Проверка статуса сервиса",
+        "en": "Check service status",
+        "cn": "检查服务状态"
+      },
+      "last_run": "2026-09-09T06:36:19.811741",
+      "last_status": "success",
+      "last_duration": "15.19s",
+      "run_count": 3,
+      "events": [
+        "on_schedule"
+      ]
+    },
+    {
+      "name": "cleanup_logs",
+      "enabled": true,
+      "schedule": "weekly",
+      "module": null,
+      "func": "_cleanup_logs_builtin",
+      "params": {
+        "max_days": 30
+      },
+      "category": "maintenance",
+      "description": {
+        "ru": "Очистка старых логов",
+        "en": "Cleanup old logs",
+        "cn": "清理旧日志"
+      },
+      "last_run": "2026-09-09T06:36:30.665455",
+      "last_status": "success",
+      "last_duration": "0.0s",
+      "run_count": 1,
+      "events": [
+        "on_schedule"
+      ]
+    },
+    {
+      "name": "check_ports",
+      "enabled": false,
+      "schedule": "daily",
+      "module": "portmanager",
+      "func": "check_ports",
+      "params": {},
+      "category": "monitoring",
+      "description": {
+        "ru": "Проверка занятых портов",
+        "en": "Check occupied ports",
+        "cn": "检查占用端口"
+      },
+      "last_run": null,
+      "last_status": null,
+      "last_duration": null,
+      "run_count": 0,
+      "events": [
+        "on_schedule"
+      ]
+    },
+    {
+      "name": "check_docker",
+      "enabled": false,
+      "schedule": "hourly",
+      "module": "docker",
+      "func": "check_docker_installed",
+      "params": {},
+      "category": "monitoring",
+      "description": {
+        "ru": "Проверка статуса Docker",
+        "en": "Check Docker status",
+        "cn": "检查Docker状态"
+      },
+      "last_run": null,
+      "last_status": null,
+      "last_duration": null,
+      "run_count": 0,
+      "events": [
+        "on_schedule"
+      ]
+    }
+  ],
+  "global_enabled": true,
+  "max_log_size_mb": 10,
+  "max_log_days": 30
+}
