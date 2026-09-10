@@ -235,7 +235,24 @@ def list_servers(data, session_obj):
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    import time
+    force = data.get('force', False) in ('true', '1', True)
+    now = time.time()
+    cache = session_obj.get('_servers_cache', {})
+    cache_time = cache.get('time', 0)
+    cache_data = cache.get('servers', [])
+
+    # Кеш 60 секунд или принудительное обновление
+    if not force and cache_data and (now - cache_time) < 60:
+        return jsonify({'status': 'success', 'servers': cache_data, 'cached': True})
+
     servers = _get_user_servers(session_obj)
+
+    # Сохраняем в кеш сессии
+    session_obj['_servers_cache'] = {'servers': servers, 'time': now}
+    session_obj.modified = True
+
     return jsonify({'status': 'success', 'servers': servers})
 
 

@@ -140,20 +140,24 @@ function loadServerTypes() {
     });
 }
 
-function loadServers() {
-    // Показываем кеш если есть
-    var cached = localStorage.getItem('servers_cache');
-    if (cached) {
-        try {
-            renderServers(JSON.parse(cached));
-        } catch(e) {}
+function loadServers(force) {
+    // Показываем кеш если есть (только при первой загрузке)
+    if (!force) {
+        var cached = localStorage.getItem('servers_cache');
+        if (cached) {
+            try {
+                renderServers(JSON.parse(cached));
+            } catch(e) {}
+        }
     }
 
-    // Загружаем свежие данные в фоне
+    // Загружаем свежие данные
+    var body = {section: 'servers', action: 'list_servers'};
+    if (force) body.force = 'true';
     fetch('/', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
-        body: new URLSearchParams({section: 'servers', action: 'list_servers'})
+        body: new URLSearchParams(body)
     })
     .then(function(r) { return r.json(); })
     .then(function(res) {
