@@ -100,6 +100,39 @@ class SchedulerModule(BaseModule):
                 SchedulerModule._create_default_config(config_path)
 
     @staticmethod
+    def get_active_sessions() -> list:
+        """Получить список активных сессий (файлы, обновлённые за последние 5 минут)"""
+        import time
+        sessions_dir = get_global('starter_path')
+        if not sessions_dir:
+            return []
+        sessions_path = os.path.join(str(sessions_dir), 'files', 'web', 'sessions')
+        if not os.path.exists(sessions_path):
+            return []
+
+        now = time.time()
+        active = []
+        for fname in os.listdir(sessions_path):
+            fpath = os.path.join(sessions_path, fname)
+            try:
+                mtime = os.path.getmtime(fpath)
+                age_seconds = now - mtime
+                if age_seconds < 300:  # 5 минут
+                    active.append({
+                        'id': fname,
+                        'last_active': datetime.fromtimestamp(mtime).isoformat(),
+                        'age_seconds': int(age_seconds)
+                    })
+            except Exception:
+                continue
+        return active
+
+    @staticmethod
+    def is_user_active() -> bool:
+        """Проверить есть ли активные пользователи (сессии обновлённые < 5 мин)"""
+        return len(SchedulerModule.get_active_sessions()) > 0
+
+    @staticmethod
     def _create_default_config(config_path: str):
         """Create default tasks configuration"""
         tasks = []
@@ -162,9 +195,58 @@ class SchedulerModule(BaseModule):
 
     @staticmethod
     def get_tasks() -> Dict[str, Any]:
-        """Get all tasks"""
+        """Получить все задачи (встроенные + кастомные из files/tasks/custom/)"""
         config = SchedulerModule._load_config()
-        return {'status': 'success', 'tasks': config.get('tasks', [])}
+        config_tasks = {t['name']: t for t in config.get('tasks', [])}
+
+        # Собираем все доступные задачи
+        from files.core.oss.default.task_base import discover_custom_tasks
+        all_builtin = dict(BUILTIN_TASKS)
+        custom_tasks = discover_custom_tasks()
+
+        # Объединяем: встроенные + кастомные, с настройками из конфига
+        result = []
+
+        # Встроенные
+        for name, task_def in all_builtin.items():
+            saved = config_tasks.get(name, {})
+            result.append({
+                'name': name,
+                'builtin': True,
+                'description': task_def.get('description', {}),
+                'category': task_def.get('category', 'custom'),
+                'enabled': saved.get('enabled', task_def.get('default_enabled', False)),
+                'schedule': saved.get('schedule', task_def.get('default_schedule', 'daily')),
+                'params': saved.get('params', task_def.get('params', {})),
+                'events': saved.get('events', task_def.get('events', ['on_schedule'])),
+                'last_run': saved.get('last_run'),
+                'last_status': saved.get('last_status'),
+                'last_duration': saved.get('last_duration'),
+                'run_count': saved.get('run_count', 0),
+            })
+
+        # Кастомные из файлов
+        for meta in custom_tasks:
+            name = meta['name']
+            saved = config_tasks.get(name, {})
+            result.append({
+                'name': name,
+                'builtin': False,
+                'description': meta.get('description', {}),
+                'category': meta.get('category', 'custom'),
+                'enabled': saved.get('enabled', meta.get('default_enabled', False)),
+                'schedule': saved.get('schedule', meta.get('default_schedule', 'daily')),
+                'params': {p['name']: p.get('default') for p in meta.get('params', [])} if not saved.get('params') else saved.get('params'),
+                'param_schema': meta.get('params', []),
+                'events': saved.get('events', meta.get('events', ['on_schedule'])),
+                'last_run': saved.get('last_run'),
+                'last_status': saved.get('last_status'),
+                'last_duration': saved.get('last_duration'),
+                'run_count': saved.get('run_count', 0),
+                'source': meta.get('_source', ''),
+            })
+
+        return {'status': 'success', 'tasks': result}
 
     @staticmethod
     def get_task(name: str) -> Dict[str, Any]:
@@ -523,7 +605,17 @@ class SchedulerModule(BaseModule):
 
     @staticmethod
     def _run_custom_task(task_name: str, params: dict) -> dict:
-        """Run a custom task by loading module and calling function"""
+        """Run a custom task — сначала из files/tasks/custom/, потом из конфига"""
+        # Пробуем найти в файлах tasks/custom/
+        try:
+            from files.core.oss.default.task_base import run_custom_task
+            result = run_custom_task(task_name, params)
+            if result.get('status') != 'error':
+                return result
+        except Exception:
+            pass
+
+        # Fallback — из конфига (старый способ)
         config = SchedulerModule._load_config()
         for task in config.get('tasks', []):
             if task['name'] == task_name:

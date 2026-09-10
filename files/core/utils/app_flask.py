@@ -99,7 +99,7 @@ def configure_app() -> Flask:
         'SESSION_COOKIE_DOMAIN': None,
         'PERMANENT_SESSION_LIFETIME': timedelta(days=7),
         'PREFERRED_URL_SCHEME': 'https',
-        'SESSION_REFRESH_EACH_REQUEST': False,
+        'SESSION_REFRESH_EACH_REQUEST': True,
     })
 
     Session(app)
