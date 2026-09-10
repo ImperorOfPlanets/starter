@@ -4,6 +4,7 @@
         <div class="position-sticky pt-3">
             <ul class="nav flex-column" id="mainMenu">
                 {% for section in sections_in_control_panel %}
+                {% if section.section_slug != 'docs' %}
                 <li class="nav-item">
                     <a class="nav-link {% if loop.first %}active bg-primary text-white{% endif %}" href="#" data-section="{{ section.section_slug }}">
                         <i class="bi {{ section.section_icon }} me-2"></i> {{ section.section_name }}
@@ -12,6 +13,7 @@
                         {% endif %}
                     </a>
                 </li>
+                {% endif %}
                 {% endfor %}
 
                 {% for grp_slug, grp in sections_groups.items() %}
@@ -30,6 +32,18 @@
                         {% endfor %}
                     </ul>
                 </li>
+                {% endfor %}
+
+                <!-- Документация — внизу через разделитель -->
+                <li class="nav-item mt-2"><hr class="text-muted my-1"></li>
+                {% for section in sections_in_control_panel %}
+                {% if section.section_slug == 'docs' %}
+                <li class="nav-item">
+                    <a class="nav-link" href="#" data-section="{{ section.section_slug }}">
+                        <i class="bi {{ section.section_icon }} me-2"></i> {{ section.section_name }}
+                    </a>
+                </li>
+                {% endif %}
                 {% endfor %}
             </ul>
         </div>
