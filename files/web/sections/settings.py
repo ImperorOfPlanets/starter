@@ -19,7 +19,6 @@ section_name = "Settings"
 section_order = 100
 
 def index(data, session):
-    SettingsModule.set_globals()
     env_vars = SettingsModule.read_env_file()
     docker_validation = SettingsModule.validate_docker_path()
     system_env_info = SettingsModule.get_system_env_info()
