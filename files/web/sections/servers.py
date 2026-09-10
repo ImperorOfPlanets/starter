@@ -19,8 +19,8 @@ logger = LogManager.get_logger('web-servers')
 
 
 def _subprocess_kwargs(timeout=10):
-    """.kwargs для subprocess — скрытие окон на Windows"""
-    kwargs = {'capture_output': True, 'text': True, 'timeout': timeout}
+    """.kwargs для subprocess — скрытие окон на Windows, UTF-8 кодировка"""
+    kwargs = {'capture_output': True, 'text': True, 'timeout': timeout, 'encoding': 'utf-8', 'errors': 'replace'}
     if get_global('os') == 'Windows':
         si = subprocess.STARTUPINFO()
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
