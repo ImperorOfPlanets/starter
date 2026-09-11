@@ -654,35 +654,40 @@ def install_server(data, session_obj):
 
             import re
 
-            # Обязательные подстановки (включая ${VAR:-default} синтаксис)
-            content = re.sub(r'\$\{PROJECTNAME\}(:?[^a-zA-Z0-9_]|$)', project_name + r'\1', content)
-            network_prefix = f"172.{subnet_octet}" if subnet_octet > 0 else ""
-            content = re.sub(r'\$\{DOCKER_NETWORK_PREFIX\}(:?[^a-zA-Z0-9_]|$)', network_prefix + r'\1', content)
-
-            # Читаем .env и подставляем все переменные
+            # Сначала читаем .env и подставляем все переменные
             env_path = docker_path / '.env'
+            env_vars = {}
             if env_path.exists():
-                env_vars = {}
                 for line in env_path.read_text(encoding='utf-8').splitlines():
                     line = line.strip()
                     if line and not line.startswith('#') and '=' in line:
                         key, _, value = line.partition('=')
                         env_vars[key.strip()] = value.strip()
 
-                for key, value in env_vars.items():
-                    # Подставляем ${VAR:-default} и ${VAR}
-                    if value:
-                        pattern = r'\$\{' + re.escape(key) + r'(:-[^}]*)?\}'
-                        content = re.sub(pattern, value, content)
-                        logger.info(f"Substituted ${key} = {value[:30]}...")
-                    else:
-                        # Убираем ${VAR:-default} → пустая строка
-                        pattern = r'\$\{' + re.escape(key) + r'(:-[^}]*)?\}'
-                        content = re.sub(pattern, '', content)
-                        logger.info(f"Skipped empty ${key}")
+            # Обязательные подстановки — перезаписываем .env значения для PROJECTNAME и NETWORK_PREFIX
+            network_prefix = f"172.{subnet_octet}" if subnet_octet > 0 else ""
+            env_vars['PROJECTNAME'] = project_name
+            if network_prefix:
+                env_vars['DOCKER_NETWORK_PREFIX'] = network_prefix
+
+            # Подставляем все переменные из .env (включая ${VAR:-default} синтаксис)
+            for key, value in env_vars.items():
+                pattern = r'\$\{' + re.escape(key) + r'(:-[^}]*)?\}'
+                if value:
+                    content = re.sub(pattern, value, content)
+                else:
+                    content = re.sub(pattern, '', content)
 
             compose_path.write_text(content, encoding='utf-8')
             logger.info(f"Copied docker-compose.example from {compose_example}")
+
+            # 6. Обновляем .env с правильными значениями
+            if env_path.exists():
+                env_content = env_path.read_text(encoding='utf-8')
+                if network_prefix:
+                    env_content = re.sub(r'^DOCKER_NETWORK_PREFIX=.*$', f'DOCKER_NETWORK_PREFIX={network_prefix}', env_content, flags=re.MULTILINE)
+                env_content = re.sub(r'^PROJECTNAME=.*$', f'PROJECTNAME={project_name}', env_content, flags=re.MULTILINE)
+                env_path.write_text(env_content, encoding='utf-8')
         else:
             return {
                 'status': 'error',
