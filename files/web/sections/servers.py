@@ -674,7 +674,7 @@ def install_server(data, session_obj):
             for key, value in env_vars.items():
                 pattern = r'\$\{' + re.escape(key) + r'(:-[^}]*)?\}'
                 if value:
-                    content = re.sub(pattern, value, content)
+                    content = re.sub(pattern, lambda m, v=value: v, content)
                 else:
                     content = re.sub(pattern, '', content)
 
