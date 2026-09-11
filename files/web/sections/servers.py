@@ -652,9 +652,12 @@ def install_server(data, session_obj):
             compose_path = docker_path / 'docker-compose.yml'
             content = compose_path.read_text(encoding='utf-8')
 
-            # Обязательные подстановки
-            content = content.replace('${PROJECTNAME}', project_name)
-            content = content.replace('${DOCKER_NETWORK_PREFIX}', f"172.{subnet_octet}" if subnet_octet > 0 else "")
+            import re
+
+            # Обязательные подстановки (включая ${VAR:-default} синтаксис)
+            content = re.sub(r'\$\{PROJECTNAME\}(:?[^a-zA-Z0-9_]|$)', project_name + r'\1', content)
+            network_prefix = f"172.{subnet_octet}" if subnet_octet > 0 else ""
+            content = re.sub(r'\$\{DOCKER_NETWORK_PREFIX\}(:?[^a-zA-Z0-9_]|$)', network_prefix + r'\1', content)
 
             # Читаем .env и подставляем все переменные
             env_path = docker_path / '.env'
@@ -667,14 +670,16 @@ def install_server(data, session_obj):
                         env_vars[key.strip()] = value.strip()
 
                 for key, value in env_vars.items():
-                    placeholder = '${' + key + '}'
-                    if placeholder in content:
-                        # Не подставляем пустые значения — оставляем ${VAR} как есть
-                        if value:
-                            content = content.replace(placeholder, value)
-                            logger.info(f"Substituted {placeholder} = {value[:30]}...")
-                        else:
-                            logger.info(f"Skipped empty {placeholder}")
+                    # Подставляем ${VAR:-default} и ${VAR}
+                    if value:
+                        pattern = r'\$\{' + re.escape(key) + r'(:-[^}]*)?\}'
+                        content = re.sub(pattern, value, content)
+                        logger.info(f"Substituted ${key} = {value[:30]}...")
+                    else:
+                        # Убираем ${VAR:-default} → пустая строка
+                        pattern = r'\$\{' + re.escape(key) + r'(:-[^}]*)?\}'
+                        content = re.sub(pattern, '', content)
+                        logger.info(f"Skipped empty ${key}")
 
             compose_path.write_text(content, encoding='utf-8')
             logger.info(f"Copied docker-compose.example from {compose_example}")
