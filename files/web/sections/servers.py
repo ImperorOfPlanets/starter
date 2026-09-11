@@ -669,8 +669,12 @@ def install_server(data, session_obj):
                 for key, value in env_vars.items():
                     placeholder = '${' + key + '}'
                     if placeholder in content:
-                        content = content.replace(placeholder, value)
-                        logger.info(f"Substituted {placeholder} = {value[:30]}...")
+                        # Не подставляем пустые значения — оставляем ${VAR} как есть
+                        if value:
+                            content = content.replace(placeholder, value)
+                            logger.info(f"Substituted {placeholder} = {value[:30]}...")
+                        else:
+                            logger.info(f"Skipped empty {placeholder}")
 
             compose_path.write_text(content, encoding='utf-8')
             logger.info(f"Copied docker-compose.example from {compose_example}")
