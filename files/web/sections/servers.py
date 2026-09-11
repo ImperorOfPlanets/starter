@@ -621,14 +621,34 @@ def install_server(data, session_obj):
         
         if compose_example:
             import shutil
-            shutil.copy2(compose_example, docker_path / 'docker-compose.yml')
 
-            # Копируем .env.example если есть рядом
+            # 1. Копируем .env.example если есть рядом
             env_example_src = compose_example.parent / '.env.example'
             if env_example_src.exists():
                 shutil.copy2(env_example_src, docker_path / '.env.example')
 
-            # Подставляем ВСЕ переменные из .env в docker-compose.yml
+            # 2. Создаём .env из .env.example если нет
+            if not (docker_path / '.env').exists():
+                if env_example_src.exists():
+                    shutil.copy2(env_example_src, docker_path / '.env')
+                else:
+                    env_example = _generate_env_example(server_type, type_info, server_name or type_info['name'], subnet_octet, port, str(server_path))
+                    (docker_path / '.env').write_text(env_example, encoding='utf-8')
+
+            # 3. Подставляем реальные пути из server_path в .env
+            env_path = docker_path / '.env'
+            if env_path.exists():
+                env_content = env_path.read_text(encoding='utf-8')
+                env_content = env_content.replace('${PATH_APP_CODE}', str(server_path / 'code'))
+                env_content = env_content.replace('${PATH_APP_DOCKER}', str(server_path / 'docker'))
+                env_content = env_content.replace('${PATH_APP_DOCKER_LOGS}', str(server_path / 'docker' / 'logs'))
+                env_content = env_content.replace('${PATH_APP_PROJECT}', str(server_path / 'code'))
+                env_path.write_text(env_content, encoding='utf-8')
+
+            # 4. Копируем docker-compose.example
+            shutil.copy2(compose_example, docker_path / 'docker-compose.yml')
+
+            # 5. Подставляем ВСЕ переменные из .env в docker-compose.yml
             compose_path = docker_path / 'docker-compose.yml'
             content = compose_path.read_text(encoding='utf-8')
 
@@ -637,48 +657,13 @@ def install_server(data, session_obj):
             content = content.replace('${DOCKER_NETWORK_PREFIX}', f"172.{subnet_octet}" if subnet_octet > 0 else "")
 
             # Читаем .env и подставляем все переменные
-            env_path = docker_path / '.env'
-            if env_path.exists():
-                env_vars = {}
-                for line in env_path.read_text(encoding='utf-8').splitlines():
-                    line = line.strip()
-                    if line and not line.startswith('#') and '=' in line:
-                        key, _, value = line.partition('=')
-                        env_vars[key.strip()] = value.strip()
-
-                for key, value in env_vars.items():
-                    placeholder = '${' + key + '}'
-                    if placeholder in content:
-                        content = content.replace(placeholder, value)
-                        logger.info(f"Substituted {placeholder} = {value[:30]}...")
-
             compose_path.write_text(content, encoding='utf-8')
             logger.info(f"Copied docker-compose.example from {compose_example}")
         else:
-            # НЕТ docker-compose.example — ошибка для продакшена
             return {
                 'status': 'error',
                 'message': 'docker-compose.example не найден в репозитории. Проверьте структуру проекта.'
             }
-            (docker_path / 'docker-compose.yml').write_text(compose_content, encoding='utf-8')
-
-        # Генерируем .env если не скопирован
-        if not (docker_path / '.env.example').exists():
-            env_example = _generate_env_example(server_type, type_info, server_name or type_info['name'], subnet_octet, port, str(server_path))
-            (docker_path / '.env.example').write_text(env_example, encoding='utf-8')
-        if not (docker_path / '.env').exists():
-            env_example = _generate_env_example(server_type, type_info, server_name or type_info['name'], subnet_octet, port, str(server_path))
-            (docker_path / '.env').write_text(env_example, encoding='utf-8')
-
-        # Подставляем реальные пути из server_path в .env
-        env_path = docker_path / '.env'
-        if env_path.exists():
-            env_content = env_path.read_text(encoding='utf-8')
-            env_content = env_content.replace('${PATH_APP_CODE}', str(server_path / 'code'))
-            env_content = env_content.replace('${PATH_APP_DOCKER}', str(server_path / 'docker'))
-            env_content = env_content.replace('${PATH_APP_DOCKER_LOGS}', str(server_path / 'docker' / 'logs'))
-            env_content = env_content.replace('${PATH_APP_PROJECT}', str(server_path / 'code'))
-            env_path.write_text(env_content, encoding='utf-8')
 
         # Регистрируем через RegistryModule
         registry = get('registry')
