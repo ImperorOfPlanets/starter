@@ -563,6 +563,15 @@ def install_server(data, session_obj):
                 except Exception:
                     pass
 
+            # Очищаем code/ для переклонирования
+            if code_path.exists():
+                import shutil
+                try:
+                    shutil.rmtree(code_path)
+                    logger.info(f"Cleaned code directory: {code_path}")
+                except Exception as e:
+                    logger.warning(f"Could not clean code dir: {e}")
+
         server_path.mkdir(parents=True, exist_ok=True)
         docker_path.mkdir(exist_ok=True)
         code_path.mkdir(exist_ok=True)
