@@ -230,15 +230,15 @@ SERVER_TYPES = {
     },
     'streams': {
         'name': 'Стриминг',
-        'description': 'Управление стримами: OBS, VK, Twitch, YouTube',
-        'requires_reverse_proxy': False,
+        'description': 'Управление стримами: OBS, VK, Twitch, YouTube (Laravel)',
+        'requires_reverse_proxy': True,
         'requires_auth': False,
         'is_reverse_proxy': False,
         'has_web_interface': True,
-        'default_port': 8090,
+        'default_port': 8080,
         'order': 18,
         'can_have_multiple': True,
-        'default_folder': 'streams',
+        'default_folder': 'streams2',
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/sfera-strimer.git',
             'branch': 'master'
