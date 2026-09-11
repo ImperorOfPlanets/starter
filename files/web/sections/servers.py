@@ -657,6 +657,21 @@ def install_server(data, session_obj):
             content = content.replace('${DOCKER_NETWORK_PREFIX}', f"172.{subnet_octet}" if subnet_octet > 0 else "")
 
             # Читаем .env и подставляем все переменные
+            env_path = docker_path / '.env'
+            if env_path.exists():
+                env_vars = {}
+                for line in env_path.read_text(encoding='utf-8').splitlines():
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, _, value = line.partition('=')
+                        env_vars[key.strip()] = value.strip()
+
+                for key, value in env_vars.items():
+                    placeholder = '${' + key + '}'
+                    if placeholder in content:
+                        content = content.replace(placeholder, value)
+                        logger.info(f"Substituted {placeholder} = {value[:30]}...")
+
             compose_path.write_text(content, encoding='utf-8')
             logger.info(f"Copied docker-compose.example from {compose_example}")
         else:
