@@ -61,10 +61,29 @@ def _check_server_status(server_path, project_type):
     if not compose_path.exists():
         return 'no_compose'
 
-    # Определяем имя контейнера по типу сервера
-    container_name = project_type.replace('_', '-')
+    # Проверяем статус через docker compose ps (надёжнее чем искать по имени)
+    try:
+        import subprocess
+        kw = _subprocess_kwargs(15)
+        result = subprocess.run(
+            ['docker', 'compose', '-f', str(compose_path), 'ps', '-a', '--format', '{{.State}}'],
+            **kw
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            states = result.stdout.strip().splitlines()
+            if any(s == 'running' for s in states):
+                return 'running'
+            elif any(s in ('created', 'exited') for s in states):
+                return 'stopped'
+            elif any(s == 'restarting' for s in states):
+                return 'restarting'
+            else:
+                return 'stopped'
+    except Exception:
+        pass
 
-    # Проверяем статус контейнера
+    # Фолбэк — проверяем по имени контейнера
+    container_name = project_type.replace('_', '-')
     try:
         status_info = docker_mod.get_container_status(container_name)
         if status_info:
@@ -75,24 +94,6 @@ def _check_server_status(server_path, project_type):
                 return 'stopped'
             elif state.get('Status') == 'restarting':
                 return 'restarting'
-            else:
-                return 'stopped'
-    except Exception:
-        pass
-
-    # Контейнера нет — проверяем есть ли вообще контейнеры в compose
-    try:
-        # Проверяем через docker compose ps
-        import subprocess
-        kw = _subprocess_kwargs(10)
-        result = subprocess.run(
-            ['docker', 'compose', '-f', str(compose_path), 'ps', '-a', '--format', '{{.State}}'],
-            **kw
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            states = result.stdout.strip().splitlines()
-            if any(s == 'running' for s in states):
-                return 'running'
             else:
                 return 'stopped'
     except Exception:
