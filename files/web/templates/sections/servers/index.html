@@ -191,6 +191,9 @@ function renderServers(servers) {
             html += '<button class="btn btn-outline-success btn-sm start-server" data-server-id="' + s.id + '" title="Запустить"><i class="bi bi-play-fill"></i></button>';
         } else if (s.status === 'running') {
             html += '<button class="btn btn-outline-warning btn-sm stop-server" data-server-id="' + s.id + '" title="Остановить"><i class="bi bi-stop-fill"></i></button>';
+            if (s.has_web_interface && s.port && s.port > 0) {
+                html += '<button class="btn btn-outline-success btn-sm open-web-interface" data-server-port="' + s.port + '" title="Открыть интерфейс"><i class="bi bi-box-arrow-up-right"></i></button>';
+            }
         }
         html += '<button class="btn btn-outline-info btn-sm server-repo-info" data-server-id="' + s.id + '" title="Инфо"><i class="bi bi-info-circle"></i></button>';
         if (s.has_git) {
@@ -687,7 +690,7 @@ $(document).on('click', '.server-repo-info', function() {
 $(document).on('click', '.open-web-interface', function() {
     var port = $(this).data('server-port');
     if (port && port > 0) {
-        window.open('https://localhost:' + port, '_blank');
+        window.open('http://localhost:' + port, '_blank');
     } else {
         showErrorModal('Порт сервера неизвестен');
     }
