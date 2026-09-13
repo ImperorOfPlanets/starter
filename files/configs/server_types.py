@@ -238,7 +238,7 @@ SERVER_TYPES = {
         'default_port': 8080,
         'order': 18,
         'can_have_multiple': True,
-        'default_folder': 'streams2',
+        'default_folder': 'streams',
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/sfera-strimer.git',
             'branch': 'master'
