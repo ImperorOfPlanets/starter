@@ -280,6 +280,9 @@ function renderInstallSelect(types) {
 loadServers();
 loadServerTypes();
 
+// Auto-refresh статуса серверов каждые 10 секунд
+setInterval(function() { loadServers(true); }, 10000);
+
 // Загружаем диски при открытии модалки
 document.getElementById('serverInstallModal').addEventListener('show.bs.modal', function() {
     loadDrives();

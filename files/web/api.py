@@ -75,6 +75,7 @@ def list_servers():
             return jsonify({'success': False, 'error': 'Registry not available'}), 500
 
         from files.configs.server_types import SERVER_TYPES
+        from files.web.sections.servers import _check_server_status
         data = registry.load_registry()
         projects = data.get('projects', [])
 
@@ -87,13 +88,15 @@ def list_servers():
             project_type = p.get('project_type', 'unknown')
             type_info = SERVER_TYPES.get(project_type, {})
 
+            real_status = _check_server_status(path, project_type)
+
             servers.append({
                 'id': path,
                 'name': path.split('\\')[-1] if '\\' in path else path.split('/')[-1],
                 'path': path,
                 'type': project_type,
                 'type_name': type_info.get('name', project_type),
-                'status': p.get('status', 'unknown'),
+                'status': real_status,
                 'port': p.get('port', 0),
                 'has_web_interface': type_info.get('has_web_interface', False),
                 'description': type_info.get('description', ''),
