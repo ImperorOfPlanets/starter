@@ -141,26 +141,68 @@ def images(data, session):
 def logs(data, session):
     """Функция модуля docker, возвращает HTML с логами контейнера"""
     container_id = data.get('container_id')
+    server_path = data.get('server_path', '')
     logs = ""
     containers_list = []
     docker_installed = get_global('docker_installed', False)
-    
+    servers_list = []
+
     if docker_installed:
         try:
+            # Получаем список серверов из реестра
+            registry = get('registry')
+            if registry:
+                reg_data = registry.load_registry()
+                for p in reg_data.get('projects', []):
+                    if p.get('installed_by_starter', False):
+                        servers_list.append({
+                            'path': p.get('path', ''),
+                            'name': p.get('path', '').split('\\')[-1] if '\\' in p.get('path', '') else p.get('path', '').split('/')[-1],
+                            'type': p.get('project_type', 'unknown'),
+                            'status': p.get('status', 'unknown')
+                        })
+
+            # Если выбран сервер — листаем его контейнеры
+            if server_path:
+                import subprocess
+                from pathlib import Path
+                compose_path = Path(server_path) / 'docker' / 'docker-compose.yml'
+                if compose_path.exists():
+                    kw = {'capture_output': True, 'text': True, 'timeout': 15}
+                    result = subprocess.run(
+                        ['docker', 'compose', '-f', str(compose_path), 'ps', '-a', '--format', '{{.Name}}\t{{.Image}}\t{{.State}}'],
+                        **kw
+                    )
+                    if result.returncode == 0:
+                        for line in result.stdout.strip().splitlines():
+                            parts = line.split('\t')
+                            if len(parts) >= 3:
+                                containers_list.append({
+                                    'id': parts[0],
+                                    'name': parts[0],
+                                    'image': parts[1],
+                                    'status': parts[2]
+                                })
+
+            # Если сервер не выбран — все контейнеры
+            if not server_path:
+                containers_list = get('docker', 'get_containers', all=True) or []
+
             if container_id:
                 logs = get('docker', 'get_logs', container_id) or ""
-            containers_list = get('docker', 'get_containers', all=True) or []
         except Exception as e:
             logger.error(f"Error getting logs: {str(e)}")
             logs = ""
             containers_list = []
-    
+
     return render_template(
         'sections/docker/logs.html',
         t=t,
         logs=logs,
         container_id=container_id,
         containers=containers_list,
+        servers=servers_list,
+        server_path=server_path,
         docker_installed=docker_installed
     )
 
