@@ -192,7 +192,13 @@ $(document).ready(function() {
         } catch (e) { console.error(translations.parse_error, e); }
         
         const $spinner = $('#loadingSpinner').show();
-        const $target = $this.closest('.section-content').find('#dockerContent');
+        const $section = $this.closest('.section-content');
+        
+        // Для docker используем #dockerContent, для всего остального — весь контент секции
+        let $target = $section.find('#dockerContent');
+        if (!$target.length) {
+            $target = $section;
+        }
         
         const requestData = { section, action, ...additionalData };
         
