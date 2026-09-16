@@ -223,6 +223,8 @@ def view(data, session):
         log_files=log_files,
         current_file=current_file['name'] if current_file else None,
         logs=filtered_logs,
+        search=data.get('search', ''),
+        get_log_files=get_log_files,
         t=t
     )
 
