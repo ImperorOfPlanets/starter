@@ -23,36 +23,72 @@ section_order = 5
 # Пути к логам
 LOG_DIR = Path('files/logs')
 LOG_TYPES = {
-    'web': 'Web Application Logs',
-    'service': 'Service Logs',
-    'system': 'System Logs',
-    'docker': 'Docker Logs'
+    'application': 'Application Log',
+    'modules': 'Modules Log',
+    'service': 'Service Tasks',
+    'translations': 'Translations Log'
+}
+
+# Маппинг: тип -> файл
+LOG_FILES_MAP = {
+    'application': 'application.log',
+    'modules': 'modules/modules.log',
+    'translations': 'translations/translations.log'
 }
 
 def get_log_files(log_type):
     """Возвращает список файлов логов для указанного типа"""
-    log_path = LOG_DIR / log_type
-    if not log_path.exists():
-        logger.warning(f"Log directory not found: {log_path}")
-        return []
-    
     log_files = []
-    for f in log_path.glob('*.log'):
-        if f.is_file():
+
+    # Если есть маппинг — ищем конкретный файл
+    if log_type in LOG_FILES_MAP:
+        file_path = LOG_DIR / LOG_FILES_MAP[log_type]
+        if file_path.exists():
             try:
-                # Получаем информацию о файле
-                stat = f.stat()
+                stat = file_path.stat()
                 log_files.append({
-                    'name': f.name,
-                    'path': str(f),
+                    'name': file_path.name,
+                    'path': str(file_path),
                     'size': stat.st_size,
                     'mtime': stat.st_mtime,
                     'stat': stat
                 })
             except Exception as e:
-                logger.error(f"Error getting file info for {f}: {e}")
-    
-    # Сортируем по времени изменения (новые сначала)
+                logger.error(f"Error getting file info for {file_path}: {e}")
+    else:
+        # Фолбэк — ищем .log файлы в подпапке
+        log_path = LOG_DIR / log_type
+        if log_path.exists():
+            for f in log_path.glob('*.log'):
+                if f.is_file():
+                    try:
+                        stat = f.stat()
+                        log_files.append({
+                            'name': f.name,
+                            'path': str(f),
+                            'size': stat.st_size,
+                            'mtime': stat.st_mtime,
+                            'stat': stat
+                        })
+                    except Exception as e:
+                        logger.error(f"Error getting file info for {f}: {e}")
+
+    # Также добавляем service/task.xml если он есть для service типа
+    if log_type == 'service':
+        task_path = LOG_DIR / 'service' / 'task.xml'
+        if task_path.exists():
+            try:
+                stat = task_path.stat()
+                log_files.append({
+                    'name': 'task.xml',
+                    'path': str(task_path),
+                    'size': stat.st_size,
+                    'mtime': stat.st_mtime,
+                    'stat': stat
+                })
+            except Exception as e:
+                pass
+
     return sorted(log_files, key=lambda x: x['mtime'], reverse=True)
 
 def read_log_file(log_path, lines=100):
@@ -114,18 +150,25 @@ def filter_logs(content, level=None, source=None, search=None):
 def get_log_file_path(log_type, filename):
     """Возвращает полный путь к файлу лога с проверкой безопасности"""
     try:
+        # Сначала проверяем маппинг
+        if log_type in LOG_FILES_MAP:
+            file_path = (LOG_DIR / LOG_FILES_MAP[log_type]).resolve()
+            if file_path.exists():
+                return file_path
+
+        # Фолбэк — ищем в подпапке
         log_path = (LOG_DIR / log_type).resolve()
         file_path = (log_path / filename).resolve()
-        
+
         # Проверяем, что файл находится внутри разрешенной директории
         if not file_path.is_relative_to(log_path):
             logger.error(f"Attempt to access file outside log directory: {filename}")
             return None
-            
+
         if not file_path.exists():
             logger.error(f"Log file not found: {file_path}")
             return None
-            
+
         return file_path
     except Exception as e:
         logger.error(f"Error getting log file path: {e}")
@@ -143,28 +186,28 @@ def index(data, session):
 
 def view(data, session):
     """Просмотр логов определенного типа"""
-    log_type = data.get('type', 'web')
-    
+    log_type = data.get('type', 'application')
+
     # Получаем список доступных файлов логов
     log_files = get_log_files(log_type)
-    
+
     # Обрабатываем выбранный файл
     current_file = None
     log_content = ''
     filename = data.get('file')
-    
+
     if filename:
         # Безопасно получаем путь к файлу
         file_path = get_log_file_path(log_type, filename)
         if file_path:
             current_file = {'name': filename, 'path': str(file_path)}
             log_content = read_log_file(file_path, 500)
-    
+
     # Если файл не указан, берем самый свежий
     elif log_files:
         current_file = log_files[0]
         log_content = read_log_file(current_file['path'], 500)
-    
+
     # Применяем фильтры
     filtered_logs = filter_logs(
         log_content,
@@ -172,7 +215,7 @@ def view(data, session):
         source=data.get('source'),
         search=data.get('search')
     )
-    
+
     return render_template(
         'sections/logs/view.html',
         log_type=log_type,
