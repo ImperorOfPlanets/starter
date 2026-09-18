@@ -307,6 +307,20 @@ class RequirementsModule(BaseModule):
         print("=" * 60)
     
     @staticmethod
+    def _needs_tray_packages() -> bool:
+        """Проверяет, нужны ли пакеты для трея (только с рабочим столом)"""
+        if sys.platform != 'win32':
+            return False
+        try:
+            from files.core.utils.loader_utils import get
+            tray_module = get('tray')
+            if tray_module and hasattr(tray_module, 'tray_dependencies_needed'):
+                return tray_module.tray_dependencies_needed()
+        except Exception:
+            pass
+        return False
+
+    @staticmethod
     def check_all_requirements(requirements_path: Path) -> Dict[str, List[str]]:
         """
         Проверяет каждую библиотеку из requirements файла.
@@ -328,6 +342,9 @@ class RequirementsModule(BaseModule):
             with open(requirements_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
             
+            needs_tray = RequirementsModule._needs_tray_packages()
+            skip_tray = {'pystray', 'pillow', 'plyer'}
+
             for line in lines:
                 line = line.strip()
                 if not line or line.startswith('#'):
@@ -339,6 +356,9 @@ class RequirementsModule(BaseModule):
                     continue
                 
                 package_name = match.group(1)
+
+                if not needs_tray and package_name.lower() in skip_tray:
+                    continue
                 result['total'] += 1
                 
                 # Преобразуем имя пакета в имя модуля
@@ -523,8 +543,13 @@ class RequirementsModule(BaseModule):
         
         print(f"\n📦 Установка отсутствующих модулей: {', '.join(missing_modules)}")
         
+        needs_tray = RequirementsModule._needs_tray_packages()
+        skip_tray = {'pystray', 'pillow', 'plyer'}
+
         packages = []
         for module in missing_modules:
+            if not needs_tray and module.lower() in skip_tray:
+                continue
             if module == 'Flask-Session':
                 packages.append('Flask-Session')
             elif module == 'python-dotenv':

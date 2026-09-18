@@ -99,13 +99,47 @@ class TrayModule(BaseModule):
             set_global('tray_icons_dir', icons_dir)
 
     @staticmethod
+    def has_desktop() -> bool:
+        """Проверяет, есть ли рабочий стол (не Docker, не Server Core, не WSL)"""
+        if sys.platform != 'win32':
+            return False
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            session_id = ctypes.windll.kernel32.WTSGetActiveConsoleSessionId()
+            if session_id == 0:
+                return False
+            desktop = user32.OpenDesktopW('Default', 0, False, 0x0100)
+            if desktop:
+                user32.CloseDesktop(desktop)
+                return True
+        except Exception:
+            pass
+        return False
+
+    @staticmethod
     def is_available() -> bool:
+        """Проверяет и библиотеки, и наличие рабочего стола"""
+        if not TrayModule.has_desktop():
+            return False
         try:
             import pystray
             from PIL import Image
             return True
         except ImportError:
             return False
+
+    @staticmethod
+    def tray_dependencies_needed() -> bool:
+        """Нужно ли устанавливать зависимости для трея"""
+        if not TrayModule.has_desktop():
+            return False
+        try:
+            import pystray
+            from PIL import Image
+            return False
+        except ImportError:
+            return True
 
     @staticmethod
     def check_dependencies():
@@ -317,22 +351,15 @@ class TrayModule(BaseModule):
             return
         if not TrayModule.check_dependencies():
             return
+
+        if 'pythonw' in sys.executable.lower():
+            import multiprocessing
+            p = multiprocessing.Process(target=TrayModule._tray_main, daemon=True)
+            p.start()
+            return
+
         TrayModule._running = True
-
-        def tray_loop():
-            try:
-                TrayModule._icon = TrayModule.create_tray_icon()
-                if TrayModule._icon:
-                    print("   🖥️ Иконка в трее активна")
-                    TrayModule._icon.run()
-                else:
-                    print("   ⚠️ Не удалось создать иконку в трее")
-            except Exception as e:
-                logger.error(f"Tray error: {e}")
-
-        TrayModule._tray_thread = threading.Thread(target=tray_loop, daemon=False)
-        TrayModule._tray_thread.start()
-        time.sleep(1)
+        TrayModule._tray_main()
 
     @staticmethod
     def stop_tray():
