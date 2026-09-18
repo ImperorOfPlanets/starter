@@ -1,11 +1,21 @@
 from files.core.base_module import BaseModule
 import socket
 import subprocess
+import sys
 import re
 
 from files.core.utils.log_utils import LogManager
 
 logger = LogManager.get_logger('portmanager')
+
+
+def _si():
+    if sys.platform != 'win32':
+        return None
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = subprocess.SW_HIDE
+    return si
 
 class PortmanagerModule(BaseModule):
     @staticmethod
@@ -32,7 +42,8 @@ class PortmanagerModule(BaseModule):
                     ['netstat', '-ano'],
                     capture_output=True,
                     text=True,
-                    timeout=2
+                    timeout=2,
+                    startupinfo=_si()
                 )
                 if result.returncode == 0:
                     for line in result.stdout.split('\n'):

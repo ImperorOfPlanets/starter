@@ -17,6 +17,13 @@ from files.core.utils.log_utils import LogManager
 logger = LogManager.get_logger('tray_windows')
 
 
+def _si():
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = subprocess.SW_HIDE
+    return si
+
+
 class TrayModule(BaseModule):
     """Модуль для управления иконкой в системном трее Windows"""
     
@@ -80,7 +87,8 @@ class TrayModule(BaseModule):
         try:
             output = subprocess.check_output(
                 ['tasklist', '/FI', 'IMAGENAME eq python.exe', '/FO', 'CSV', '/NH'],
-                text=True
+                text=True,
+                startupinfo=_si()
             )
             
             import re
@@ -91,7 +99,8 @@ class TrayModule(BaseModule):
                         pid = int(match.group(1))
                         if pid != current_pid:
                             subprocess.run(['taskkill', '/F', '/PID', str(pid)], 
-                                         capture_output=True, check=False)
+                                         capture_output=True, check=False,
+                                         startupinfo=_si())
                             killed.append(pid)
                             print(f"   ✅ Убит процесс starter.py PID: {pid}")
             
@@ -170,7 +179,7 @@ class TrayModule(BaseModule):
                 $notify.Visible = $true
                 $notify.ShowBalloonTip(3000, "Starter Server", "Сервер запущен на {protocol}://127.0.0.1:{port}`nPID: {os.getpid()}", [System.Windows.Forms.ToolTipIcon]::Info)
                 '''
-                subprocess.run(['powershell', '-Command', ps_cmd], capture_output=True)
+                subprocess.run(['powershell', '-Command', ps_cmd], capture_output=True, startupinfo=_si())
             
             # Создаем меню
             menu = pystray.Menu(

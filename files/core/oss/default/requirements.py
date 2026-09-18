@@ -18,6 +18,16 @@ from files.core.base_module import BaseModule
 from files.core.utils.globalVars_utils import get_global, set_global
 from files.core.utils.log_utils import LogManager
 
+
+def _si():
+    """STARTUPINFO для скрытия окон на Windows"""
+    if sys.platform != 'win32':
+        return None
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = subprocess.SW_HIDE
+    return si
+
 logger = LogManager.get_logger('requirements')
 
 
@@ -466,7 +476,8 @@ class RequirementsModule(BaseModule):
                 [str(python_path), '-m', 'pip', 'install', '--upgrade', 'pip'],
                 capture_output=True,
                 timeout=60,
-                check=False
+                check=False,
+                startupinfo=_si()
             )
             
             # Устанавливаем зависимости
@@ -477,7 +488,8 @@ class RequirementsModule(BaseModule):
                 [str(python_path), '-m', 'pip', 'install', '-r', str(requirements_path)],
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=300,
+                startupinfo=_si()
             )
             
             install_time = time.time() - start_time
@@ -527,7 +539,8 @@ class RequirementsModule(BaseModule):
                 [str(venv_python), '-m', 'pip', 'install'] + packages,
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=120,
+                startupinfo=_si()
             )
             
             if result.returncode == 0:

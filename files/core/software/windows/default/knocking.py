@@ -1,5 +1,6 @@
 import socket
 import json
+import sys
 import time
 import subprocess
 from typing import List, Dict, Optional
@@ -8,6 +9,13 @@ from datetime import datetime
 from files.core.base_module import BaseModule
 from files.core.utils.globalVars_utils import get_global, set_global
 from files.core.utils.log_utils import LogManager
+
+
+def _si():
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = subprocess.SW_HIDE
+    return si
 
 logger = LogManager.get_logger('knocking_windows')
 
@@ -30,7 +38,8 @@ class KnockingModule(BaseModule):
             result = subprocess.run(
                 ['powershell', '-Command',
                  f'Get-NetFirewallRule -DisplayName "{RULE_PREFIX}*" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty DisplayName'],
-                capture_output=True, text=True, timeout=10
+                capture_output=True, text=True, timeout=10,
+                startupinfo=_si()
             )
             return bool(result.stdout.strip())
         except Exception:
@@ -93,7 +102,8 @@ class KnockingModule(BaseModule):
         try:
             result = subprocess.run(
                 ['powershell', '-NoProfile', '-Command', command],
-                capture_output=True, text=True, timeout=30
+                capture_output=True, text=True, timeout=30,
+                startupinfo=_si()
             )
             return {
                 'success': result.returncode == 0,

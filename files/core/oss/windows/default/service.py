@@ -16,6 +16,13 @@ from files.core.utils.log_utils import LogManager
 logger = LogManager.get_logger('service_windows')
 
 
+def _si():
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = subprocess.SW_HIDE
+    return si
+
+
 class ServiceModule(BaseModule):
     SERVICE_VBS = "StarterService.vbs"
     WEB_VBS = "StarterWeb.vbs"
@@ -86,7 +93,8 @@ class ServiceModule(BaseModule):
             import re
             result = subprocess.run(
                 ['tasklist', '/FI', 'IMAGENAME eq pythonw.exe', '/FO', 'CSV', '/NH'],
-                capture_output=True, text=True, timeout=10
+                capture_output=True, text=True, timeout=10,
+                startupinfo=_si()
             )
             for line in (result.stdout or '').strip().split('\n'):
                 if not line.strip():
@@ -188,7 +196,8 @@ class ServiceModule(BaseModule):
             import re
             output = subprocess.check_output(
                 ['tasklist', '/FI', 'IMAGENAME eq pythonw.exe', '/FO', 'CSV', '/NH'],
-                text=True, timeout=10
+                text=True, timeout=10,
+                startupinfo=_si()
             )
             for line in output.split('\n'):
                 if not line.strip():
@@ -226,12 +235,12 @@ class ServiceModule(BaseModule):
 
         elif action == 'stop':
             for pid in ServiceModule._find_starter_pids():
-                subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True, timeout=10)
+                subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True, timeout=10, startupinfo=_si())
             return {'status': 'success', 'message': 'Сервис остановлен'}
 
         elif action == 'restart':
             for pid in ServiceModule._find_starter_pids():
-                subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True, timeout=10)
+                subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True, timeout=10, startupinfo=_si())
             time.sleep(2)
             si = subprocess.STARTUPINFO()
             si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -296,7 +305,7 @@ class ServiceModule(BaseModule):
                 proc = psutil.Process(pid)
                 cmdline = ' '.join(proc.cmdline())
                 if 'starter.py' in cmdline and '--service' not in cmdline:
-                    subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True, timeout=10)
+                    subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True, timeout=10, startupinfo=_si())
                     stopped += 1
             except Exception:
                 pass

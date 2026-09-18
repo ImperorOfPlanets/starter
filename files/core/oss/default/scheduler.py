@@ -18,6 +18,16 @@ from files.core.base_module import BaseModule
 from files.core.utils.globalVars_utils import get_global, set_global
 from files.core.utils.log_utils import LogManager
 
+
+def _si():
+    """STARTUPINFO для скрытия окон на Windows"""
+    if sys.platform != 'win32':
+        return None
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = subprocess.SW_HIDE
+    return si
+
 logger = LogManager.get_logger('scheduler')
 
 # Built-in task registry — here you register all available tasks
@@ -522,7 +532,8 @@ class SchedulerModule(BaseModule):
                 result = subprocess.run(
                     ['git', 'fetch', '--dry-run'],
                     cwd=str(starter_path),
-                    capture_output=True, text=True, timeout=30
+                    capture_output=True, text=True, timeout=30,
+                    startupinfo=_si() if sys.platform == 'win32' else None
                 )
                 has_updates = bool(result.stdout.strip())
                 return {'status': 'success', 'has_updates': has_updates}
