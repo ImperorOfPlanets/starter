@@ -1,9 +1,11 @@
 # files/core/oss/windows/default/tray.py
 """
-Модуль для системного трея в Windows
+Модуль системного трея Windows
+Управление стартером: статус, запуск, остановка, открытие веб-интерфейса
 """
 import os
 import sys
+import socket
 import threading
 import subprocess
 import time
@@ -24,217 +26,320 @@ def _si():
     return si
 
 
+def _find_starter_pids() -> list:
+    """Найти PID всех процессов starter.py"""
+    pids = []
+    try:
+        import re
+        output = subprocess.check_output(
+            ['tasklist', '/FI', 'IMAGENAME eq pythonw.exe', '/FO', 'CSV', '/NH'],
+            text=True, startupinfo=_si()
+        )
+        for line in output.split('\n'):
+            if not line.strip():
+                continue
+            match = re.search(r'"(\d+)"', line)
+            if match:
+                pid = int(match.group(1))
+                try:
+                    import psutil
+                    proc = psutil.Process(pid)
+                    cmdline = ' '.join(proc.cmdline())
+                    if 'starter.py' in cmdline:
+                        pids.append(pid)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return pids
+
+
+def _is_web_running() -> bool:
+    """Проверяет, работает ли веб-сервер стартера"""
+    port = get_global('port', 2000)
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            result = s.connect_ex(('127.0.0.1', port))
+            return result == 0
+    except Exception:
+        return False
+
+
+def _is_service_running() -> bool:
+    """Проверяет, работает ли сервисный режим"""
+    for pid in _find_starter_pids():
+        try:
+            import psutil
+            proc = psutil.Process(pid)
+            cmdline = ' '.join(proc.cmdline())
+            if '--service' in cmdline:
+                return True
+        except Exception:
+            pass
+    return False
+
+
 class TrayModule(BaseModule):
-    """Модуль для управления иконкой в системном трее Windows"""
-    
+    """Модуль системного трея Windows — управление стартером"""
+
     _tray_thread = None
     _running = False
     _icon = None
-    
+
     @staticmethod
     def check() -> bool:
-        """Проверяет доступность модуля (только Windows)"""
         return sys.platform == 'win32'
-    
+
     @staticmethod
     def set_globals():
-        """Устанавливает глобальные переменные"""
         starter_path = get_global('starter_path')
         if starter_path:
             icons_dir = starter_path / "files" / "web" / "public"
             set_global('tray_icons_dir', icons_dir)
-            logger.debug(f"Icons directory: {icons_dir}")
-    
+
     @staticmethod
     def is_available() -> bool:
-        """Проверяет доступность библиотек для трея"""
         try:
             import pystray
             from PIL import Image
             return True
         except ImportError:
             return False
-    
+
     @staticmethod
     def check_dependencies():
-        """Проверяет наличие зависимостей для трея"""
         missing = []
-        
         try:
             import pystray
         except ImportError:
             missing.append('pystray')
-        
         try:
             from PIL import Image
         except ImportError:
             missing.append('Pillow')
-        
         if missing:
-            print(f"\n   ⚠️ Для иконки в трее требуются: {', '.join(missing)}")
-            print(f"   Установите: pip install {' '.join(missing)}")
+            print(f"\n   ⚠️ Для трея требуются: {', '.join(missing)}")
+            print(f"   💡 pip install {' '.join(missing)}")
             return False
-        
-        print("   ✅ Все зависимости для трея установлены")
+        print("   ✅ Зависимости трея установлены")
         return True
-    
+
     @staticmethod
-    def kill_starter_processes():
-        """Убивает все процессы starter.py"""
+    def _start_web_server():
+        """Запуск веб-сервера стартера (без окон)"""
+        starter_path = get_global('starter_path')
+        venv_python = str(Path(starter_path) / "venv" / "Scripts" / "pythonw.exe")
+        script = str(Path(starter_path) / "starter.py")
+
+        if not os.path.exists(venv_python):
+            return False
+
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
+        subprocess.Popen(
+            [venv_python, script],
+            cwd=starter_path,
+            startupinfo=si,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        return True
+
+    @staticmethod
+    def _stop_web_server():
+        """Остановка веб-сервера стартера (убивает только интерактивные процессы)"""
         current_pid = os.getpid()
-        killed = []
-        
-        try:
-            output = subprocess.check_output(
-                ['tasklist', '/FI', 'IMAGENAME eq python.exe', '/FO', 'CSV', '/NH'],
-                text=True,
-                startupinfo=_si()
-            )
-            
-            import re
-            for line in output.split('\n'):
-                if 'starter.py' in line.lower():
-                    match = re.search(r'"(\d+)"', line)
-                    if match:
-                        pid = int(match.group(1))
-                        if pid != current_pid:
-                            subprocess.run(['taskkill', '/F', '/PID', str(pid)], 
-                                         capture_output=True, check=False,
-                                         startupinfo=_si())
-                            killed.append(pid)
-                            print(f"   ✅ Убит процесс starter.py PID: {pid}")
-            
-            return killed
-        except Exception as e:
-            logger.error(f"Error killing starter processes: {e}")
-            return []
-    
+        stopped = 0
+        for pid in _find_starter_pids():
+            if pid == current_pid:
+                continue
+            try:
+                import psutil
+                proc = psutil.Process(pid)
+                cmdline = ' '.join(proc.cmdline())
+                if 'starter.py' in cmdline and '--service' not in cmdline:
+                    subprocess.run(['taskkill', '/F', '/PID', str(pid)],
+                                   capture_output=True, startupinfo=_si())
+                    stopped += 1
+            except Exception:
+                pass
+        return stopped
+
+    @staticmethod
+    def _kill_all():
+        """Убить все процессы стартера"""
+        for pid in _find_starter_pids():
+            subprocess.run(['taskkill', '/F', '/PID', str(pid)],
+                           capture_output=True, startupinfo=_si())
+
     @staticmethod
     def create_tray_icon():
-        """Создает иконку в системном трее"""
         try:
             import pystray
             from PIL import Image, ImageDraw
-            
-            # Создаем иконку программно (64x64)
-            size = 64
-            img = Image.new('RGB', (size, size), color='#0d6efd')
-            draw = ImageDraw.Draw(img)
-            
-            # Рисуем квадрат в центре
-            margin = 16
-            draw.rectangle([margin, margin, size - margin, size - margin], fill='white')
-            
-            # Рисуем внутренний квадрат
-            inner_margin = 24
-            draw.rectangle([inner_margin, inner_margin, size - inner_margin, size - inner_margin], 
-                          fill='#0d6efd')
-            
-            # Рисуем стрелку "play"
-            center = size // 2
-            draw.polygon([
-                (center - 8, center - 10),
-                (center - 8, center + 10),
-                (center + 10, center)
-            ], fill='white')
-            
-            # Получаем URL сервера
-            port = get_global('port', 2100)
-            protocol = 'https'
-            url = f"{protocol}://127.0.0.1:{port}"
-            
-            def on_quit(icon, item):
-                """Выход из приложения"""
-                print("\n🛑 Завершение работы через трей...")
-                TrayModule.kill_starter_processes()
-                icon.stop()
-                os._exit(0)
-            
-            def on_restart(icon, item):
-                """Перезапуск сервера"""
-                print("\n🔄 Перезапуск сервера...")
-                
-                starter_path = get_global('starter_path')
-                if starter_path:
-                    script_path = starter_path / "starter.py"
-                    subprocess.Popen([sys.executable, str(script_path)], 
-                                   creationflags=subprocess.CREATE_NEW_CONSOLE)
-                
-                on_quit(icon, item)
-            
-            def on_open_browser(icon, item):
-                """Открыть браузер"""
+
+            port = get_global('port', 2000)
+            url = f"https://127.0.0.1:{port}"
+
+            def make_icon(color='#0d6efd'):
+                size = 64
+                img = Image.new('RGB', (size, size), color=color)
+                draw = ImageDraw.Draw(img)
+                margin = 16
+                draw.rectangle([margin, margin, size - margin, size - margin], fill='white')
+                inner = 24
+                draw.rectangle([inner, inner, size - inner, size - inner], fill=color)
+                center = size // 2
+                draw.polygon([
+                    (center - 8, center - 10),
+                    (center - 8, center + 10),
+                    (center + 10, center)
+                ], fill='white')
+                return img
+
+            def update_icon():
+                """Обновить иконку в зависимости от статуса"""
+                if not TrayModule._icon:
+                    return
+                try:
+                    if _is_web_running():
+                        TrayModule._icon.icon = make_icon('#198754')
+                    else:
+                        TrayModule._icon.icon = make_icon('#dc3545')
+                except Exception:
+                    pass
+
+            def on_show(icon, item):
+                """Открыть веб-интерфейс, запустить если нужно"""
+                if not _is_web_running():
+                    TrayModule._start_web_server()
+                    time.sleep(3)
                 import webbrowser
                 webbrowser.open(url)
-            
-            def on_show_status(icon, item):
-                """Показать статус"""
-                port = get_global('port', 2100)
-                protocol = 'https'
-                
-                ps_cmd = f'''
-                Add-Type -AssemblyName System.Windows.Forms
-                $notify = New-Object System.Windows.Forms.NotifyIcon
-                $notify.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon([System.Windows.Forms.Application]::ExecutablePath)
-                $notify.Visible = $true
-                $notify.ShowBalloonTip(3000, "Starter Server", "Сервер запущен на {protocol}://127.0.0.1:{port}`nPID: {os.getpid()}", [System.Windows.Forms.ToolTipIcon]::Info)
-                '''
-                subprocess.run(['powershell', '-Command', ps_cmd], capture_output=True, startupinfo=_si())
-            
-            # Создаем меню
+
+            def on_start(icon, item):
+                """Запустить веб-сервер"""
+                if _is_web_running():
+                    return
+                TrayModule._start_web_server()
+                time.sleep(2)
+                update_icon()
+
+            def on_stop(icon, item):
+                """Остановить веб-сервер"""
+                TrayModule._stop_web_server()
+                time.sleep(1)
+                update_icon()
+
+            def on_status(icon, item):
+                """Показать статус через балloon"""
+                service = _is_service_running()
+                web = _is_web_running()
+                lines = [
+                    f"Сервис: {'ON' if service else 'OFF'}",
+                    f"Веб-сервер: {'ON' if web else 'OFF'}",
+                    f"Порт: {port}",
+                    f"PID: {os.getpid()}"
+                ]
+                TrayModule._balloon("Starter Status", "\n".join(lines))
+
+            def on_restart(icon, item):
+                """Перезапуск — убить всё и запустить заново"""
+                TrayModule._kill_all()
+                time.sleep(2)
+                TrayModule._start_web_server()
+                time.sleep(3)
+                update_icon()
+
+            def on_quit(icon, item):
+                """Выход"""
+                TrayModule._kill_all()
+                icon.stop()
+                os._exit(0)
+
             menu = pystray.Menu(
-                pystray.MenuItem(f"🌐 Открыть Starter", on_open_browser),
-                pystray.MenuItem(f"📡 Порт: {port}", lambda: None, enabled=False),
+                pystray.MenuItem("🌐 Показать Starter", on_show, default=True),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("▶️ Запустить веб-сервер", on_start),
+                pystray.MenuItem("⏹ Остановить веб-сервер", on_stop),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("🔄 Перезапустить", on_restart),
-                pystray.MenuItem("📊 Показать статус", on_show_status),
+                pystray.MenuItem("📊 Статус", on_status),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("❌ Выйти", on_quit)
             )
-            
-            icon = pystray.Icon("starter_server", img, "Starter Server", menu)
+
+            icon = pystray.Icon(
+                "starter_server",
+                make_icon('#0d6efd'),
+                "Starter Server",
+                menu
+            )
+
+            icon.run_detached()
+
+            def monitor_loop():
+                while TrayModule._running:
+                    time.sleep(5)
+                    update_icon()
+
+            threading.Thread(target=monitor_loop, daemon=True).start()
+
             return icon
-            
+
         except ImportError as e:
-            logger.warning(f"Required library not installed: {e}")
+            logger.warning(f"pystray not installed: {e}")
             return None
         except Exception as e:
-            logger.error(f"Failed to create tray icon: {e}")
+            logger.error(f"Failed to create tray: {e}")
             return None
-    
+
+    @staticmethod
+    def _balloon(title: str, message: str):
+        """Показать balloon-уведомление через PowerShell"""
+        ps_cmd = f'''
+        Add-Type -AssemblyName System.Windows.Forms
+        $notify = New-Object System.Windows.Forms.NotifyIcon
+        $notify.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon([System.Windows.Forms.Application]::ExecutablePath)
+        $notify.Visible = $true
+        $notify.ShowBalloonTip(3000, "{title}", "{message}", [System.Windows.Forms.ToolTipIcon]::Info)
+        '''
+        try:
+            subprocess.run(['powershell', '-Command', ps_cmd],
+                           capture_output=True, startupinfo=_si(), timeout=10)
+        except Exception:
+            pass
+
     @staticmethod
     def run_tray():
-        """Запускает иконку в трее в отдельном потоке"""
         if TrayModule._running:
             return
-        
         if not TrayModule.check_dependencies():
             return
-        
         TrayModule._running = True
-        
+
         def tray_loop():
             try:
                 TrayModule._icon = TrayModule.create_tray_icon()
                 if TrayModule._icon:
-                    print("   🖥️ Иконка в системном трее активна")
+                    print("   🖥️ Иконка в трее активна")
                     TrayModule._icon.run()
                 else:
                     print("   ⚠️ Не удалось создать иконку в трее")
             except Exception as e:
-                logger.error(f"Tray icon error: {e}")
-        
+                logger.error(f"Tray error: {e}")
+
         TrayModule._tray_thread = threading.Thread(target=tray_loop, daemon=False)
         TrayModule._tray_thread.start()
         time.sleep(1)
-    
+
     @staticmethod
     def stop_tray():
-        """Останавливает иконку в трее"""
         TrayModule._running = False
         if TrayModule._icon:
             try:
                 TrayModule._icon.stop()
-            except:
+            except Exception:
                 pass
-        logger.info("Tray icon stopped")
+        logger.info("Tray stopped")

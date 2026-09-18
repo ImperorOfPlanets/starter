@@ -113,10 +113,38 @@ def check_and_install_cron():
             print(f"   ⚠️ Ошибка при настройке CRON: {e}")
 
 
+def _another_starter_running() -> bool:
+    """Проверяет, запущен ли уже другой процесс starter.py"""
+    import psutil
+    current = os.getpid()
+    for proc in psutil.process_iter(['pid', 'cmdline']):
+        try:
+            if proc.pid == current:
+                continue
+            cmdline = ' '.join(proc.cmdline() or [])
+            if 'starter.py' in cmdline and 'pythonw' in cmdline.lower():
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    return False
+
+
 def start_service_mode():
-    """Режим работы как сервис/демон"""
+    """Режим работы как сервис/демон + трей"""
+    from files.core.utils.loader_utils import get
     logger = LogManager.get_logger('main')
     logger.info("Запуск в сервисном режиме...")
+
+    if not _another_starter_running():
+        tray_module = get('tray')
+        if tray_module and tray_module.is_available():
+            print("🖥️ Сервисный режим: запуск иконки в трее...")
+            tray_module.run_tray()
+        else:
+            print("   ⚠️ Трей недоступен, сервис работает в фоне")
+    else:
+        print("   ℹ️ Другой экземпляр уже работает, трей не создаётся")
+
     try:
         while True:
             time.sleep(1)
@@ -185,7 +213,9 @@ def start_interactive_mode():
         setup_module.open_browser()
     
     # Запуск иконки в трее
-    if tray_module:
+    if _another_starter_running():
+        print("   ℹ️ Другой экземпляр работает, трей не создаётся")
+    elif tray_module:
         if tray_module.is_available():
             print("🖥️ Запуск иконки в системном трее...")
             tray_module.run_tray()
