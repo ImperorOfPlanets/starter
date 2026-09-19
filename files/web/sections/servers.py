@@ -408,10 +408,22 @@ def list_server_types(data, session_obj):
     for key, info in sorted(merged_types.items(), key=lambda x: x[1].get('order', 999)):
         if key not in allowed_keys:
             continue
+        # Get current language for localized name/description
+        current_lang = 'ru'
+        try:
+            i18n_mod = get('i18n')
+            if i18n_mod:
+                current_lang = i18n_mod.get_current_language()
+        except Exception:
+            pass
+
+        lang_name = info.get(f'name_{current_lang}', info['name'])
+        lang_desc = info.get(f'description_{current_lang}', info.get('description', ''))
+
         types.append({
             'key': key,
-            'name': info['name'],
-            'description': info.get('description', ''),
+            'name': lang_name,
+            'description': lang_desc,
             'requires_reverse_proxy': info.get('requires_reverse_proxy', False),
             'requires_auth': info.get('requires_auth', False),
             'has_web_interface': info.get('has_web_interface', False),
@@ -1073,8 +1085,9 @@ def save_server_config(data, session_obj):
 
 
 def start_server(data, session_obj):
-    """Запустить сервер через Docker Compose"""
+    """Запустить сервер через Docker Compose с предварительными проверками"""
     import subprocess
+    import json
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
@@ -1101,6 +1114,85 @@ def start_server(data, session_obj):
     if not os.path.exists(compose_file):
         return jsonify({'status': 'error', 'message': 'docker-compose.yml not found'})
 
+    checks = []
+    has_errors = False
+
+    # Check 1: Docker running
+    try:
+        kw = _subprocess_kwargs(15)
+        r = subprocess.run(['docker', 'info'], **kw)
+        if r.returncode == 0:
+            checks.append({'step': 'docker', 'status': 'ok', 'message': 'Docker works'})
+        else:
+            checks.append({'step': 'docker', 'status': 'error', 'message': 'Docker is not running'})
+            has_errors = True
+    except Exception as e:
+        checks.append({'step': 'docker', 'status': 'error', 'message': f'Docker check failed: {e}'})
+        has_errors = True
+
+    # Check 2: docker-compose.yml valid
+    if not has_errors:
+        try:
+            kw = _subprocess_kwargs(30)
+            r = subprocess.run(['docker', 'compose', 'config', '--quiet'], cwd=docker_path, **kw)
+            if r.returncode == 0:
+                checks.append({'step': 'compose', 'status': 'ok', 'message': 'docker-compose.yml is valid'})
+            else:
+                err_msg = (r.stderr or '').strip()[:200]
+                checks.append({'step': 'compose', 'status': 'error', 'message': f'Invalid docker-compose.yml: {err_msg}'})
+                has_errors = True
+        except Exception as e:
+            checks.append({'step': 'compose', 'status': 'error', 'message': f'Compose check failed: {e}'})
+            has_errors = True
+
+    # Check 3: .env non-empty critical vars
+    if not has_errors:
+        env_path = os.path.join(docker_path, '.env')
+        if os.path.exists(env_path):
+            try:
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    env_content = f.read()
+                empty_vars = []
+                for line in env_content.splitlines():
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, val = line.split('=', 1)
+                        if key.strip() in ('DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD') and not val.strip():
+                            empty_vars.append(key.strip())
+                if empty_vars:
+                    checks.append({'step': 'env', 'status': 'warn', 'message': f'Empty values: {", ".join(empty_vars)}'})
+                else:
+                    checks.append({'step': 'env', 'status': 'ok', 'message': '.env is configured'})
+            except Exception:
+                checks.append({'step': 'env', 'status': 'ok', 'message': '.env exists'})
+        else:
+            checks.append({'step': 'env', 'status': 'warn', 'message': '.env file not found'})
+
+    # Check 4: Images built
+    if not has_errors:
+        try:
+            kw = _subprocess_kwargs(60)
+            r = subprocess.run(['docker', 'compose', 'images', '--format', 'json'], cwd=docker_path, capture_output=True, text=True, timeout=60, encoding='utf-8', errors='replace')
+            if r.returncode == 0 and r.stdout.strip():
+                checks.append({'step': 'images', 'status': 'ok', 'message': 'Images are available'})
+            else:
+                # Need to build
+                checks.append({'step': 'images', 'status': 'info', 'message': 'Building images...'})
+                build_kw = _subprocess_kwargs(600)
+                build_r = subprocess.run(['docker', 'compose', 'build'], cwd=docker_path, **build_kw)
+                if build_r.returncode == 0:
+                    checks.append({'step': 'images', 'status': 'ok', 'message': 'Images built successfully'})
+                else:
+                    err_msg = (build_r.stderr or '').strip()[:300]
+                    checks.append({'step': 'images', 'status': 'error', 'message': f'Build failed: {err_msg}'})
+                    has_errors = True
+        except Exception as e:
+            checks.append({'step': 'images', 'status': 'warn', 'message': f'Image check skipped: {e}'})
+
+    if has_errors:
+        return jsonify({'status': 'error', 'message': 'Pre-flight checks failed', 'checks': checks})
+
+    # All checks passed — start server
     try:
         kw = _subprocess_kwargs(120)
         result = subprocess.run(
@@ -1110,12 +1202,73 @@ def start_server(data, session_obj):
         if result.returncode == 0:
             server['status'] = 'running'
             registry.save_registry(reg_data)
-            return jsonify({'status': 'success', 'message': 'Сервер запущен'})
+            checks.append({'step': 'start', 'status': 'ok', 'message': 'Server started'})
+            return jsonify({'status': 'success', 'message': 'Сервер запущен', 'checks': checks})
         else:
-            return jsonify({'status': 'error', 'message': f'Ошибка: {result.stderr[:500]}'})
+            err_msg = (result.stderr or '').strip()[:500]
+            checks.append({'step': 'start', 'status': 'error', 'message': err_msg})
+            return jsonify({'status': 'error', 'message': f'Ошибка: {err_msg}', 'checks': checks})
     except Exception as e:
         logger.error(f"Error starting server: {e}")
-        return jsonify({'status': 'error', 'message': f'Ошибка запуска: {str(e)}'})
+        return jsonify({'status': 'error', 'message': f'Ошибка запуска: {str(e)}', 'checks': checks})
+
+
+def get_server_logs(data, session_obj):
+    """Получить логи контейнеров сервера"""
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    server_id = data.get('server_id')
+    if not server_id:
+        return jsonify({'status': 'error', 'message': 'Server ID required'})
+
+    registry = get('registry')
+    if not registry:
+        return jsonify({'status': 'error', 'message': 'Registry not found'})
+
+    reg_data = registry.load_registry()
+    server = next((s for s in reg_data.get('projects', []) if s.get('path') == server_id), None)
+    if not server:
+        return jsonify({'status': 'error', 'message': 'Server not found'})
+
+    server_path = server.get('path')
+    docker_path = os.path.join(server_path, 'docker')
+    lines = int(data.get('lines', 50))
+
+    logs = {}
+    try:
+        # Get container names for this project
+        project_name = os.path.basename(server_path).lower().replace(' ', '-')
+        kw = _subprocess_kwargs(30)
+        r = subprocess.run(
+            ['docker', 'compose', 'ps', '-a', '--format', 'json'],
+            cwd=docker_path, capture_output=True, text=True, timeout=30, encoding='utf-8', errors='replace'
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            for line in r.stdout.strip().split('\n'):
+                try:
+                    container = json.loads(line)
+                    name = container.get('Name', container.get('name', ''))
+                    state = container.get('State', container.get('state', ''))
+                    if name:
+                        # Get logs for each container
+                        log_kw = _subprocess_kwargs(10)
+                        log_r = subprocess.run(
+                            ['docker', 'logs', '--tail', str(lines), name],
+                            capture_output=True, text=True, timeout=10, encoding='utf-8', errors='replace'
+                        )
+                        log_output = (log_r.stdout or '') + (log_r.stderr or '')
+                        logs[name] = {
+                            'state': state,
+                            'logs': log_output.strip()[-2000:] if log_output else '(no logs)'
+                        }
+                except json.JSONDecodeError:
+                    continue
+    except Exception as e:
+        logger.error(f"Error getting server logs: {e}")
+
+    return jsonify({'status': 'success', 'logs': logs})
 
 
 def stop_server(data, session_obj):
