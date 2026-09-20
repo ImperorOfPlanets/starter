@@ -57,13 +57,15 @@ def _find_starter_pids() -> list:
 def _is_web_running() -> bool:
     """Проверяет, работает ли веб-сервер стартера"""
     port = get_global('port', 2000)
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(1)
-            result = s.connect_ex(('127.0.0.1', port))
-            return result == 0
-    except Exception:
-        return False
+    for host in ('localhost', '127.0.0.1'):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                if s.connect_ex((host, port)) == 0:
+                    return True
+        except Exception:
+            pass
+    return False
 
 
 def _is_service_running() -> bool:
@@ -173,7 +175,7 @@ class TrayModule(BaseModule):
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         si.wShowWindow = subprocess.SW_HIDE
         subprocess.Popen(
-            [venv_python, script],
+            [venv_python, script, '--no-tray'],
             cwd=starter_path,
             startupinfo=si,
             creationflags=subprocess.CREATE_NO_WINDOW
@@ -208,22 +210,39 @@ class TrayModule(BaseModule):
                            capture_output=True, startupinfo=_si())
 
     @staticmethod
+    def _get_icon_path():
+        """Get path to .ico file"""
+        starter_path = get_global('starter_path')
+        if starter_path:
+            icon_path = Path(starter_path) / 'files' / 'web' / 'public' / 'icon.ico'
+            if icon_path.exists():
+                return str(icon_path)
+        return None
+
+    @staticmethod
     def create_tray_icon():
         try:
             import pystray
             from PIL import Image, ImageDraw
 
             port = get_global('port', 2000)
-            url = f"https://127.0.0.1:{port}"
+            url = f"https://localhost:{port}"
 
             def make_icon(color='#0d6efd'):
+                try:
+                    icon_path = TrayModule._get_icon_path()
+                    if icon_path:
+                        img = Image.open(icon_path)
+                        if img.size != (64, 64):
+                            img = img.resize((64, 64), Image.LANCZOS)
+                        return img
+                except Exception:
+                    pass
                 size = 64
-                img = Image.new('RGB', (size, size), color=color)
+                img = Image.new('RGBA', (size, size), color=(0, 0, 0, 0))
                 draw = ImageDraw.Draw(img)
-                margin = 16
-                draw.rectangle([margin, margin, size - margin, size - margin], fill='white')
-                inner = 24
-                draw.rectangle([inner, inner, size - inner, size - inner], fill=color)
+                margin = 4
+                draw.rounded_rectangle([margin, margin, size - margin, size - margin], radius=12, fill=color)
                 center = size // 2
                 draw.polygon([
                     (center - 8, center - 10),
@@ -237,10 +256,14 @@ class TrayModule(BaseModule):
                 if not TrayModule._icon:
                     return
                 try:
-                    if _is_web_running():
+                    web = _is_web_running()
+                    service = _is_service_running()
+                    if web:
                         TrayModule._icon.icon = make_icon('#198754')
+                        TrayModule._icon.title = f"Starter | Web: ON | Port: {port}"
                     else:
                         TrayModule._icon.icon = make_icon('#dc3545')
+                        TrayModule._icon.title = f"Starter | Web: OFF"
                 except Exception:
                     pass
 
@@ -347,19 +370,73 @@ class TrayModule(BaseModule):
 
     @staticmethod
     def run_tray():
+        """Launch tray icon as a separate process (python.exe, not pythonw.exe)"""
         if TrayModule._running:
             return
-        if not TrayModule.check_dependencies():
+
+        starter_path = get_global('starter_path')
+        if not starter_path:
+            logger.warning("starter_path not set, cannot launch tray")
             return
 
-        if 'pythonw' in sys.executable.lower():
-            import multiprocessing
-            p = multiprocessing.Process(target=TrayModule._tray_main, daemon=True)
-            p.start()
+        venv_python = str(Path(starter_path) / "venv" / "Scripts" / "python.exe")
+        tray_script = str(Path(starter_path) / "tray_runner.py")
+
+        if not os.path.exists(venv_python):
+            logger.warning(f"python.exe not found: {venv_python}")
+            return
+        if not os.path.exists(tray_script):
+            logger.warning(f"tray_runner.py not found: {tray_script}")
             return
 
-        TrayModule._running = True
-        TrayModule._tray_main()
+        # Kill any existing tray_runner processes to avoid duplicates
+        try:
+            import re
+            result = subprocess.run(
+                ['tasklist', '/FI', 'IMAGENAME eq python.exe', '/FO', 'CSV', '/NH'],
+                capture_output=True, text=True, timeout=10, startupinfo=_si()
+            )
+            current_pid = os.getpid()
+            for line in (result.stdout or '').strip().split('\n'):
+                if not line.strip():
+                    continue
+                match = re.search(r'"(\d+)"', line)
+                if match:
+                    pid = int(match.group(1))
+                    if pid == current_pid:
+                        continue
+                    try:
+                        import psutil
+                        proc = psutil.Process(pid)
+                        cmdline = ' '.join(proc.cmdline() or [])
+                        if 'tray_runner.py' in cmdline:
+                            logger.info(f"Killing old tray_runner PID={pid}")
+                            proc.kill()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+        except Exception as e:
+            logger.warning(f"Error cleaning old tray processes: {e}")
+
+        port = get_global('port', 2000)
+
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
+
+        log_file = str(Path(starter_path) / "logs" / "tray_runner.log")
+        try:
+            proc = subprocess.Popen(
+                [venv_python, '-u', tray_script, '--port', str(port), '--starter-path', str(starter_path)],
+                cwd=str(starter_path),
+                startupinfo=si,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                stdout=open(log_file, 'a', encoding='utf-8'),
+                stderr=subprocess.STDOUT,
+            )
+            TrayModule._running = True
+            logger.info(f"Tray runner launched, PID={proc.pid}")
+        except Exception as e:
+            logger.error(f"Failed to launch tray runner: {e}")
 
     @staticmethod
     def stop_tray():
