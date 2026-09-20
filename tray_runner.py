@@ -262,6 +262,61 @@ def _get_icon_path():
     return None
 
 
+def _get_available_languages():
+    """Scan locales/ directory for available languages"""
+    locales_dir = _starter_path / 'files' / 'web' / 'locales'
+    langs = []
+    if not locales_dir.exists():
+        return langs
+    for f in sorted(locales_dir.glob('*.py')):
+        if f.name.startswith('_'):
+            continue
+        code = f.stem
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(f'locale_{code}', str(f))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            tr = getattr(mod, 'translations', {})
+            common = tr.get('common', {})
+            name = common.get('this_language', code)
+            langs.append({'code': code, 'name': name})
+        except Exception:
+            langs.append({'code': code, 'name': code})
+    return langs
+
+
+def _get_current_language():
+    """Read current language from .env"""
+    env_file = _starter_path / '.env'
+    try:
+        if env_file.exists():
+            with open(env_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('LANGUAGE=') and not line.startswith('#'):
+                        return line.split('=', 1)[1].strip()
+    except Exception:
+        pass
+    return 'en'
+
+
+def _set_language(code):
+    """Write language to .env"""
+    env_file = _starter_path / '.env'
+    try:
+        content = env_file.read_text(encoding='utf-8') if env_file.exists() else ''
+        if 'LANGUAGE=' in content:
+            import re
+            content = re.sub(r'LANGUAGE=.*', f'LANGUAGE={code}', content)
+        else:
+            content += f'\nLANGUAGE={code}\n'
+        env_file.write_text(content, encoding='utf-8')
+    except Exception as e:
+        if _logger:
+            _logger.error(f"Failed to set language: {e}")
+
+
 def run_tray():
     """Main tray entry point"""
     try:
@@ -276,9 +331,11 @@ def run_tray():
 
     port = get_global_port()
     url = f"https://localhost:{port}"
+    available_langs = _get_available_languages()
+    current_lang = _get_current_language()
 
     if _logger:
-        _logger.info(f"Starting tray, port={port}, url={url}")
+        _logger.info(f"Starting tray, port={port}, url={url}, langs={[l['code'] for l in available_langs]}")
 
     def make_icon(color='#0d6efd', letter='S'):
         try:
@@ -395,6 +452,118 @@ def run_tray():
         icon.stop()
         os._exit(0)
 
+    def on_language(code):
+        def handler(icon, item):
+            nonlocal current_lang
+            _set_language(code)
+            current_lang = code
+            _balloon("Language", f"Language changed to: {next((l['name'] for l in available_langs if l['code'] == code), code)}")
+        return handler
+
+    def build_language_submenu():
+        items = []
+        for lang in available_langs:
+            mark = '\u2713 ' if lang['code'] == current_lang else '   '
+            items.append(pystray.MenuItem(
+                f"{mark}{lang['name']} ({lang['code']})",
+                on_language(lang['code']),
+                radio=True,
+                checked=lambda item, c=lang['code']: c == current_lang
+            ))
+        return items
+
+    def on_settings(icon, item):
+        """Open settings window"""
+        try:
+            import tkinter as tk
+            from tkinter import ttk
+        except ImportError:
+            _balloon("Settings", "tkinter not available")
+            return
+
+        def settings_thread():
+            root = tk.Tk()
+            root.title("Starter Settings")
+            root.geometry("380x320")
+            root.resizable(False, False)
+
+            try:
+                root.iconbitmap(str(_starter_path / 'files' / 'web' / 'public' / 'icon.ico'))
+            except Exception:
+                pass
+
+            notebook = ttk.Notebook(root)
+            notebook.pack(fill='both', expand=True, padx=8, pady=8)
+
+            # === General Tab ===
+            frame_general = ttk.Frame(notebook)
+            notebook.add(frame_general, text="General")
+
+            ttk.Label(frame_general, text="Port:").grid(row=0, column=0, sticky='w', padx=8, pady=4)
+            port_var = tk.StringVar(value=str(port))
+            ttk.Entry(frame_general, textvariable=port_var, width=10).grid(row=0, column=1, padx=8, pady=4)
+
+            web_status = "ON" if _is_web_running(port) else "OFF"
+            svc_status = "ON" if _is_service_running() else "OFF"
+            ttk.Label(frame_general, text=f"Web server: {web_status}").grid(row=1, column=0, columnspan=2, sticky='w', padx=8, pady=2)
+            ttk.Label(frame_general, text=f"Service: {svc_status}").grid(row=2, column=0, columnspan=2, sticky='w', padx=8, pady=2)
+            ttk.Label(frame_general, text=f"URL: {url}").grid(row=3, column=0, columnspan=2, sticky='w', padx=8, pady=2)
+
+            # === Language Tab ===
+            frame_lang = ttk.Frame(notebook)
+            notebook.add(frame_lang, text="Language")
+
+            lang_var = tk.StringVar(value=current_lang)
+            for i, lang in enumerate(available_langs):
+                rb = ttk.Radiobutton(
+                    frame_lang,
+                    text=f"{lang['name']} ({lang['code']})",
+                    variable=lang_var,
+                    value=lang['code']
+                )
+                rb.grid(row=i, column=0, sticky='w', padx=12, pady=4)
+
+            def apply_language():
+                code = lang_var.get()
+                _set_language(code)
+                nonlocal current_lang
+                current_lang = code
+                _balloon("Language", f"Language changed to: {next((l['name'] for l in available_langs if l['code'] == code), code)}")
+
+            ttk.Button(frame_lang, text="Apply", command=apply_language).grid(row=len(available_langs), column=0, pady=8)
+
+            # === Servers Tab ===
+            frame_servers = ttk.Frame(notebook)
+            notebook.add(frame_servers, text="Servers")
+
+            servers = _status_cache.get('servers', [])
+            if servers:
+                cols = ('Name', 'Status', 'Type')
+                tree = ttk.Treeview(frame_servers, columns=cols, show='headings', height=8)
+                tree.heading('Name', text='Name')
+                tree.heading('Status', text='Status')
+                tree.heading('Type', text='Type')
+                tree.column('Name', width=140)
+                tree.column('Status', width=80)
+                tree.column('Type', width=80)
+                tree.pack(fill='both', expand=True, padx=8, pady=4)
+                for s in servers:
+                    tree.insert('', 'end', values=(
+                        s.get('name', s.get('path', '?')),
+                        s.get('status', '?'),
+                        s.get('type', '?')
+                    ))
+            else:
+                ttk.Label(frame_servers, text="No servers found").pack(pady=20)
+
+            def on_close():
+                root.destroy()
+
+            root.protocol("WM_DELETE_WINDOW", on_close)
+            root.mainloop()
+
+        threading.Thread(target=settings_thread, daemon=True).start()
+
     menu = pystray.Menu(
         pystray.MenuItem("Show Starter", on_show, default=True),
         pystray.Menu.SEPARATOR,
@@ -405,6 +574,9 @@ def run_tray():
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Restart", on_restart),
         pystray.MenuItem("Status", on_status),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("Language", lambda: pystray.Menu(*build_language_submenu())),
+        pystray.MenuItem("Settings", on_settings),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", on_quit)
     )
