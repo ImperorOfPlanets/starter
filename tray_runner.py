@@ -27,6 +27,109 @@ _starter_path = None
 # --- File logging (so errors are visible) ---
 _logger = None
 
+# --- Tray translations (separate from web i18n) ---
+TRAY_TRANSLATIONS = {
+    'en': {
+        'show': 'Show Starter',
+        'start': 'Start web server',
+        'stop': 'Stop web server',
+        'servers': 'Servers',
+        'restart': 'Restart',
+        'status': 'Status',
+        'settings': 'Settings',
+        'quit': 'Quit',
+        'no_servers': '(no servers)',
+        'lang_tab': 'Language',
+        'general_tab': 'General',
+        'servers_tab': 'Servers',
+        'apply': 'Apply',
+        'port': 'Port:',
+        'web_server': 'Web server:',
+        'service': 'Service:',
+        'url': 'URL:',
+        'lang_changed': 'Language changed',
+        'service_status': 'Starter Status',
+        'on': 'ON',
+        'off': 'OFF',
+    },
+    'ru': {
+        'show': 'Показать Starter',
+        'start': 'Запустить веб-сервер',
+        'stop': 'Остановить веб-сервер',
+        'servers': 'Серверы',
+        'restart': 'Перезапустить',
+        'status': 'Статус',
+        'settings': 'Настройки',
+        'quit': 'Выйти',
+        'no_servers': '(нет серверов)',
+        'lang_tab': 'Язык',
+        'general_tab': 'Основные',
+        'servers_tab': 'Серверы',
+        'apply': 'Применить',
+        'port': 'Порт:',
+        'web_server': 'Веб-сервер:',
+        'service': 'Сервис:',
+        'url': 'URL:',
+        'lang_changed': 'Язык изменён',
+        'service_status': 'Статус Starter',
+        'on': 'ВКЛ',
+        'off': 'ВЫКЛ',
+    },
+    'cn': {
+        'show': '显示 Starter',
+        'start': '启动 Web 服务器',
+        'stop': '停止 Web 服务器',
+        'servers': '服务器',
+        'restart': '重启',
+        'status': '状态',
+        'settings': '设置',
+        'quit': '退出',
+        'no_servers': '(没有服务器)',
+        'lang_tab': '语言',
+        'general_tab': '基本',
+        'servers_tab': '服务器',
+        'apply': '应用',
+        'port': '端口:',
+        'web_server': 'Web 服务器:',
+        'service': '服务:',
+        'url': 'URL:',
+        'lang_changed': '语言已更改',
+        'service_status': 'Starter 状态',
+        'on': '开启',
+        'off': '关闭',
+    }
+}
+
+
+def _get_tray_config_path():
+    return _starter_path / 'tray_config.json'
+
+
+def _load_tray_config():
+    cfg = {'lang': 'en'}
+    try:
+        p = _get_tray_config_path()
+        if p.exists():
+            with open(p, 'r', encoding='utf-8') as f:
+                cfg.update(json.load(f))
+    except Exception:
+        pass
+    return cfg
+
+
+def _save_tray_config(cfg):
+    try:
+        with open(_get_tray_config_path(), 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        if _logger:
+            _logger.error(f"Failed to save tray config: {e}")
+
+
+def _tr(key, lang='en'):
+    """Get translated tray string"""
+    return TRAY_TRANSLATIONS.get(lang, TRAY_TRANSLATIONS['en']).get(key, key)
+
 
 def _setup_logging(starter_path):
     global _logger
@@ -379,10 +482,11 @@ def run_tray():
     port = get_global_port()
     url = f"https://localhost:{port}"
     available_langs = _get_available_languages()
-    current_lang = _get_current_language()
+    tray_cfg = _load_tray_config()
+    tray_lang = tray_cfg.get('lang', 'en')
 
     if _logger:
-        _logger.info(f"Starting tray, port={port}, url={url}, langs={[l['code'] for l in available_langs]}")
+        _logger.info(f"Starting tray, port={port}, url={url}, tray_lang={tray_lang}")
 
     def make_icon(color='#0d6efd', letter='S'):
         try:
@@ -422,16 +526,16 @@ def run_tray():
             if web:
                 if running_count > 0:
                     color = '#198754'
-                    tooltip = f"Starter | Web: ON | Servers: {running_count} running"
+                    tooltip = f"Starter | {_tr('web_server', tray_lang)} {_tr('on', tray_lang)} | {_tr('servers', tray_lang)}: {running_count}"
                 else:
                     color = '#198754'
-                    tooltip = f"Starter | Web: ON | Port: {port}"
+                    tooltip = f"Starter | {_tr('web_server', tray_lang)} {_tr('on', tray_lang)} | {_tr('port', tray_lang)} {port}"
             else:
                 color = '#dc3545'
-                tooltip = f"Starter | Web: OFF"
+                tooltip = f"Starter | {_tr('web_server', tray_lang)} {_tr('off', tray_lang)}"
 
             if service:
-                tooltip += " | Service: ON"
+                tooltip += f" | {_tr('service', tray_lang)} {_tr('on', tray_lang)}"
 
             icon_ref[0].icon = make_icon(color)
             icon_ref[0].title = tooltip
@@ -443,7 +547,7 @@ def run_tray():
     def build_servers_submenu():
         servers = _status_cache.get('servers', [])
         if not servers:
-            return [pystray.MenuItem("(no servers)", None, enabled=False)]
+            return [pystray.MenuItem(_tr('no_servers', tray_lang), None, enabled=False)]
         items = []
         for s in servers:
             name = s.get('name', s.get('path', '?'))
@@ -477,15 +581,13 @@ def run_tray():
         servers = _get_servers_from_api(port) if web else []
         running = [s.get('name', '?') for s in servers if s.get('status') == 'running']
         lines = [
-            f"Service: {'ON' if service else 'OFF'}",
-            f"Web: {'ON' if web else 'OFF'}",
-            f"Port: {port}",
-            f"Running servers: {len(running)}",
+            f"{_tr('service', tray_lang)} {_tr('on', tray_lang) if service else _tr('off', tray_lang)}",
+            f"{_tr('web_server', tray_lang)} {_tr('on', tray_lang) if web else _tr('off', tray_lang)}",
+            f"{_tr('port', tray_lang)} {port}",
         ]
         if running:
             lines.extend([f"  - {n}" for n in running[:5]])
-        lines.append(f"Tray PID: {os.getpid()}")
-        _balloon("Starter Status", "\n".join(lines))
+        _balloon(_tr('service_status', tray_lang), "\n".join(lines))
 
     def on_restart(icon, item):
         _kill_all()
@@ -499,23 +601,24 @@ def run_tray():
         icon.stop()
         os._exit(0)
 
-    def on_language(code):
+    def on_set_tray_lang(code):
         def handler(icon, item):
-            nonlocal current_lang
-            _set_language(code)
-            current_lang = code
-            _balloon("Language", f"Language changed to: {next((l['name'] for l in available_langs if l['code'] == code), code)}")
+            nonlocal tray_lang
+            tray_lang = code
+            tray_cfg['lang'] = code
+            _save_tray_config(tray_cfg)
+            rebuild_menu()
+            _balloon(_tr('lang_changed', tray_lang), f"{_tr('lang_changed', tray_lang)}: {next((l['name'] for l in available_langs if l['code'] == code), code)}")
         return handler
 
     def build_language_submenu():
         items = []
         for lang in available_langs:
-            mark = '\u2713 ' if lang['code'] == current_lang else '   '
             items.append(pystray.MenuItem(
-                f"{mark}{lang['name']} ({lang['code']})",
-                on_language(lang['code']),
+                f"{'\\u2713 ' if lang['code'] == tray_lang else '   '}{lang['name']}",
+                on_set_tray_lang(lang['code']),
                 radio=True,
-                checked=lambda item, c=lang['code']: c == current_lang
+                checked=lambda item, c=lang['code']: c == tray_lang
             ))
         return items
 
@@ -528,10 +631,12 @@ def run_tray():
             _balloon("Settings", "tkinter not available")
             return
 
+        settings_lang = [tray_lang]
+
         def settings_thread():
             root = tk.Tk()
-            root.title("Starter Settings")
-            root.geometry("380x320")
+            root.title(_tr('settings', settings_lang[0]))
+            root.geometry("400x340")
             root.resizable(False, False)
 
             try:
@@ -544,23 +649,23 @@ def run_tray():
 
             # === General Tab ===
             frame_general = ttk.Frame(notebook)
-            notebook.add(frame_general, text="General")
+            notebook.add(frame_general, text=_tr('general_tab', settings_lang[0]))
 
-            ttk.Label(frame_general, text="Port:").grid(row=0, column=0, sticky='w', padx=8, pady=4)
+            ttk.Label(frame_general, text=_tr('port', settings_lang[0])).grid(row=0, column=0, sticky='w', padx=8, pady=4)
             port_var = tk.StringVar(value=str(port))
             ttk.Entry(frame_general, textvariable=port_var, width=10).grid(row=0, column=1, padx=8, pady=4)
 
-            web_status = "ON" if _is_web_running(port) else "OFF"
-            svc_status = "ON" if _is_service_running() else "OFF"
-            ttk.Label(frame_general, text=f"Web server: {web_status}").grid(row=1, column=0, columnspan=2, sticky='w', padx=8, pady=2)
-            ttk.Label(frame_general, text=f"Service: {svc_status}").grid(row=2, column=0, columnspan=2, sticky='w', padx=8, pady=2)
-            ttk.Label(frame_general, text=f"URL: {url}").grid(row=3, column=0, columnspan=2, sticky='w', padx=8, pady=2)
+            web_status = _tr('on', settings_lang[0]) if _is_web_running(port) else _tr('off', settings_lang[0])
+            svc_status = _tr('on', settings_lang[0]) if _is_service_running() else _tr('off', settings_lang[0])
+            ttk.Label(frame_general, text=f"{_tr('web_server', settings_lang[0])} {web_status}").grid(row=1, column=0, columnspan=2, sticky='w', padx=8, pady=2)
+            ttk.Label(frame_general, text=f"{_tr('service', settings_lang[0])} {svc_status}").grid(row=2, column=0, columnspan=2, sticky='w', padx=8, pady=2)
+            ttk.Label(frame_general, text=f"{_tr('url', settings_lang[0])} {url}").grid(row=3, column=0, columnspan=2, sticky='w', padx=8, pady=2)
 
             # === Language Tab ===
             frame_lang = ttk.Frame(notebook)
-            notebook.add(frame_lang, text="Language")
+            notebook.add(frame_lang, text=_tr('lang_tab', settings_lang[0]))
 
-            lang_var = tk.StringVar(value=current_lang)
+            lang_var = tk.StringVar(value=tray_lang)
             for i, lang in enumerate(available_langs):
                 rb = ttk.Radiobutton(
                     frame_lang,
@@ -572,16 +677,20 @@ def run_tray():
 
             def apply_language():
                 code = lang_var.get()
+                nonlocal tray_lang
+                tray_lang = code
+                tray_cfg['lang'] = code
+                _save_tray_config(tray_cfg)
+                rebuild_menu()
+                # Also change web interface language
                 _set_language(code)
-                nonlocal current_lang
-                current_lang = code
-                _balloon("Language", f"Language changed to: {next((l['name'] for l in available_langs if l['code'] == code), code)}")
+                _balloon(_tr('lang_changed', tray_lang), f"{_tr('lang_changed', tray_lang)}: {code}")
 
-            ttk.Button(frame_lang, text="Apply", command=apply_language).grid(row=len(available_langs), column=0, pady=8)
+            ttk.Button(frame_lang, text=_tr('apply', settings_lang[0]), command=apply_language).grid(row=len(available_langs), column=0, pady=8)
 
             # === Servers Tab ===
             frame_servers = ttk.Frame(notebook)
-            notebook.add(frame_servers, text="Servers")
+            notebook.add(frame_servers, text=_tr('servers_tab', settings_lang[0]))
 
             servers = _status_cache.get('servers', [])
             if servers:
@@ -601,7 +710,7 @@ def run_tray():
                         s.get('type', '?')
                     ))
             else:
-                ttk.Label(frame_servers, text="No servers found").pack(pady=20)
+                ttk.Label(frame_servers, text=_tr('no_servers', settings_lang[0])).pack(pady=20)
 
             def on_close():
                 root.destroy()
@@ -611,20 +720,41 @@ def run_tray():
 
         threading.Thread(target=settings_thread, daemon=True).start()
 
+    def rebuild_menu():
+        """Rebuild tray menu (for language change)"""
+        if not icon_ref[0]:
+            return
+        new_menu = pystray.Menu(
+            pystray.MenuItem(_tr('show', tray_lang), on_show, default=True),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(_tr('start', tray_lang), on_start),
+            pystray.MenuItem(_tr('stop', tray_lang), on_stop),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(_tr('servers', tray_lang), lambda: pystray.Menu(*build_servers_submenu())),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(_tr('restart', tray_lang), on_restart),
+            pystray.MenuItem(_tr('status', tray_lang), on_status),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(_tr('settings', tray_lang), on_settings),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(_tr('quit', tray_lang), on_quit)
+        )
+        icon_ref[0].menu = new_menu
+
     menu = pystray.Menu(
-        pystray.MenuItem("Show Starter", on_show, default=True),
+        pystray.MenuItem(_tr('show', tray_lang), on_show, default=True),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Start web server", on_start),
-        pystray.MenuItem("Stop web server", on_stop),
+        pystray.MenuItem(_tr('start', tray_lang), on_start),
+        pystray.MenuItem(_tr('stop', tray_lang), on_stop),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Servers", lambda: pystray.Menu(*build_servers_submenu())),
+        pystray.MenuItem(_tr('servers', tray_lang), lambda: pystray.Menu(*build_servers_submenu())),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Restart", on_restart),
-        pystray.MenuItem("Status", on_status),
+        pystray.MenuItem(_tr('restart', tray_lang), on_restart),
+        pystray.MenuItem(_tr('status', tray_lang), on_status),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Settings", on_settings),
+        pystray.MenuItem(_tr('settings', tray_lang), on_settings),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Quit", on_quit)
+        pystray.MenuItem(_tr('quit', tray_lang), on_quit)
     )
 
     icon = pystray.Icon(
