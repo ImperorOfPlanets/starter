@@ -302,7 +302,50 @@ def _get_current_language():
 
 
 def _set_language(code):
-    """Write language to .env"""
+    """Set language via API (updates .env + in-memory state)"""
+    import urllib.request
+    import ssl
+
+    api_key_file = _starter_path / 'files' / 'crypto' / '.api_key'
+    api_key = ''
+    try:
+        if api_key_file.exists():
+            api_key = api_key_file.read_text().strip()
+    except Exception:
+        pass
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    # Try API first (updates .env + os.environ in running server)
+    port = get_global_port()
+    try:
+        data_urlencoded = f'section=language&action=changeLanguage&lang={code}'.encode('utf-8')
+        req = urllib.request.Request(
+            f'https://localhost:{port}/',
+            data=data_urlencoded,
+            headers={
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json'
+            },
+            method='POST'
+        )
+        # We need session cookie — use cookie jar
+        import http.cookiejar
+        cj = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+        resp = opener.open(req, timeout=5)
+        result = json.loads(resp.read().decode('utf-8'))
+        if result.get('status') == 'success':
+            if _logger:
+                _logger.info(f"Language changed via API: {code}")
+            return True
+    except Exception as e:
+        if _logger:
+            _logger.warning(f"API language change failed: {e}, falling back to .env")
+
+    # Fallback: write .env directly
     env_file = _starter_path / '.env'
     try:
         content = env_file.read_text(encoding='utf-8') if env_file.exists() else ''
@@ -312,9 +355,13 @@ def _set_language(code):
         else:
             content += f'\nLANGUAGE={code}\n'
         env_file.write_text(content, encoding='utf-8')
+        if _logger:
+            _logger.info(f"Language written to .env: {code}")
+        return True
     except Exception as e:
         if _logger:
             _logger.error(f"Failed to set language: {e}")
+        return False
 
 
 def run_tray():
@@ -575,7 +622,6 @@ def run_tray():
         pystray.MenuItem("Restart", on_restart),
         pystray.MenuItem("Status", on_status),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Language", lambda: pystray.Menu(*build_language_submenu())),
         pystray.MenuItem("Settings", on_settings),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", on_quit)
