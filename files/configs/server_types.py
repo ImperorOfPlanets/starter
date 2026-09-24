@@ -44,6 +44,28 @@ SERVER_TYPES = {
             'branch': 'master'
         }
     },
+    'clientv2': {
+        'name': 'AI Помощник v2',
+        'name_en': 'AI Assistant v2',
+        'name_cn': 'AI 助手 v2',
+        'description': 'Персональный AI-ассистент v2 с мульти-агентной системой и оптимизированным Docker',
+        'description_en': 'Personal AI assistant v2 with multi-agent system and optimized Docker',
+        'description_cn': '具有多代理系统和优化Docker的个人AI助手v2',
+        'requires_reverse_proxy': True,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 80,
+        'order': 1,
+        'can_have_multiple': True,
+        'default_folder': 'clientv2',
+        'docker_compose_path': 'docker/docker-compose.yml',
+        'env_example_path': 'docker/.env.example',
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/clientv2.git',
+            'branch': 'master'
+        }
+    },
     'embeddings': {
         'name': 'Генератор векторов',
         'name_en': 'Vector Generator',
