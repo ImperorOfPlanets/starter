@@ -17,6 +17,23 @@ translations = {
         "installation_check_failed": "安装检查失败：{error}"
     },
 
+    # ==================== 硬件标识符同意 ====================
+    "consent": {
+        "title": "硬件标识符收集同意书",
+        "purpose": "用于将服务器安装锁定到您的设备。",
+        "what_collected": "收集的内容",
+        "cpu_id": "CPU ID",
+        "motherboard_serial": "主板序列号",
+        "disk_serial": "硬盘序列号",
+        "bios_serial": "BIOS序列号",
+        "not_collected": "不收集的内容",
+        "data_usage": "数据不会与第三方共享，仅存储在本地。",
+        "decline_info": "如拒绝，将使用基本指纹（主机名+MAC+路径），稳定性较差。",
+        "accept": "接受",
+        "decline": "拒绝",
+        "read_full": "完整文本：",
+    },
+
     # ==================== 主要模板变量（templates 文件夹中的文件） ====================
 
     "main":{

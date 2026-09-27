@@ -708,24 +708,9 @@ class OauthModule(BaseModule):
 
     @staticmethod
     def get_device_fingerprint() -> str:
-        """Получить отпечаток устройства для привязки"""
-        import hashlib
-        import uuid
-        
-        hostname = socket.gethostname()
-        
-        mac_address = "unknown"
-        try:
-            mac_address = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) 
-                                   for elements in range(0, 2*6, 2)][::-1])
-        except:
-            pass
-        
-        starter_path = str(get_global('starter_path', ''))
-        
-        fingerprint_data = f"{hostname}:{mac_address}:{starter_path}"
-        fingerprint = hashlib.sha256(fingerprint_data.encode()).hexdigest()[:32]
-        
+        """Получить отпечаток устройства для привязки (v2: hardware ID)"""
+        from files.core.utils.hardware_id import get_device_fingerprint as hw_fp
+        fingerprint = hw_fp()
         logger.info(f"Device fingerprint: {fingerprint}")
         return fingerprint
 

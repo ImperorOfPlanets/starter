@@ -17,6 +17,23 @@ translations = {
         "installation_check_failed": "Installation check failed: {error}"
     },
 
+    # ==================== HARDWARE ID CONSENT ====================
+    "consent": {
+        "title": "Consent for Hardware Identifier Collection",
+        "purpose": "For locking server installations to your device.",
+        "what_collected": "What Is Collected",
+        "cpu_id": "CPU ID",
+        "motherboard_serial": "Motherboard Serial Number",
+        "disk_serial": "Disk Serial Number",
+        "bios_serial": "BIOS Serial Number",
+        "not_collected": "What Is NOT Collected",
+        "data_usage": "Data is NOT shared with third parties and is stored only locally.",
+        "decline_info": "If declined, a basic fingerprint (hostname + MAC + path) is used, which is less stable.",
+        "accept": "Accept",
+        "decline": "Decline",
+        "read_full": "Full text:",
+    },
+
     # ==================== MAIN TEMPLATE VARIABLES (Files in templates folder) ====================
 
     "main":{
