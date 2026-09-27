@@ -319,7 +319,7 @@ function renderServerTypes(types) {
         }
         card += '</div></div></div>';
 
-        if (isApi) {
+        if (isApi && info.requires_auth) {
             apiHtml += card;
         } else {
             html += card;

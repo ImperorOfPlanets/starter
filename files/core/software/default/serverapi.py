@@ -184,12 +184,13 @@ def merge_server_types(local_types: Dict, api_servers: List[Dict], user_servers:
     """
     merged = dict(local_types)
     
-    # Если approved_keys не передан — собираем из user_servers
+    # Если approved_keys не передан — собираем из user_servers (ТОЛЬКО приватные)
     if approved_keys is None:
         approved_keys = set()
         for s in user_servers:
             slug = s.get('server_type') or s.get('slug')
-            if slug:
+            requires_auth = s.get('requires_auth', False)
+            if slug and requires_auth:
                 approved_keys.add(slug)
         # Fallback: если есть заявки но slug пуст — показываем все auth-required
         if not approved_keys and user_servers:
