@@ -493,18 +493,49 @@ class OauthModule(BaseModule):
             session_obj['user_applications'] = user_applications
             logger.info(f"User has {len(user_applications)} approved applications")
             
-            # Извлекаем Tailscale домены из заявок
+            # Извлекаем Tailscale домены и auth_key из заявок
             tailscale_domains = []
+            tailscale_auth_key = None
             for app in user_applications:
-                if app.get('type') == 'tailscale' and app.get('tailscale'):
-                    tailscale_domains.append({
-                        'application_id': app['id'],
-                        'server_name': app['tailscale'].get('server_name'),
-                        'tailscale_ip': app['tailscale'].get('tailscale_ip'),
-                        'status': app['tailscale'].get('status'),
-                    })
+                if app.get('type') == 'tailscale' and app.get('status') == 'approved':
+                    # Получаем auth_key для этой заявки
+                    if not tailscale_auth_key:
+                        try:
+                            import requests as req
+                            response = req.post(
+                                f"{OauthModule.MYIDON_URL}/api/tailscale/auth-key",
+                                headers={
+                                    'Authorization': f'Bearer {access_token}',
+                                    'Accept': 'application/json',
+                                    'Content-Type': 'application/json',
+                                },
+                                json={
+                                    'application_id': app['id'],
+                                    'server_type': 'starter',
+                                    'server_name': socket.gethostname(),
+                                },
+                                timeout=10
+                            )
+                            if response.status_code == 200:
+                                result = response.json()
+                                if result.get('success'):
+                                    tailscale_auth_key = result.get('auth_key')
+                                    logger.info(f"Got Tailscale auth_key from application #{app['id']}")
+                        except Exception as e:
+                            logger.warning(f"Failed to get Tailscale auth_key: {e}")
+                    
+                    if app.get('tailscale'):
+                        tailscale_domains.append({
+                            'application_id': app['id'],
+                            'server_name': app['tailscale'].get('server_name'),
+                            'tailscale_ip': app['tailscale'].get('tailscale_ip'),
+                            'status': app['tailscale'].get('status'),
+                            'auth_key': tailscale_auth_key,
+                        })
+            
             session_obj['tailscale_domains'] = tailscale_domains
-            logger.info(f"User has {len(tailscale_domains)} Tailscale domains")
+            session_obj['tailscale_auth_key'] = tailscale_auth_key
+            logger.info(f"User has {len(tailscale_domains)} Tailscale domains, auth_key={'yes' if tailscale_auth_key else 'no'}")
         else:
             session_obj['user_applications'] = []
             session_obj['tailscale_domains'] = []

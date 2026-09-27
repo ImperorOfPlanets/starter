@@ -1,4 +1,5 @@
 import platform
+import socket
 from flask import render_template, request, jsonify, session
 from files.core.utils.loader_utils import get
 from files.core.utils.globalVars_utils import get_global
@@ -99,6 +100,49 @@ def info(data, session_obj):
 def request_vpn(data, session_obj):
     login_server = data.get('login_server') or get_global('headscale_login_server', '')
     auth_key = data.get('auth_key')
+
+    # Если нет auth_key — пробуем получить из сессии (получен при логине)
+    if not auth_key:
+        auth_key = session_obj.get('tailscale_auth_key')
+        if auth_key:
+            logger.info("Using auth_key from session (obtained at login)")
+
+    # Если всё ещё нет — пробуем получить из одобренной заявки
+    if not auth_key:
+        user_applications = session_obj.get('user_applications', [])
+        for app in user_applications:
+            if app.get('type') == 'tailscale' and app.get('status') == 'approved':
+                oauth_token = session_obj.get('oauth_token')
+                if oauth_token:
+                    try:
+                        import requests
+                        from files.core.utils.globalVars_utils import get_global
+                        
+                        app_id = app.get('id')
+                        response = requests.post(
+                            f"https://myidon.site/api/tailscale/auth-key",
+                            headers={
+                                'Authorization': f'Bearer {oauth_token}',
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json',
+                            },
+                            json={
+                                'application_id': app_id,
+                                'server_type': 'starter',
+                                'server_name': socket.gethostname(),
+                            },
+                            timeout=10
+                        )
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            if result.get('success'):
+                                auth_key = result.get('auth_key')
+                                session_obj['tailscale_auth_key'] = auth_key
+                                logger.info(f"Got auth_key from application #{app_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to get auth_key from application: {e}")
+                break
 
     if not login_server:
         return jsonify({'status': 'error', 'message': 'HEADSCALE_LOGIN_SERVER not configured'})

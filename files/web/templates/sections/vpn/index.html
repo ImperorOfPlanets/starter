@@ -329,10 +329,16 @@ function requestVpn() {
     const btn = document.getElementById('connectBtn');
     if (btn) btn.disabled = true;
 
+    // Если есть Tailscale домены из заявки — используем auth_key автоматически
+    const tailscaleDomains = {{ tailscale_domains|tojson|safe }};
+    
     fetch('/api/vpn/request', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({login_server: '{{ login_server }}'})
+        body: JSON.stringify({
+            login_server: '{{ login_server }}',
+            use_application_key: tailscaleDomains.length > 0
+        })
     })
     .then(r => r.json())
     .then(data => {
