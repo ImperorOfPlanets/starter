@@ -314,7 +314,7 @@ SERVER_TYPES = {
         'description_en': 'Stream management: OBS, VK, Twitch, YouTube (Laravel)',
         'description_cn': '流媒体管理：OBS, VK, Twitch, YouTube（Laravel）',
         'requires_reverse_proxy': True,
-        'requires_auth': False,
+        'requires_auth': True,
         'is_reverse_proxy': False,
         'has_web_interface': True,
         'default_port': 8080,
@@ -345,6 +345,106 @@ SERVER_TYPES = {
         'env_example_path': 'docker/.env.example',
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/social-bridge.git',
+            'branch': 'master'
+        }
+    },
+    'wall': {
+        'name': 'Стена/Посты',
+        'name_en': 'Wall/Posts',
+        'name_cn': '墙/帖子',
+        'description': 'Публикация постов и стена (модуль для клиента)',
+        'description_en': 'Post publication and wall (client module)',
+        'description_cn': '帖子发布和墙（客户端模块）',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 8000,
+        'order': 100,
+        'can_have_multiple': True,
+        'default_folder': 'wall',
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/client-wall.git',
+            'branch': 'master'
+        }
+    },
+    'shop': {
+        'name': 'Магазин',
+        'name_en': 'Shop',
+        'name_cn': '商店',
+        'description': 'Интернет-магазин с каталогом и корзиной (модуль для клиента)',
+        'description_en': 'Online store with catalog and cart (client module)',
+        'description_cn': '带目录和购物车的网上商店（客户端模块）',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 8000,
+        'order': 200,
+        'can_have_multiple': True,
+        'default_folder': 'shop',
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/client-shop.git',
+            'branch': 'master'
+        }
+    },
+    'pages': {
+        'name': 'Страницы',
+        'name_en': 'Pages',
+        'name_cn': '页面',
+        'description': 'CMS страницы (модуль для клиента)',
+        'description_en': 'CMS pages (client module)',
+        'description_cn': 'CMS页面（客户端模块）',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 8000,
+        'order': 300,
+        'can_have_multiple': True,
+        'default_folder': 'pages',
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/client-pages.git',
+            'branch': 'master'
+        }
+    },
+    'payments': {
+        'name': 'Платежи',
+        'name_en': 'Payments',
+        'name_cn': '支付',
+        'description': 'Обработка платежей (модуль для клиента)',
+        'description_en': 'Payment processing (client module)',
+        'description_cn': '支付处理（客户端模块）',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 8000,
+        'order': 400,
+        'can_have_multiple': True,
+        'default_folder': 'payments',
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/client-payments.git',
+            'branch': 'master'
+        }
+    },
+    'roles': {
+        'name': 'Роли',
+        'name_en': 'Roles',
+        'name_cn': '角色',
+        'description': 'Роли и права myidon.site (модуль для клиента)',
+        'description_en': 'Roles and permissions myidon.site (client module)',
+        'description_cn': 'myidon.site的角色和权限（客户端模块）',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 8000,
+        'order': 500,
+        'can_have_multiple': True,
+        'default_folder': 'roles',
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/client-roles.git',
             'branch': 'master'
         }
     }
