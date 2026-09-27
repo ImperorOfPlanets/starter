@@ -16,7 +16,7 @@ class LogManager:
 
         starter_path = get_global('starter_path')
         if starter_path:
-            log_dir = starter_path / "files" / "logs"
+            log_dir = starter_path / "logs"
             log_dir.mkdir(parents=True, exist_ok=True)
         else:
             log_dir = Path.cwd() / "logs"
@@ -56,7 +56,7 @@ class LogManager:
         """Регистрирует специальную директорию для логгера"""
         starter_path = get_global('starter_path')
         if starter_path:
-            log_dir = starter_path / "files" / "logs" / subdirectory
+            log_dir = starter_path / "logs" / subdirectory
             log_dir.mkdir(parents=True, exist_ok=True)
             cls._log_dirs[logger_name] = log_dir
     

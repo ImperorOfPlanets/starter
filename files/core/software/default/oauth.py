@@ -487,6 +487,33 @@ class OauthModule(BaseModule):
             session_obj['user_servers'] = []
             logger.warning("Failed to fetch user servers from myidon.site")
 
+        # Получаем одобренные заявки с Tailscale данными
+        user_applications = OauthModule.get_user_applications(access_token)
+        if user_applications is not None:
+            session_obj['user_applications'] = user_applications
+            logger.info(f"User has {len(user_applications)} approved applications")
+            
+            # Извлекаем Tailscale домены из заявок
+            tailscale_domains = []
+            for app in user_applications:
+                if app.get('type') == 'tailscale' and app.get('tailscale'):
+                    tailscale_domains.append({
+                        'application_id': app['id'],
+                        'server_name': app['tailscale'].get('server_name'),
+                        'tailscale_ip': app['tailscale'].get('tailscale_ip'),
+                        'status': app['tailscale'].get('status'),
+                    })
+            session_obj['tailscale_domains'] = tailscale_domains
+            logger.info(f"User has {len(tailscale_domains)} Tailscale domains")
+        else:
+            session_obj['user_applications'] = []
+            session_obj['tailscale_domains'] = []
+            logger.warning("Failed to fetch user applications from myidon.site")
+
+        # Сохраняем отпечаток устройства для привязки
+        device_fingerprint = OauthModule.get_device_fingerprint()
+        session_obj['device_fingerprint'] = device_fingerprint
+
         # После входа — создаём заявку если нет
         if not OauthModule._application_id:
             env_path = get_global('starter_env_path')
@@ -566,6 +593,37 @@ class OauthModule(BaseModule):
             }
     
     @staticmethod
+    def refresh_user_applications(session_obj) -> bool:
+        """Обновить заявки пользователя из myidon.site"""
+        oauth_token = session_obj.get('oauth_token')
+        if not oauth_token:
+            return False
+        
+        try:
+            user_applications = OauthModule.get_user_applications(oauth_token)
+            if user_applications is not None:
+                session_obj['user_applications'] = user_applications
+                
+                # Обновляем Tailscale домены
+                tailscale_domains = []
+                for app in user_applications:
+                    if app.get('type') == 'tailscale' and app.get('tailscale'):
+                        tailscale_domains.append({
+                            'application_id': app['id'],
+                            'server_name': app['tailscale'].get('server_name'),
+                            'tailscale_ip': app['tailscale'].get('tailscale_ip'),
+                            'status': app['tailscale'].get('status'),
+                        })
+                session_obj['tailscale_domains'] = tailscale_domains
+                
+                logger.info(f"Refreshed {len(user_applications)} applications for user")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to refresh applications: {e}")
+            return False
+
+    @staticmethod
     def get_application_id() -> Optional[str]:
         """Возвращает ID заявки"""
         return OauthModule._application_id
@@ -595,3 +653,94 @@ class OauthModule(BaseModule):
         except Exception as e:
             logger.error(f"Error getting user servers: {e}")
             return None
+
+    @staticmethod
+    def get_user_applications(access_token: str) -> Optional[List[Dict]]:
+        """Получить одобренные заявки пользователя с Tailscale данными"""
+        try:
+            response = requests.get(
+                f"{OauthModule.MYIDON_URL}/api/user/applications",
+                headers={
+                    'Authorization': f'Bearer {access_token}',
+                    'Accept': 'application/json'
+                },
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                applications = data.get('applications', [])
+                logger.info(f"Retrieved {len(applications)} approved applications for user")
+                return applications
+            else:
+                logger.error(f"Failed to get user applications: {response.status_code}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error getting user applications: {e}")
+            return None
+
+    @staticmethod
+    def get_user_tailscale_machines(access_token: str) -> Optional[List[Dict]]:
+        """Получить Tailscale машины для заявок пользователя"""
+        try:
+            response = requests.get(
+                f"{OauthModule.MYIDON_URL}/api/user/tailscale/machines",
+                headers={
+                    'Authorization': f'Bearer {access_token}',
+                    'Accept': 'application/json'
+                },
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                machines = data.get('machines', [])
+                logger.info(f"Retrieved {len(machines)} Tailscale machines for user")
+                return machines
+            else:
+                logger.error(f"Failed to get Tailscale machines: {response.status_code}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error getting Tailscale machines: {e}")
+            return None
+
+    @staticmethod
+    def get_device_fingerprint() -> str:
+        """Получить отпечаток устройства для привязки"""
+        import hashlib
+        import uuid
+        
+        hostname = socket.gethostname()
+        
+        mac_address = "unknown"
+        try:
+            mac_address = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) 
+                                   for elements in range(0, 2*6, 2)][::-1])
+        except:
+            pass
+        
+        starter_path = str(get_global('starter_path', ''))
+        
+        fingerprint_data = f"{hostname}:{mac_address}:{starter_path}"
+        fingerprint = hashlib.sha256(fingerprint_data.encode()).hexdigest()[:32]
+        
+        logger.info(f"Device fingerprint: {fingerprint}")
+        return fingerprint
+
+    @staticmethod
+    def check_user_access_to_server(session_obj, server_type: str) -> bool:
+        """Проверить, есть ли у пользователя доступ к типу сервера"""
+        user_applications = session_obj.get('user_applications', [])
+        
+        for app in user_applications:
+            if app.get('type') == 'server_type' and app.get('status') == 'approved':
+                data = app.get('data', {})
+                server_type_keys = data.get('server_type_keys', [])
+                if not data.get('server_type_key') is None:
+                    server_type_keys.append(data['server_type_key'])
+                if server_type in server_type_keys:
+                    return True
+        
+        return False

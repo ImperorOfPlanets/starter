@@ -29,6 +29,7 @@ def parse_args():
     parser.add_argument('--install-cron', action='store_true', help='Установить CRON задачу')
     parser.add_argument('--task', type=str, help='Выполнить задачу (отдельный процесс)')
     parser.add_argument('--task-params', type=str, help='JSON параметры для задачи')
+    parser.add_argument('--no-tray', action='store_true', help='Не запускать трей (для веб-сервера из трея)')
     return parser.parse_args()
 
 
@@ -114,28 +115,135 @@ def check_and_install_cron():
 
 
 def _another_starter_running() -> bool:
-    """Проверяет, запущен ли уже другой процесс starter.py"""
-    import psutil
+    """Проверяет, запущен ли уже другой процесс starter.py (через PID-файл)"""
+    pid_file = get_global('starter_path') / "starter.pid"
     current = os.getpid()
-    for proc in psutil.process_iter(['pid', 'cmdline']):
-        try:
-            if proc.pid == current:
-                continue
-            cmdline = ' '.join(proc.cmdline() or [])
-            if 'starter.py' in cmdline and 'pythonw' in cmdline.lower():
-                return True
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
+    if not pid_file.exists():
+        return False
+    try:
+        old_pid = int(pid_file.read_text().strip())
+        if old_pid == current:
+            return False
+        import psutil
+        proc = psutil.Process(old_pid)
+        cmdline = ' '.join(proc.cmdline() or [])
+        if 'starter.py' in cmdline:
+            return True
+    except (ValueError, psutil.NoSuchProcess, psutil.AccessDenied):
+        pass
+    except Exception:
+        pass
     return False
 
 
+_web_spawn_in_progress = False
+
+
+def _start_web_server_background():
+    """Запустить веб-сервер стартера как фоновый процесс (pythonw.exe, --no-tray)"""
+    global _web_spawn_in_progress
+    logger = LogManager.get_logger('main')
+
+    if _web_spawn_in_progress:
+        return None
+
+    if _is_port_open(get_global('port', 2000)):
+        return None
+
+    _web_spawn_in_progress = True
+    starter_path = get_global('starter_path')
+    venv_pythonw = str(Path(starter_path) / "venv" / "Scripts" / "pythonw.exe")
+    script = str(Path(starter_path) / "starter.py")
+
+    if not os.path.exists(venv_pythonw):
+        logger.error(f"pythonw.exe not found: {venv_pythonw}")
+        _web_spawn_in_progress = False
+        return None
+
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = subprocess.SW_HIDE
+    try:
+        proc = subprocess.Popen(
+            [venv_pythonw, script, '--no-tray'],
+            cwd=str(starter_path),
+            startupinfo=si,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        logger.info(f"Web server started, PID={proc.pid}")
+        print(f"   ✅ Веб-сервер запущен (PID={proc.pid})")
+        return proc
+    except Exception as e:
+        logger.error(f"Failed to start web server: {e}")
+        print(f"   ❌ Ошибка запуска веб-сервера: {e}")
+        _web_spawn_in_progress = False
+        return None
+
+
+def _is_port_open(port, timeout=2):
+    """Проверить, слушает ли порт"""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            return s.connect_ex(('127.0.0.1', port)) == 0
+    except Exception:
+        return False
+
+
+def _kill_stale_starter_processes():
+    """Убить зависшие процессы starter.py (по PID-файлу)"""
+    logger = LogManager.get_logger('main')
+    pid_file = get_global('starter_path') / "starter.pid"
+    if not pid_file.exists():
+        return
+    try:
+        old_pid = int(pid_file.read_text().strip())
+        if old_pid == os.getpid():
+            return
+        import psutil
+        proc = psutil.Process(old_pid)
+        cmdline = ' '.join(proc.cmdline() or [])
+        if 'starter.py' in cmdline:
+            logger.info(f"Killing stale starter process PID={old_pid}")
+            print(f"   🧹 Убиваем зависший процесс PID={old_pid}")
+            proc.kill()
+    except (ValueError, psutil.NoSuchProcess, psutil.AccessDenied):
+        pass
+    except Exception as e:
+        logger.warning(f"Error checking stale PID: {e}")
+    finally:
+        try:
+            pid_file.write_text(str(os.getpid()))
+        except Exception:
+            pass
+
+
 def start_service_mode():
-    """Режим работы как сервис/демон + трей"""
+    """Режим работы как сервис/демон: веб-сервер + трей"""
     from files.core.utils.loader_utils import get
     logger = LogManager.get_logger('main')
     logger.info("Запуск в сервисном режиме...")
 
-    if not _another_starter_running():
+    # 1) Убить зависшие процессы стартера
+    _kill_stale_starter_processes()
+
+    # 2) Сохранить PID текущего процесса
+    pid_file = get_global('starter_path') / "starter.pid"
+    try:
+        pid_file.write_text(str(os.getpid()))
+    except Exception:
+        pass
+
+    # 3) Запустить веб-сервер (если порт свободен)
+    port = get_global('port', 2000)
+    if not _is_port_open(port):
+        _start_web_server_background()
+    else:
+        print(f"   ℹ️ Порт {port} уже занят, веб-сервер пропущен")
+
+    # 4) Запустить трей (если доступен и нет другого экземпляра)
+    if not get_global('no_tray', False):
         tray_module = get('tray')
         if tray_module and tray_module.is_available():
             print("🖥️ Сервисный режим: запуск иконки в трее...")
@@ -143,13 +251,28 @@ def start_service_mode():
         else:
             print("   ⚠️ Трей недоступен, сервис работает в фоне")
     else:
-        print("   ℹ️ Другой экземпляр уже работает, трей не создаётся")
+        print("   ℹ️ Трей отключен (--no-tray)")
 
+    # 5) Мониторинг: перезапуск веб-сервера при падении
+    logger.info("Service monitor loop started")
+    _web_spawn_in_progress = False
     try:
         while True:
-            time.sleep(1)
+            time.sleep(30)
+            if not _is_port_open(port):
+                _web_spawn_in_progress = False
+                logger.warning("Web server is down, restarting...")
+                print("   ⚠️ Веб-сервер упал, перезапуск...")
+                _start_web_server_background()
+            else:
+                _web_spawn_in_progress = False
     except KeyboardInterrupt:
         print("\n🛑 Сервис остановлен")
+        logger.info("Service stopped by user")
+        try:
+            pid_file.unlink(missing_ok=True)
+        except Exception:
+            pass
         sys.exit(0)
 
 
@@ -213,7 +336,9 @@ def start_interactive_mode():
         setup_module.open_browser()
     
     # Запуск иконки в трее
-    if _another_starter_running():
+    if get_global('no_tray', False):
+        print("   ℹ️ Трей отключен (--no-tray)")
+    elif _another_starter_running():
         print("   ℹ️ Другой экземпляр работает, трей не создаётся")
     elif tray_module:
         if tray_module.is_available():
@@ -254,6 +379,7 @@ def main():
 
     args = parse_args()
     set_global('is_service', args.service)
+    set_global('no_tray', args.no_tray)
 
     # ============================================================
     # ЭТАП 1: SystemModule - сбор информации о системе
@@ -698,13 +824,36 @@ def main():
 
 
 if __name__ == '__main__':
+    import traceback as _tb
+    def _crash_handler(exc_type, exc_value, exc_tb):
+        try:
+            from files.core.utils.globalVars_utils import get_global as _gg
+            sp = _gg('starter_path')
+            if sp:
+                log_path = Path(sp) / "logs" / "crash.log"
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n{'='*60}\n")
+                    f.write(f"CRASH at {datetime.now()}\n")
+                    f.write(f"PID: {os.getpid()}\n")
+                    f.write(f"Python: {sys.executable}\n")
+                    f.write(f"Args: {sys.argv}\n")
+                    _tb.print_exception(exc_type, exc_value, exc_tb, file=f)
+                    f.write(f"{'='*60}\n")
+        except Exception:
+            pass
+        _tb.print_exception(exc_type, exc_value, exc_tb)
+        sys.exit(1)
+
+    sys.excepthook = _crash_handler
     try:
         main()
     except KeyboardInterrupt:
         print("\n\n👋 Программа остановлена пользователем")
         sys.exit(0)
+    except SystemExit:
+        raise
     except Exception as e:
         print(f"\n❌ Критическая ошибка: {e}")
-        import traceback
         traceback.print_exc()
         sys.exit(1)

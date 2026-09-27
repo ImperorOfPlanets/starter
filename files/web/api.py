@@ -236,6 +236,26 @@ def remove_server(server_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@api.route('/servers/<path:server_id>/update', methods=['POST'])
+@require_api_key
+def update_server(server_id):
+    """Обновить сервер через git pull (не удаляет .env и docker configs)"""
+    try:
+        from files.web.sections.servers import update_server as do_update
+
+        result = do_update({'server_id': server_id}, API_SESSION)
+
+        if isinstance(result, tuple):
+            result, status = result
+            return result, status
+
+        return result
+
+    except Exception as e:
+        logger.error(f"API update_server error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @api.route('/servers/<path:server_id>', methods=['GET'])
 @require_api_key
 def server_details(server_id):

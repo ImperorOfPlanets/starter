@@ -221,6 +221,21 @@ def index(data, session_obj):
     except Exception:
         pass
 
+    # Получаем application_id из заявок пользователя
+    user_applications = session_obj.get('user_applications', [])
+    application_id = None
+    for app in user_applications:
+        if app.get('type') == 'server_type' and app.get('status') == 'approved':
+            application_id = app.get('id')
+            break
+    
+    # Если нет server_type заявки, берём первую одобренную
+    if not application_id and user_applications:
+        for app in user_applications:
+            if app.get('status') == 'approved':
+                application_id = app.get('id')
+                break
+
     return render_template(
         'sections/servers/index.html',
         servers=servers,
@@ -228,6 +243,8 @@ def index(data, session_obj):
         user=user,
         can_manage=can_manage,
         reverse_proxy_status=reverse_proxy_status,
+        application_id=application_id,
+        tailscale_domains=session_obj.get('tailscale_domains', []),
         t=t
     )
 
@@ -258,7 +275,34 @@ def list_servers(data, session_obj):
 
 
 def _get_approved_server_keys(session_obj):
-    """Получает одобренные типы серверов из myidon.site по заявкам пользователя"""
+    """Получает одобренные типы серверов из заявок пользователя в сессии"""
+    # Сначала пробуем из заявок в сессии (быстрее)
+    user_applications = session_obj.get('user_applications', [])
+    if user_applications:
+        keys = set()
+        for app in user_applications:
+            if app.get('status') == 'approved':
+                app_type = app.get('type')
+                data = app.get('data', {})
+                
+                if app_type == 'server_type':
+                    # Извлекаем ключи серверов из заявки
+                    server_type_keys = data.get('server_type_keys', [])
+                    if data.get('server_type_key'):
+                        server_type_keys.append(data['server_type_key'])
+                    for key in server_type_keys:
+                        if key:
+                            keys.add(key)
+                
+                # Также добавляем тип заявки как ключ
+                if app_type:
+                    keys.add(app_type)
+        
+        if keys:
+            logger.info(f"Approved server types from session applications: {keys}")
+            return keys
+    
+    # Fallback: если нет заявок в сессии — пробуем API
     oauth_token = session_obj.get('oauth_token')
     if not oauth_token:
         return set()
@@ -549,6 +593,37 @@ def install_server(data, session_obj):
     docker_path = server_path / 'docker'
     code_path = server_path / 'code'
 
+    # =================== ПРОВЕРКА УСТАНОВКИ ЧЕРЕЗ MYIDON.SITE =================
+    oauth_token = session_obj.get('oauth_token')
+    application_id = data.get('application_id')
+    
+    if oauth_token and application_id:
+        from files.core.software.default.installation_lock import InstallationLockModule
+        
+        check_result = InstallationLockModule.check_installation(
+            oauth_token=oauth_token,
+            server_type=server_type,
+            server_path=install_path,
+            application_id=int(application_id)
+        )
+        
+        if not check_result.get('allowed', False):
+            reason = check_result.get('reason', 'unknown')
+            existing = check_result.get('existing', {})
+            
+            # Если это не первая установка и данные не совпадают — блокируем
+            if reason != 'first_installation':
+                return {
+                    'status': 'error',
+                    'message': f'Установка заблокирована: {reason}',
+                    'code': 'INSTALLATION_LOCKED',
+                    'existing': existing,
+                    'checks': check_result.get('checks', {}),
+                }
+        
+        logger.info(f"Installation check passed: {check_result.get('reason')}")
+    # =================== КОНЕЦ ПРОВЕРКИ =================
+
     # Проверяем не пустая ли папка
     is_reinstall = False
     if server_path.exists() and list(server_path.iterdir()):
@@ -724,6 +799,31 @@ def install_server(data, session_obj):
                     break
             RegistryModule.save_registry(reg)
             logger.info(f"Server {'reinstalled' if is_reinstall else 'registered'}: {server_type} at {install_path} (subnet: {subnet_octet})")
+
+        # =================== ФИКСАЦИЯ УСТАНОВКИ НА MYIDON.SITE =================
+        oauth_token = session_obj.get('oauth_token')
+        application_id = data.get('application_id')
+        
+        if oauth_token and application_id:
+            try:
+                from files.core.software.default.installation_lock import InstallationLockModule
+                
+                InstallationLockModule.record_installation(
+                    oauth_token=oauth_token,
+                    server_type=server_type,
+                    server_path=install_path,
+                    application_id=int(application_id),
+                    additional_data={
+                        'server_name': server_name,
+                        'subnet_octet': subnet_octet,
+                        'port': port,
+                        'is_reinstall': is_reinstall,
+                    }
+                )
+                logger.info(f"Installation recorded on myidon.site: {server_type} at {install_path}")
+            except Exception as e:
+                logger.warning(f"Failed to record installation on myidon.site: {e}")
+        # =================== КОНЕЦ ФИКСАЦИИ =================
 
         action = 'Переустановлен' if is_reinstall else 'Установлен'
         return {'status': 'success', 'message': f'{type_info["name"]} {action} в {install_path}'}
@@ -1111,6 +1211,29 @@ def start_server(data, session_obj):
         return jsonify({'status': 'error', 'message': 'Docker directory not found'})
 
     compose_file = os.path.join(docker_path, 'docker-compose.yml')
+    compose_example = os.path.join(docker_path, 'docker-compose.example')
+
+    # Regenerate docker-compose.yml from example on every start
+    if os.path.exists(compose_example):
+        import shutil
+        shutil.copy2(compose_example, compose_file)
+        # Substitute ${VAR} from .env
+        env_file = os.path.join(docker_path, '.env')
+        if os.path.exists(env_file):
+            env_vars = {}
+            with open(env_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        k, v = line.split('=', 1)
+                        env_vars[k.strip()] = v.strip()
+            with open(compose_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            for k, v in env_vars.items():
+                content = content.replace('${' + k + '}', v)
+            with open(compose_file, 'w', encoding='utf-8') as f:
+                f.write(content)
+
     if not os.path.exists(compose_file):
         return jsonify({'status': 'error', 'message': 'docker-compose.yml not found'})
 

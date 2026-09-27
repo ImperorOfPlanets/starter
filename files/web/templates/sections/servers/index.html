@@ -21,6 +21,20 @@
         {% endif %}
     </div>
 
+    <!-- Информация о заявке и Tailscale доменах -->
+    {% if application_id %}
+    <div class="alert alert-info mb-3">
+        <i class="bi bi-check-circle me-2"></i>
+        <strong>Заявка #{{ application_id }}</strong> одобрена
+        {% if tailscale_domains %}
+            | Tailscale домены:
+            {% for domain in tailscale_domains %}
+                <code>{{ domain.tailscale_ip or domain.server_name }}</code>{% if not loop.last %}, {% endif %}
+            {% endfor %}
+        {% endif %}
+    </div>
+    {% endif %}
+
     <!-- Установленные серверы -->
     <h6 class="text-muted mb-2">{{ t('installed_servers') }}</h6>
     <div id="serversList">
@@ -554,7 +568,8 @@ function installServer() {
             server_type: type,
             path: path,
             name: document.getElementById('installName').value.trim(),
-            force: force ? 'true' : 'false'
+            force: force ? 'true' : 'false',
+            application_id: '{{ application_id|default("") }}'
         })
     })
     .then(function(r) { return r.json(); })

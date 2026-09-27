@@ -222,11 +222,24 @@ class ServiceModule(BaseModule):
         paths = ServiceModule._get_paths()
 
         if action == 'start':
+            # Kill any existing starter service process first
+            for pid in ServiceModule._find_starter_pids():
+                try:
+                    import psutil
+                    proc = psutil.Process(pid)
+                    cmdline = ' '.join(proc.cmdline() or [])
+                    if '--service' in cmdline:
+                        subprocess.run(['taskkill', '/F', '/PID', str(pid)],
+                                       capture_output=True, timeout=10, startupinfo=_si())
+                except Exception:
+                    pass
+            time.sleep(1)
+
             si = subprocess.STARTUPINFO()
             si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             si.wShowWindow = subprocess.SW_HIDE
             subprocess.Popen(
-                [paths['pythonw'], paths['script']],
+                [paths['pythonw'], paths['script'], '--service'],
                 cwd=paths['starter_path'],
                 startupinfo=si,
                 creationflags=subprocess.CREATE_NO_WINDOW
@@ -246,7 +259,7 @@ class ServiceModule(BaseModule):
             si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             si.wShowWindow = subprocess.SW_HIDE
             subprocess.Popen(
-                [paths['pythonw'], paths['script']],
+                [paths['pythonw'], paths['script'], '--service'],
                 cwd=paths['starter_path'],
                 startupinfo=si,
                 creationflags=subprocess.CREATE_NO_WINDOW
@@ -289,7 +302,7 @@ class ServiceModule(BaseModule):
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         si.wShowWindow = subprocess.SW_HIDE
         subprocess.Popen(
-            [paths['pythonw'], paths['script']],
+            [paths['pythonw'], paths['script'], '--no-tray'],
             cwd=paths['starter_path'],
             startupinfo=si,
             creationflags=subprocess.CREATE_NO_WINDOW

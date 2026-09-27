@@ -122,6 +122,55 @@
     </div>
 
     <!-- Серверы в VPN-сети -->
+    <!-- Назначенные Tailscale домены из заявок -->
+    {% if assigned_domains %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <i class="bi bi-globe me-2"></i> Назначенные домены ({{ assigned_domains|length }})
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Сервер</th>
+                                <th>Tailscale IP</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for domain in assigned_domains %}
+                            <tr>
+                                <td><strong>{{ domain.server_name or 'N/A' }}</strong></td>
+                                <td><code>{{ domain.tailscale_ip or 'Не назначен' }}</code></td>
+                                <td>
+                                    {% if domain.status == 'connected' %}
+                                        <span class="badge bg-success">Подключен</span>
+                                    {% elif domain.status == 'pending' %}
+                                        <span class="badge bg-warning">Ожидание</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ domain.status or 'unknown' }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if domain.tailscale_ip %}
+                                        <button class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('{{ domain.tailscale_ip }}')">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {% if tailscale_peers %}
     <div class="row">
         <div class="col-12">
@@ -161,8 +210,115 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- Смена железа -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header bg-warning">
+                    <i class="bi bi-exchange me-2"></i> Смена устройства
+                </div>
+                <div class="card-body">
+                    {% if hardware_change_status.has_pending %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-clock me-2"></i>
+                            Заявка на смену железа ожидает одобрения.
+                            <br><small>Создана: {{ hardware_change_status.pending_request.created_at }}</small>
+                        </div>
+                    {% else %}
+                        <p>Если вы сменили компьютер, подайте заявку на смену устройства.</p>
+                        <p><small class="text-muted">После одобрения вы сможете устанавливать на новом ПК.</small></p>
+                        
+                        <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#hardwareChangeModal">
+                            <i class="bi bi-exchange me-1"></i> Подать заявку
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно заявки на смену железа -->
+    <div class="modal fade" id="hardwareChangeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title"><i class="bi bi-exchange me-2"></i>Смена устройства</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="hardwareChangeForm">
+                        <div class="mb-3">
+                            <label class="form-label">Причина смены:</label>
+                            <select class="form-select" name="reason" required>
+                                <option value="">Выберите причину...</option>
+                                <option value="new_computer">Купил новый компьютер</option>
+                                <option value="hardware_failure">Вышла из строя материнская плата</option>
+                                <option value="upgrade">Апгрейд компонентов</option>
+                                <option value="other">Другое</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Описание нового ПК (необязательно):</label>
+                            <textarea class="form-control" name="new_device_info" rows="2" 
+                                      placeholder="Модель материнки, процессора и т.д."></textarea>
+                        </div>
+                        <div class="alert alert-info">
+                            <small>
+                                <i class="bi bi-info-circle me-1"></i>
+                                После подачи заявки администратор проверит её и одобрит.
+                                Затем вы сможете устанавливать на новом устройстве.
+                            </small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-warning" onclick="submitHardwareChange()">
+                        <i class="bi bi-send me-1"></i> Отправить заявку
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
     {% endif %}
 </div>
+
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        alert('IP скопирован: ' + text);
+    });
+}
+
+function submitHardwareChange() {
+    const form = document.getElementById('hardwareChangeForm');
+    const formData = new FormData(form);
+    
+    fetch('/api/hardware-change/request', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            reason: formData.get('reason'),
+            new_device_info: formData.get('new_device_info')
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Заявка отправлена! Ожидайте одобрения.');
+            location.reload();
+        } else {
+            alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    })
+    .catch(err => {
+        alert('Ошибка: ' + err.message);
+    });
+}
+</script>
 
 <script>
 function refreshStatus() {

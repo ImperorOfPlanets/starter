@@ -26,6 +26,20 @@ def index(data, session_obj):
                         'hostname': None, 'version': None, 'backend_state': None}
     tailscale_peers = []
     login_server = get_global('headscale_login_server', '')
+    
+    # Получаем назначенные Tailscale домены из заявок пользователя
+    assigned_domains = session_obj.get('tailscale_domains', [])
+    user_applications = session_obj.get('user_applications', [])
+    
+    # Проверяем статус заявки на смену железа
+    hardware_change_status = {'has_pending': False}
+    oauth_token = session_obj.get('oauth_token')
+    if oauth_token:
+        try:
+            from files.core.software.default.installation_lock import InstallationLockModule
+            hardware_change_status = InstallationLockModule.get_hardware_change_status(oauth_token)
+        except Exception as e:
+            logger.warning(f"Failed to get hardware change status: {e}")
 
     try:
         tailscale_installed = get('tailscale', 'check_tailscale_installed') or False
@@ -48,6 +62,9 @@ def index(data, session_obj):
         tailscale_status=tailscale_status,
         tailscale_peers=tailscale_peers,
         login_server=login_server,
+        assigned_domains=assigned_domains,
+        user_applications=user_applications,
+        hardware_change_status=hardware_change_status,
         t=t
     )
 
