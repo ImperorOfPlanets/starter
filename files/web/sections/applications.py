@@ -1,5 +1,9 @@
 # files/web/sections/applications.py
-import requests
+"""
+Веб-секция для отображения заявок пользователя
+Использует модуль ApplicationsModule из ядра
+"""
+
 from flask import render_template, jsonify, session
 
 from files.core.utils.globalVars_utils import get_global
@@ -21,60 +25,23 @@ def t(key: str, **kwargs) -> str:
     return key
 
 
-def get_myidon_url() -> str:
-    return get_global('myidon_url', 'https://myidon.site')
-
-
-def get_oauth_token() -> str:
-    """Получаем OAuth токен из сессии или из глобальных переменных"""
-    token = session.get('oauth_token')
-    if token:
-        return token
-    
-    # Пытаемся получить из глобальных переменных
-    oauth_module = get('oauth')
-    if oauth_module and hasattr(oauth_module, 'get_access_token'):
-        return oauth_module.get_access_token()
-    
-    return None
-
-
-def fetch_user_applications() -> list:
-    """Получаем одобренные заявки пользователя с myidon.site"""
-    myidon_url = get_myidon_url()
-    token = get_oauth_token()
-    
-    if not token:
-        logger.warning("No OAuth token available for fetching applications")
-        return []
-    
-    try:
-        response = requests.get(
-            f"{myidon_url}/api/user/applications",
-            headers={
-                'Authorization': f'Bearer {token}',
-                'Accept': 'application/json'
-            },
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('applications', [])
-        else:
-            logger.error(f"Failed to fetch applications: {response.status_code} - {response.text}")
-            return []
-            
-    except Exception as e:
-        logger.error(f"Error fetching applications: {e}", exc_info=True)
-        return []
-
-
 def index(data, session):
     """Главная страница раздела Заявки"""
-    # Проверяем что пользователь авторизован через MyIDon.Site
-    token = get_oauth_token()
-    if not token:
+    # Получаем модуль заявок
+    applications_module = get('applications')
+    
+    if not applications_module:
+        logger.error("Applications module not found")
+        return render_template(
+            'sections/applications/index.html',
+            applications=[],
+            oauth_required=True,
+            error_message="Module not found",
+            t=t
+        )
+    
+    # Проверяем авторизацию
+    if not applications_module.is_authenticated():
         return render_template(
             'sections/applications/index.html',
             applications=[],
@@ -82,7 +49,8 @@ def index(data, session):
             t=t
         )
     
-    applications = fetch_user_applications()
+    # Получаем заявки через модуль
+    applications = applications_module.get_user_applications()
     
     # Обогащаем данные для отображения
     for app in applications:
@@ -168,7 +136,15 @@ def format_application_data(app: dict) -> dict:
 
 def refresh(data, session):
     """Обновляет список заявок"""
-    applications = fetch_user_applications()
+    applications_module = get('applications')
+    
+    if not applications_module:
+        return jsonify({'status': 'error', 'message': 'Module not found'})
+    
+    if not applications_module.is_authenticated():
+        return jsonify({'status': 'error', 'message': 'Not authenticated'})
+    
+    applications = applications_module.refresh_applications()
     return jsonify({
         'status': 'success',
         'count': len(applications),
