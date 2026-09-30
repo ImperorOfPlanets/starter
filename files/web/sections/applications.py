@@ -25,7 +25,7 @@ def t(key: str, **kwargs) -> str:
     return key
 
 
-def index(data, session):
+def index(data, session_obj):
     """Главная страница раздела Заявки"""
     # Получаем модуль заявок
     applications_module = get('applications')
@@ -40,14 +40,19 @@ def index(data, session):
             t=t
         )
     
-    # Проверяем авторизацию
-    if not applications_module.is_authenticated():
+    # Получаем OAuth токен из сессии (уже есть после авторизации через myidon.site)
+    oauth_token = session_obj.get('oauth_token')
+    
+    if not oauth_token:
         return render_template(
             'sections/applications/index.html',
             applications=[],
             oauth_required=True,
             t=t
         )
+    
+    # Устанавливаем токен в модуль
+    applications_module.set_access_token(oauth_token)
     
     # Получаем заявки через модуль
     applications = applications_module.get_user_applications()
@@ -134,16 +139,18 @@ def format_application_data(app: dict) -> dict:
     return result
 
 
-def refresh(data, session):
+def refresh(data, session_obj):
     """Обновляет список заявок"""
     applications_module = get('applications')
     
     if not applications_module:
         return jsonify({'status': 'error', 'message': 'Module not found'})
     
-    if not applications_module.is_authenticated():
+    oauth_token = session_obj.get('oauth_token')
+    if not oauth_token:
         return jsonify({'status': 'error', 'message': 'Not authenticated'})
     
+    applications_module.set_access_token(oauth_token)
     applications = applications_module.refresh_applications()
     return jsonify({
         'status': 'success',
