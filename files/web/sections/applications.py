@@ -26,28 +26,19 @@ def t(key: str, **kwargs) -> str:
 
 def index(data, session_obj):
     """Главная страница раздела Заявки"""
-    applications_module = get('applications')
+    # Проверяем авторизацию через сессию (как servers.py)
+    oauth_token = session_obj.get('oauth_token')
     
-    if not applications_module:
-        logger.error("Applications module not found")
+    if not oauth_token:
         return render_template(
             'sections/applications/index.html',
             applications=[],
             oauth_required=True,
-            error_message="Module not found",
             t=t
         )
     
     # Получаем заявки из сессии (как servers.py)
     user_applications = session_obj.get('user_applications', [])
-    
-    if not user_applications:
-        return render_template(
-            'sections/applications/index.html',
-            applications=[],
-            oauth_required=True,
-            t=t
-        )
     
     # Обогащаем данные для отображения
     for app in user_applications:
@@ -132,7 +123,7 @@ def format_application_data(app: dict) -> dict:
 
 
 def refresh(data, session_obj):
-    """Обновляет список заявок"""
+    """Обновляет список заявок через API"""
     applications_module = get('applications')
     
     if not applications_module:
@@ -142,6 +133,7 @@ def refresh(data, session_obj):
     if not oauth_token:
         return jsonify({'status': 'error', 'message': 'Not authenticated'})
     
+    # Устанавливаем токен в модуль и обновляем заявки
     applications_module.set_access_token(oauth_token)
     applications = applications_module.refresh_applications()
     
