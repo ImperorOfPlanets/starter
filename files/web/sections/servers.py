@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Dict
 from flask import render_template, jsonify, session
 
 from files.core.utils.globalVars_utils import get_global
@@ -276,36 +277,52 @@ def list_servers(data, session_obj):
 
 def _get_approved_server_keys(session_obj):
     """Получает одобренные типы серверов из заявок пользователя в сессии"""
+    from files.configs.server_types import SERVER_TYPES
+
     # Сначала пробуем из заявок в сессии (быстрее)
     user_applications = session_obj.get('user_applications', [])
     if user_applications:
         keys = set()
         for app in user_applications:
-            if app.get('status') == 'approved':
-                app_type = app.get('type')
-                data = app.get('data', {})
-                
-                if app_type == 'server_type':
-                    # Извлекаем ключи серверов из заявки
-                    server_type_keys = data.get('server_type_keys', [])
-                    if data.get('server_type_key'):
-                        server_type_keys.append(data['server_type_key'])
-                    for key in server_type_keys:
-                        if key:
-                            keys.add(key)
-                
-                # Также добавляем тип заявки как ключ
-                if app_type:
-                    keys.add(app_type)
-        
+            if app.get('status') != 'approved':
+                continue
+
+            data = app.get('data', {}) or {}
+            app_type = app.get('type')
+
+            # Собираем все возможные ключи серверного типа из заявки.
+            # Одобренная заявка = доступ к этому типу сервера.
+            candidates = []
+            for field in ('server_type_keys', 'server_type_key',
+                          'repository_type_key', 'server_type', 'slug', 'type_key'):
+                value = data.get(field)
+                if isinstance(value, list):
+                    candidates.extend(value)
+                elif value:
+                    candidates.append(value)
+
+            # Ключ может лежать и на верхнем уровне заявки
+            for field in ('server_type_key', 'server_type'):
+                value = app.get(field)
+                if value:
+                    candidates.append(value)
+
+            for key in candidates:
+                if key and key in SERVER_TYPES:
+                    keys.add(key)
+
+        # Валидируем по реально существующим типам — мусор вроде
+        # 'server_type'/'business' в allowed_keys попадать не должен
         if keys:
-            logger.info(f"Approved server types from session applications: {keys}")
+            logger.info(f"Approved server types from applications: {keys}")
             return keys
-    
+
+        logger.info(f"No valid server types in applications (candidates: {candidates}), trying API")
+
     # Fallback: если нет заявок в сессии — пробуем API
     oauth_token = session_obj.get('oauth_token')
     if not oauth_token:
-        return set()
+        return _all_auth_required_types(SERVER_TYPES)
 
     try:
         from files.core.software.default.serverapi import fetch_user_servers, fetch_available_servers
@@ -342,18 +359,29 @@ def _get_approved_server_keys(session_obj):
 
         # Fallback: если есть заявки но ни одна не смэтчилась —
         # показываем все серверы требующие auth (раз уж заявка одобрена)
-        if not keys and user_servers and available:
+        if not keys and user_servers:
             logger.info(f"No match found, showing all auth-required servers (user has {len(user_servers)} approved)")
-            for api_server in available:
-                if api_server.get('requires_auth', False):
-                    keys.add(api_server.get('slug', ''))
+            keys |= _all_auth_required_types(SERVER_TYPES)
 
         logger.info(f"Approved server types from myidon.site: {keys}")
         return keys
 
     except Exception as e:
         logger.error(f"Error fetching approved servers from myidon.site: {e}")
-        return set()
+        return _all_auth_required_types(SERVER_TYPES)
+
+
+def _all_auth_required_types(server_types: Dict) -> set:
+    """Аварийный fallback: все типы серверов, требующие заявки.
+
+    Используется, когда myidon.site не отдаёт user-servers (404)
+    и в заявках нет явного server_type_key — чтобы раздел серверов
+    оставался рабочим, а админ выдавал доступ вручную.
+    """
+    keys = {k for k, v in server_types.items() if v.get('requires_auth', False)}
+    if keys:
+        logger.info(f"Fallback: showing all {len(keys)} auth-required server types")
+    return keys
 
 
 def _get_merged_server_types(session_obj):
