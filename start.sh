@@ -1,14 +1,29 @@
 #!/bin/sh
 
-# ====== Вспомогательные функции ======
+# ==================== КОНФИГУРАЦИЯ ====================
+API_URL="https://myidon.site/api/v1/install/repositories"
+API_KEY=""
+
+# Fallback репозитории (если API недоступен)
+# Формат: url|branch
+FALLBACK_REPOS="
+https://github.com/ImperorOfPlanets/starter/archive/refs/heads/master.zip|master
+https://gitflic.ru/project/imperor/starter/file/downloadAll?branch=master&format=zip|master
+"
+
+# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 info() { printf "%s\n" "$@"; }
 
-# ====== Проверка обновлений ======
+log() {
+    printf "%s - %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >> /tmp/starter_install.log 2>/dev/null
+}
+
+# ==================== ПРОВЕРКА ОБНОВЛЕНИЙ ====================
 info "=== Проверка обновлений start.sh ==="
 CURRENT_SCRIPT="$0"
 TMP_SCRIPT="/tmp/start.sh.$$"
 
-if wget -q -O "$TMP_SCRIPT" "https://myidon.site/install/start.sh"; then
+if wget -q -O "$TMP_SCRIPT" "https://myidon.site/install/start.sh" 2>/dev/null; then
     if [ -f "$CURRENT_SCRIPT" ]; then
         CURRENT_SIZE=$(wc -c < "$CURRENT_SCRIPT")
         NEW_SIZE=$(wc -c < "$TMP_SCRIPT")
@@ -31,11 +46,10 @@ else
     info "Не удалось проверить обновление скрипта"
 fi
 
-# ====== Информация о системе ======
+# ==================== ИНФОРМАЦИЯ О СИСТЕМЕ ====================
 info ""
 info "=== Информация о системе ==="
 
-# OS name
 osname="Unknown"
 if [ -f /etc/os-release ]; then
     while IFS= read -r line; do
@@ -50,12 +64,11 @@ if [ -f /etc/os-release ]; then
 fi
 info "ОС: $osname"
 
-# Kernel
 krn="$(uname -r 2>/dev/null)"
 [ -n "$krn" ] || krn="Unknown"
 info "Версия ядра: $krn"
 
-# ====== Поиск Python 3.8+ с venv ======
+# ==================== ПОИСК PYTHON ====================
 info ""
 info "=== Поиск Python 3.8+ с venv ==="
 
@@ -72,17 +85,16 @@ for cmd in python3.12 python3.11 python3.10 python3.9 python3.8 python3; do
 
         if [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 8 ]; }; then
             if "$cmd" --version >/dev/null 2>&1 && "$cmd" -c "import venv" >/dev/null 2>&1; then
-                bad_lib=0
-                ldd "$py_path" 2>/dev/null | while IFS= read -r ln; do
-                    [ -n "$ln" ] && case "$ln" in *"not found"*) bad_lib=1;; esac
-                done
-                if [ "$bad_lib" = 0 ]; then
+                # Проверяем реальное создание venv с pip
+                _test_dir=$(mktemp -d)
+                if "$cmd" -m venv "$_test_dir" 2>/dev/null && [ -f "$_test_dir/bin/pip" ]; then
                     info "  Найден подходящий: $cmd (версия $ver, путь: $py_path)"
                     available_pythons="${available_pythons}${ver}:${py_path}
 "
                 else
-                    info "  $cmd: несовместимость библиотек - пропускаем"
+                    info "  $cmd: venv недоступен или без pip - пропускаем"
                 fi
+                rm -rf "$_test_dir"
             else
                 info "  $cmd: модуль venv недоступен - пропускаем"
             fi
@@ -94,6 +106,7 @@ done
 
 if [ -z "$available_pythons" ]; then
     info "ОШИБКА: Не найден Python 3.8+ с модулем venv!"
+    info "Установите: apt install python3.11-venv (или другой версии)"
     exit 1
 fi
 
@@ -128,7 +141,12 @@ selected_python="$best_path"
 info ""
 info "Выбрана максимальная версия: Python $py_version (путь: $selected_python)"
 
-# ====== ОПРЕДЕЛЕНИЕ ПУТЕЙ ======
+PY_MAJOR=${py_version%%.*}
+TMP=${py_version#*.}
+PY_MINOR=${TMP%%.*}
+PY_MAJOR_MINOR="$PY_MAJOR.$PY_MINOR"
+
+# ==================== ОПРЕДЕЛЕНИЕ ПУТЕЙ ====================
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 
 if [ -n "$STARTER_SUBDIR" ] && [ -d "$STARTER_SUBDIR" ]; then
@@ -145,41 +163,68 @@ fi
 VENV_DIR="$STARTER_DIR/venv"
 info "Виртуальное окружение: $VENV_DIR"
 
-# ====== Установка Starter ======
+# ==================== ПОЛУЧЕНИЕ РЕПОЗИТОРИЕВ ====================
+info ""
+info "=== Получение списка репозиториев ==="
+
+get_repos_from_api() {
+    api_args=""
+    if [ -n "$API_KEY" ]; then
+        api_args="--header=X-API-Key: $API_KEY"
+    fi
+    response=$(wget -q -O - --timeout=10 $api_args "${API_URL}?type=starter" 2>/dev/null)
+    if [ -z "$response" ]; then
+        return 1
+    fi
+    # Парсим URL из JSON
+    echo "$response" | grep -o '"url":"[^"]*"' | cut -d'"' -f4
+}
+
+# Пробуем API, потом fallback
+REPO_URLS=""
+api_urls=$(get_repos_from_api)
+if [ -n "$api_urls" ]; then
+    info "✓ Репозитории получены из API"
+    REPO_URLS="$api_urls"
+else
+    info "API недоступен, используем захардкожанные URL"
+    REPO_URLS=$(echo "$FALLBACK_REPOS" | cut -d'|' -f1)
+fi
+
+if [ -z "$REPO_URLS" ]; then
+    info "ОШИБКА: Нет доступных репозиториев!"
+    exit 1
+fi
+
+# ==================== УСТАНОВКА STARTER ====================
 STARTER_ZIP="/tmp/starter.zip"
 if [ ! -f "$STARTER_DIR/starter.py" ]; then
     info ""
     info "=== Установка Starter в $STARTER_DIR ==="
-    
+
     rm -rf "$STARTER_DIR"/* 2>/dev/null
-    
-    # Пробуем разные репозитории
+
     DOWNLOADED=0
-    
-    # GitHub
-    info "Пробуем GitHub..."
-    if wget -q -O "$STARTER_ZIP" "https://github.com/ImperorOfPlanets/starter/archive/refs/heads/master.zip" 2>/dev/null; then
-        DOWNLOADED=1
-        info "✓ Скачано с GitHub"
-    fi
-    
-    # GitFlic (fallback)
-    if [ "$DOWNLOADED" -eq 0 ]; then
-        info "Пробуем GitFlic..."
-        if wget -q -O "$STARTER_ZIP" "https://gitflic.ru/project/imperor/starter/file/downloadAll?branch=master&format=zip" 2>/dev/null; then
+    while IFS= read -r repo_url; do
+        repo_url=$(echo "$repo_url" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        [ -z "$repo_url" ] && continue
+
+        info "Пробуем: $repo_url"
+        if wget -q -O "$STARTER_ZIP" "$repo_url" 2>/dev/null && [ -s "$STARTER_ZIP" ]; then
             DOWNLOADED=1
-            info "✓ Скачано с GitFlic"
+            info "✓ Скачано"
+            break
         fi
-    fi
-    
+    done <<< "$REPO_URLS"
+
     if [ "$DOWNLOADED" -eq 0 ]; then
         info "ОШИБКА: Не удалось скачать Starter ни из одного репозитория!"
         exit 1
     fi
-    
+
     unzip -q "$STARTER_ZIP" -d "$STARTER_DIR/" || { info "Ошибка распаковки!"; exit 1; }
     rm -f "$STARTER_ZIP"
-    
+
     if [ ! -f "$STARTER_DIR/starter.py" ]; then
         SUBDIR=$(find "$STARTER_DIR" -name "starter.py" -type f | head -1)
         if [ -n "$SUBDIR" ]; then
@@ -191,21 +236,16 @@ if [ ! -f "$STARTER_DIR/starter.py" ]; then
             fi
         fi
     fi
-    
+
     info "Starter успешно установлен в $STARTER_DIR"
 else
     info ""
     info "Starter уже установлен в $STARTER_DIR"
 fi
 
-# ====== Подготовка виртуального окружения ======
+# ==================== ПОДГОТОВКА VENV ====================
 info ""
 info "=== Подготовка виртуального окружения ==="
-
-PY_MAJOR=${py_version%%.*}
-TMP=${py_version#*.}
-PY_MINOR=${TMP%%.*}
-PY_MAJOR_MINOR="$PY_MAJOR.$PY_MINOR"
 
 if [ -d "$VENV_DIR" ]; then
     VENV_PY=$("$VENV_DIR/bin/python" -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2>/dev/null)
@@ -222,7 +262,16 @@ if [ ! -d "$VENV_DIR" ]; then
     "$selected_python" -m venv "$VENV_DIR" || { info "Ошибка создания venv!"; exit 1; }
 fi
 
-# ====== Запуск Starter ======
+# ====== Проверка pip в venv ======
+if [ ! -f "$VENV_DIR/bin/pip" ]; then
+    info "ОШИБКА: venv создан без pip!"
+    info "Возможно не установлен пакет python${PY_MAJOR_MINOR}-venv"
+    info "Попробуйте: apt install python${PY_MAJOR_MINOR}-venv"
+    rm -rf "$VENV_DIR"
+    exit 1
+fi
+
+# ==================== ЗАПУСК STARTER ====================
 info ""
 info "=== Запуск Starter ==="
 PYTHON="$VENV_DIR/bin/python"

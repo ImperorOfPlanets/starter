@@ -1,0 +1,84 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-clipboard-list me-2"></i>{{ t('applications_title') }}</h2>
+        <button class="btn btn-outline-primary" onclick="refreshApplications()">
+            <i class="fas fa-sync-alt me-1"></i>{{ t('refresh') }}
+        </button>
+    </div>
+
+    {% if applications %}
+        <div class="row">
+            {% for app in applications %}
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="badge bg-primary">{{ app.type_display }}</span>
+                        <span class="badge bg-success">{{ app.status_display }}</span>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title">{{ app.data_display.name }}</h5>
+                        <p class="card-text text-muted">{{ app.data_display.description }}</p>
+                        
+                        {% if app.data_display.type_key %}
+                        <p class="mb-1"><strong>{{ t('server_type') }}:</strong> <code>{{ app.data_display.type_key }}</code></p>
+                        {% endif %}
+                        
+                        {% if app.data_display.expected_users %}
+                        <p class="mb-1"><strong>{{ t('expected_users') }}:</strong> {{ app.data_display.expected_users }}</p>
+                        {% endif %}
+                        
+                        {% if app.data_display.devices_count %}
+                        <p class="mb-1"><strong>{{ t('devices') }}:</strong> {{ app.data_display.devices_count }}</p>
+                        {% endif %}
+                        
+                        {% if app.data_display.tailscale_ip %}
+                        <hr>
+                        <p class="mb-1"><strong>{{ t('tailscale_ip') }}:</strong> <code>{{ app.data_display.tailscale_ip }}</code></p>
+                        <p class="mb-1"><strong>{{ t('tailscale_status') }}:</strong> 
+                            <span class="badge bg-{{ 'success' if app.data_display.tailscale_status == 'connected' else 'secondary' }}">
+                                {{ app.data_display.tailscale_status }}
+                            </span>
+                        </p>
+                        {% endif %}
+                        
+                        {% if app.data_display.oauth_client_id %}
+                        <hr>
+                        <p class="mb-1"><strong>{{ t('oauth_client_id') }}:</strong> <code>{{ app.data_display.oauth_client_id }}</code></p>
+                        {% endif %}
+                    </div>
+                    <div class="card-footer text-muted">
+                        <small>{{ t('created') }}: {{ app.created_at }}</small>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>{{ t('no_applications') }}
+        </div>
+    {% endif %}
+</div>
+
+<script>
+function refreshApplications() {
+    fetch('{{ url_for("routes.handle_sections") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'section=applications&action=refresh'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            location.reload();
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+</script>
+{% endblock %}

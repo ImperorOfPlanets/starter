@@ -664,10 +664,16 @@ def install_server(data, session_obj):
         docker_path.mkdir(exist_ok=True)
         code_path.mkdir(exist_ok=True)
 
-        # Клонируем из репозитория
+        # Клонируем из репозитория (только если код отсутствует локально)
         repository = type_info.get('repository', {})
         repo_url = repository.get('url', '') if isinstance(repository, dict) else ''
-        if repo_url and not repo_url.startswith('https://github.com/your-org'):
+        
+        # Проверяем, есть ли уже код локально
+        has_local_code = code_path.exists() and any(code_path.iterdir())
+        
+        if has_local_code:
+            logger.info(f"Code already exists locally at {code_path}, skipping clone")
+        elif repo_url and not repo_url.startswith('https://github.com/your-org'):
             import subprocess
             clone_result = _clone_repository(repo_url, repository, code_path, logger)
             if not clone_result.get('success'):

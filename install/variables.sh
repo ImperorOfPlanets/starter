@@ -31,7 +31,7 @@
 [debian,12,python]="python3.11"
 [debian,12,pip]="python3-pip"
 [debian,12,python-dev]="python3-dev"
-[debian,12,python-venv]=" "
+[debian,12,python-venv]="python3.11-venv"
 [debian,12,unzip]="unzip"
 [debian,12,pre_install]="apt-get update -y"
 [debian,12,install]="apt-get install -y --no-install-recommends"
