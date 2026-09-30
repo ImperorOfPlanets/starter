@@ -4,9 +4,8 @@
 Использует модуль ApplicationsModule из ядра
 """
 
-from flask import render_template, jsonify, session
+from flask import render_template, jsonify
 
-from files.core.utils.globalVars_utils import get_global
 from files.core.utils.loader_utils import get
 from files.core.utils.log_utils import LogManager
 
@@ -27,7 +26,6 @@ def t(key: str, **kwargs) -> str:
 
 def index(data, session_obj):
     """Главная страница раздела Заявки"""
-    # Получаем модуль заявок
     applications_module = get('applications')
     
     if not applications_module:
@@ -40,19 +38,14 @@ def index(data, session_obj):
             t=t
         )
     
-    # Получаем OAuth токен из сессии (уже есть после авторизации через myidon.site)
-    oauth_token = session_obj.get('oauth_token')
-    
-    if not oauth_token:
+    # Модуль сам получает токен из сессии
+    if not applications_module.is_authenticated():
         return render_template(
             'sections/applications/index.html',
             applications=[],
             oauth_required=True,
             t=t
         )
-    
-    # Устанавливаем токен в модуль
-    applications_module.set_access_token(oauth_token)
     
     # Получаем заявки через модуль
     applications = applications_module.get_user_applications()
@@ -146,11 +139,9 @@ def refresh(data, session_obj):
     if not applications_module:
         return jsonify({'status': 'error', 'message': 'Module not found'})
     
-    oauth_token = session_obj.get('oauth_token')
-    if not oauth_token:
+    if not applications_module.is_authenticated():
         return jsonify({'status': 'error', 'message': 'Not authenticated'})
     
-    applications_module.set_access_token(oauth_token)
     applications = applications_module.refresh_applications()
     return jsonify({
         'status': 'success',
