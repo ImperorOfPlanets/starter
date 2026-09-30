@@ -537,9 +537,11 @@ class OauthModule(BaseModule):
             session_obj['tailscale_auth_key'] = tailscale_auth_key
             logger.info(f"User has {len(tailscale_domains)} Tailscale domains, auth_key={'yes' if tailscale_auth_key else 'no'}")
         else:
-            session_obj['user_applications'] = []
+            # Не очищаем заявки если API вернул ошибку — возможно уже есть заявки в сессии
+            if not session_obj.get('user_applications'):
+                session_obj['user_applications'] = []
             session_obj['tailscale_domains'] = []
-            logger.warning("Failed to fetch user applications from myidon.site")
+            logger.warning("Failed to fetch user applications from myidon.site, keeping existing session data")
 
         # Сохраняем отпечаток устройства для привязки
         device_fingerprint = OauthModule.get_device_fingerprint()
