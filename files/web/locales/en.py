@@ -104,6 +104,7 @@ translations = {
             "service": "Service",
             "network": "Network",
             "develop": "Develop",
+            "applications": "Applications",
         }
     },
 
@@ -949,6 +950,47 @@ translations = {
                 'error_stopping': 'Stop error',
                 'error_deleting': 'Delete error',
                 'error_updating': 'Update error'
+            }
+        },
+
+        # ==================== APPLICATIONS ====================
+        'applications': {
+            'basic': {
+                'title': 'Applications',
+                'description': 'User applications on MyIDon.Site'
+            },
+            'index': {
+                'applications_title': 'My Applications',
+                'refresh': 'Refresh',
+                'oauth_required_title': 'Authorization Required',
+                'oauth_required_message': 'Please login via MyIDon.Site to view your applications',
+                'login_with_myidon': 'Login via MyIDon.Site',
+                'no_applications': 'You have no applications yet',
+                'application_type_server': 'Server Type',
+                'application_type_tailscale': 'Tailscale VPN',
+                'application_type_starter': 'Starter',
+                'application_type_personal': 'Personal',
+                'application_type_business': 'Business',
+                'application_type_city': 'City',
+                'application_type_callback': 'Callback',
+                'application_type_websocket': 'WebSocket',
+                'application_type_vk_callback': 'VK Callback',
+                'application_type_wecom': 'WeCom',
+                'application_type_telegram_bot': 'Telegram Bot',
+                'status_draft': 'Draft',
+                'status_submitted': 'Submitted',
+                'status_in_review': 'In Review',
+                'status_approved': 'Approved',
+                'status_rejected': 'Rejected',
+                'status_cancelled': 'Cancelled',
+                'server_type': 'Server Type',
+                'expected_users': 'Expected Users',
+                'devices': 'Devices',
+                'tailscale_ip': 'Tailscale IP',
+                'tailscale_status': 'Tailscale Status',
+                'oauth_client_id': 'OAuth Client ID',
+                'created': 'Created',
+                'vpn_access': 'VPN Access'
             }
         }
     }

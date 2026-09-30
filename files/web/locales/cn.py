@@ -104,6 +104,7 @@ translations = {
             "service": "服务",
             "network": "网络连接",
             "develop": "开发",
+            "applications": "申请",
         }
     },
 
@@ -948,6 +949,47 @@ translations = {
                 'error_stopping': '停止错误',
                 'error_deleting': '删除错误',
                 'error_updating': '更新错误'
+            }
+        },
+
+        # ==================== APPLICATIONS ====================
+        'applications': {
+            'basic': {
+                'title': '申请',
+                'description': 'MyIDon.Site 上的用户申请'
+            },
+            'index': {
+                'applications_title': '我的申请',
+                'refresh': '刷新',
+                'oauth_required_title': '需要授权',
+                'oauth_required_message': '请通过 MyIDon.Site 登录以查看您的申请',
+                'login_with_myidon': '通过 MyIDon.Site 登录',
+                'no_applications': '您还没有申请',
+                'application_type_server': '服务器类型',
+                'application_type_tailscale': 'Tailscale VPN',
+                'application_type_starter': 'Starter',
+                'application_type_personal': '个人',
+                'application_type_business': '商业',
+                'application_type_city': '城市',
+                'application_type_callback': 'Callback',
+                'application_type_websocket': 'WebSocket',
+                'application_type_vk_callback': 'VK Callback',
+                'application_type_wecom': 'WeCom',
+                'application_type_telegram_bot': 'Telegram Bot',
+                'status_draft': '草稿',
+                'status_submitted': '已提交',
+                'status_in_review': '审核中',
+                'status_approved': '已批准',
+                'status_rejected': '已拒绝',
+                'status_cancelled': '已取消',
+                'server_type': '服务器类型',
+                'expected_users': '预期用户数',
+                'devices': '设备',
+                'tailscale_ip': 'Tailscale IP',
+                'tailscale_status': 'Tailscale 状态',
+                'oauth_client_id': 'OAuth Client ID',
+                'created': '创建时间',
+                'vpn_access': 'VPN 访问'
             }
         }
     }

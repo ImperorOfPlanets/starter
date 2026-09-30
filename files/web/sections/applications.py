@@ -38,8 +38,10 @@ def index(data, session_obj):
             t=t
         )
     
-    # Модуль сам получает токен из сессии
-    if not applications_module.is_authenticated():
+    # Получаем заявки из сессии (как servers.py)
+    user_applications = session_obj.get('user_applications', [])
+    
+    if not user_applications:
         return render_template(
             'sections/applications/index.html',
             applications=[],
@@ -47,18 +49,15 @@ def index(data, session_obj):
             t=t
         )
     
-    # Получаем заявки через модуль
-    applications = applications_module.get_user_applications()
-    
     # Обогащаем данные для отображения
-    for app in applications:
+    for app in user_applications:
         app['type_display'] = get_type_display(app.get('type', ''))
         app['status_display'] = get_status_display(app.get('status', ''))
         app['data_display'] = format_application_data(app)
     
     return render_template(
         'sections/applications/index.html',
-        applications=applications,
+        applications=user_applications,
         oauth_required=False,
         t=t
     )
@@ -139,10 +138,16 @@ def refresh(data, session_obj):
     if not applications_module:
         return jsonify({'status': 'error', 'message': 'Module not found'})
     
-    if not applications_module.is_authenticated():
+    oauth_token = session_obj.get('oauth_token')
+    if not oauth_token:
         return jsonify({'status': 'error', 'message': 'Not authenticated'})
     
+    applications_module.set_access_token(oauth_token)
     applications = applications_module.refresh_applications()
+    
+    # Обновляем заявки в сессии
+    session_obj['user_applications'] = applications
+    
     return jsonify({
         'status': 'success',
         'count': len(applications),

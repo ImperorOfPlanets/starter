@@ -104,6 +104,7 @@ translations = {
             "service": "Сервис",
             "network": "Сетевые подключения",
             "develop": "Разработка",
+            "applications": "Заявки",
         }
     },
 
@@ -948,6 +949,47 @@ translations = {
                 'error_stopping': 'Ошибка остановки',
                 'error_deleting': 'Ошибка удаления',
                 'error_updating': 'Ошибка обновления'
+            }
+        },
+
+        # ==================== APPLICATIONS ====================
+        'applications': {
+            'basic': {
+                'title': 'Заявки',
+                'description': 'Заявки пользователя на MyIDon.Site'
+            },
+            'index': {
+                'applications_title': 'Мои заявки',
+                'refresh': 'Обновить',
+                'oauth_required_title': 'Требуется авторизация',
+                'oauth_required_message': 'Для просмотра заявок необходимо авторизоваться через MyIDon.Site',
+                'login_with_myidon': 'Войти через MyIDon.Site',
+                'no_applications': 'У вас пока нет заявок',
+                'application_type_server': 'Тип сервера',
+                'application_type_tailscale': 'Tailscale VPN',
+                'application_type_starter': 'Starter',
+                'application_type_personal': 'Личное',
+                'application_type_business': 'Бизнес',
+                'application_type_city': 'Городское',
+                'application_type_callback': 'Callback',
+                'application_type_websocket': 'WebSocket',
+                'application_type_vk_callback': 'VK Callback',
+                'application_type_wecom': 'WeCom',
+                'application_type_telegram_bot': 'Telegram Bot',
+                'status_draft': 'Черновик',
+                'status_submitted': 'Подана',
+                'status_in_review': 'На рассмотрении',
+                'status_approved': 'Одобрена',
+                'status_rejected': 'Отклонена',
+                'status_cancelled': 'Отменена',
+                'server_type': 'Тип сервера',
+                'expected_users': 'Ожидаемых пользователей',
+                'devices': 'Устройств',
+                'tailscale_ip': 'Tailscale IP',
+                'tailscale_status': 'Статус Tailscale',
+                'oauth_client_id': 'OAuth Client ID',
+                'created': 'Создана',
+                'vpn_access': 'VPN доступ'
             }
         }
     }
