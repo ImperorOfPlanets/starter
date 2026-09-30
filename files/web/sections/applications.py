@@ -72,6 +72,16 @@ def fetch_user_applications() -> list:
 
 def index(data, session):
     """Главная страница раздела Заявки"""
+    # Проверяем что пользователь авторизован через MyIDon.Site
+    token = get_oauth_token()
+    if not token:
+        return render_template(
+            'sections/applications/index.html',
+            applications=[],
+            oauth_required=True,
+            t=t
+        )
+    
     applications = fetch_user_applications()
     
     # Обогащаем данные для отображения
@@ -83,6 +93,7 @@ def index(data, session):
     return render_template(
         'sections/applications/index.html',
         applications=applications,
+        oauth_required=False,
         t=t
     )
 
