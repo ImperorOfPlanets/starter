@@ -27,34 +27,44 @@
                         <span class="badge bg-success">{{ app.status_display }}</span>
                     </div>
                     <div class="card-body">
-                        <h5 class="card-title">{{ app.data_display.name }}</h5>
-                        <p class="card-text text-muted">{{ app.data_display.description }}</p>
-                        
-                        {% if app.data_display.type_key %}
-                        <p class="mb-1"><strong>{{ t('server_type') }}:</strong> <code>{{ app.data_display.type_key }}</code></p>
+                        {% if app.type == 'server_type' %}
+                            <h5 class="card-title">{{ app.data.repository_name or app.data_display.name }}</h5>
+                            <p class="card-text text-muted">{{ app.data.repository_description or app.data_display.description }}</p>
+                            <p class="mb-1"><strong>{{ t('server_type') }}:</strong> <code>{{ app.data.repository_type_key or app.data_display.type_key }}</code></p>
+                            {% if app.data.expected_users %}
+                            <p class="mb-1"><strong>{{ t('expected_users') }}:</strong> {{ app.data.expected_users }}</p>
+                            {% endif %}
+                        {% elif app.type == 'tailscale' %}
+                            <h5 class="card-title">{{ t('vpn_access') }}</h5>
+                            <p class="card-text text-muted">{{ app.data.network_description or app.data_display.description }}</p>
+                            <p class="mb-1"><strong>{{ t('devices') }}:</strong> {{ app.data.devices_count or app.data_display.devices_count }}</p>
+                            {% if app.data.vpn_purpose %}
+                            <p class="mb-1"><strong>{{ t('server_type') }}:</strong> {{ app.data.vpn_purpose }}</p>
+                            {% endif %}
+                        {% elif app.type == 'starter' %}
+                            <h5 class="card-title">{{ app.data.company_name or app.data_display.name }}</h5>
+                            <p class="card-text text-muted">{{ app.data.project_description or app.data_display.description }}</p>
+                            {% if app.data.repository_purpose %}
+                            <p class="mb-1"><strong>{{ t('server_type') }}:</strong> {{ app.data.repository_purpose }}</p>
+                            {% endif %}
+                        {% else %}
+                            <h5 class="card-title">{{ app.data.company_name or app.data.full_name or app.data_display.name }}</h5>
+                            <p class="card-text text-muted">{{ app.data.business_description or app.data.personal_purpose or app.data_display.description }}</p>
                         {% endif %}
                         
-                        {% if app.data_display.expected_users %}
-                        <p class="mb-1"><strong>{{ t('expected_users') }}:</strong> {{ app.data_display.expected_users }}</p>
-                        {% endif %}
-                        
-                        {% if app.data_display.devices_count %}
-                        <p class="mb-1"><strong>{{ t('devices') }}:</strong> {{ app.data_display.devices_count }}</p>
-                        {% endif %}
-                        
-                        {% if app.data_display.tailscale_ip %}
+                        {% if app.tailscale %}
                         <hr>
-                        <p class="mb-1"><strong>{{ t('tailscale_ip') }}:</strong> <code>{{ app.data_display.tailscale_ip }}</code></p>
+                        <p class="mb-1"><strong>{{ t('tailscale_ip') }}:</strong> <code>{{ app.tailscale.tailscale_ip or app.data_display.tailscale_ip }}</code></p>
                         <p class="mb-1"><strong>{{ t('tailscale_status') }}:</strong> 
-                            <span class="badge bg-{{ 'success' if app.data_display.tailscale_status == 'connected' else 'secondary' }}">
-                                {{ app.data_display.tailscale_status }}
+                            <span class="badge bg-{{ 'success' if app.tailscale.status == 'connected' else 'secondary' }}">
+                                {{ app.tailscale.status or app.data_display.tailscale_status }}
                             </span>
                         </p>
                         {% endif %}
                         
-                        {% if app.data_display.oauth_client_id %}
+                        {% if app.oauth_client %}
                         <hr>
-                        <p class="mb-1"><strong>{{ t('oauth_client_id') }}:</strong> <code>{{ app.data_display.oauth_client_id }}</code></p>
+                        <p class="mb-1"><strong>{{ t('oauth_client_id') }}:</strong> <code>{{ app.oauth_client.id or app.data_display.oauth_client_id }}</code></p>
                         {% endif %}
                     </div>
                     <div class="card-footer text-muted">
