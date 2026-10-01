@@ -671,9 +671,15 @@ def _composer_cmd():
 def _module_hosts(session_obj, type_info):
     """Клиенты, в которые можно поставить модуль.
 
-    Берём из реестра только проекты, установленные стартером,
-    тип которых указан в installs_into.
+    Берём из реестра проекты, установленные стартером, у которых:
+      - тип помечен is_client в server_types.py, либо
+      - тип входит в installs_into модуля
+
+    Так новый тип клиента подхватывается автоматически, без правок
+    в каждом модуле.
     """
+    from files.configs.server_types import SERVER_TYPES
+
     allowed = type_info.get('installs_into') or []
     registry = get('registry')
     hosts = []
@@ -692,17 +698,22 @@ def _module_hosts(session_obj, type_info):
         path = p.get('path', '')
         if not path:
             continue
-        if allowed and ptype not in allowed:
+
+        is_client = SERVER_TYPES.get(ptype, {}).get('is_client', False)
+        if not (is_client or ptype in allowed):
             continue
-        # модуль ставится только в клиент, у которого есть code/
+
+        # модуль ставится только туда, где есть code/composer.json
         if not (Path(path) / 'code' / 'composer.json').exists():
             continue
+
         hosts.append({
             'path': path,
             'name': Path(path).name,
             'project_type': ptype,
             'status': p.get('status', 'unknown'),
         })
+
     return hosts
 
 

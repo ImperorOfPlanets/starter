@@ -39,6 +39,7 @@ SERVER_TYPES = {
         'default_folder': 'client',
         'docker_compose_path': 'docker/docker-compose.yml',
         'env_example_path': 'docker/.env.example',
+        'is_client': True,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/client.git',
             'branch': 'master'
@@ -61,6 +62,76 @@ SERVER_TYPES = {
         'default_folder': 'clientv2',
         'docker_compose_path': 'docker/docker-compose.yml',
         'env_example_path': 'docker/.env.example',
+        'is_client': True,
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/clientv2.git',
+            'branch': 'master'
+        }
+    },
+    'client_core': {
+        'name': 'AI Помощник v2 — Ядро',
+        'name_en': 'AI Assistant v2 — Core',
+        'name_cn': 'AI 助手 v2 — 内核',
+        'description': 'Базовый клиент CLIENTv2 без отраслевых модулей — только ядро',
+        'description_en': 'Base CLIENTv2 client without domain modules — core only',
+        'description_cn': '基础 CLIENTv2 客户端，不含行业模块，仅核心',
+        'requires_reverse_proxy': True,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 80,
+        'order': 2,
+        'can_have_multiple': True,
+        'default_folder': 'client-core',
+        'docker_compose_path': 'docker/docker-compose.yml',
+        'env_example_path': 'docker/.env.example',
+        'is_client': True,
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/clientv2.git',
+            'branch': 'master'
+        }
+    },
+    'client_city': {
+        'name': 'AI Помощник — Город',
+        'name_en': 'AI Assistant — City',
+        'name_cn': 'AI 助手 — 城市',
+        'description': 'Клиент для городских организаций: адреса, объекты, заявки',
+        'description_en': 'Client for city organizations: addresses, objects, applications',
+        'description_cn': '面向城市组织的客户端：地址、对象、申请',
+        'requires_reverse_proxy': True,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 80,
+        'order': 3,
+        'can_have_multiple': True,
+        'default_folder': 'client-city',
+        'docker_compose_path': 'docker/docker-compose.yml',
+        'env_example_path': 'docker/.env.example',
+        'is_client': True,
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/clientv2.git',
+            'branch': 'master'
+        }
+    },
+    'client_medical': {
+        'name': 'AI Помощник — Медицина',
+        'name_en': 'AI Assistant — Medical',
+        'name_cn': 'AI 助手 — 医疗',
+        'description': 'Клиент для медицинских организаций',
+        'description_en': 'Client for medical organizations',
+        'description_cn': '面向医疗机构的客户端',
+        'requires_reverse_proxy': True,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 80,
+        'order': 4,
+        'can_have_multiple': True,
+        'default_folder': 'CLIENT-MEDICAL',
+        'docker_compose_path': 'docker/docker-compose.yml',
+        'env_example_path': 'docker/.env.example',
+        'is_client': True,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/clientv2.git',
             'branch': 'master'
@@ -160,10 +231,12 @@ SERVER_TYPES = {
         'default_port': 8009,
         'order': 6,
         'can_have_multiple': True,
-        # Репозиторий содержит code/ с тремя сервисами и docker/ с композом
+        # Репозиторий содержит три сервиса (.py) и docker/ с композом.
+        # Стартер клонирует его в <путь>/code, поэтому .py лежат в корне репо,
+        # а docker/ — под docker/, как и требует install_server.
         'default_folder': 'slam_server',
         'repository': {
-            'url': 'https://gitflic.ru/project/imperor/slam-server.git',
+            'url': 'https://gitflic.ru/project/imperor/slam-api.git',
             'branch': 'master'
         },
         # Подсказка для UI: какие порты занимает стек
@@ -393,7 +466,6 @@ SERVER_TYPES = {
         'can_have_multiple': False,
         'default_folder': 'client-wall',
         'is_module': True,
-        'installs_into': ['clientv2', 'client', 'client_core', 'client_city', 'client_medical'],
         'composer_package': 'imperor/wall',
         'module_path': 'C:/control/WALL',
         'repository': {
@@ -417,7 +489,6 @@ SERVER_TYPES = {
         'can_have_multiple': False,
         'default_folder': 'client-shop',
         'is_module': True,
-        'installs_into': ['clientv2', 'client', 'client_core', 'client_city', 'client_medical'],
         'composer_package': 'imperor/shop',
         'module_path': 'C:/control/SHOP',
         'repository': {
@@ -441,7 +512,6 @@ SERVER_TYPES = {
         'can_have_multiple': False,
         'default_folder': 'client-pages',
         'is_module': True,
-        'installs_into': ['clientv2', 'client', 'client_core', 'client_city', 'client_medical'],
         'composer_package': 'imperor/pages',
         'module_path': 'C:/control/PAGES',
         'repository': {
@@ -465,7 +535,6 @@ SERVER_TYPES = {
         'can_have_multiple': False,
         'default_folder': 'client-payments',
         'is_module': True,
-        'installs_into': ['clientv2', 'client', 'client_core', 'client_city', 'client_medical'],
         'composer_package': 'imperor/payments',
         'module_path': 'C:/control/PAYMENTS',
         'repository': {
@@ -489,7 +558,6 @@ SERVER_TYPES = {
         'can_have_multiple': False,
         'default_folder': 'client-roles',
         'is_module': True,
-        'installs_into': ['clientv2', 'client', 'client_core', 'client_city', 'client_medical'],
         'composer_package': 'imperor/client-roles',
         'module_path': 'C:/control/ROLES',
         'repository': {
