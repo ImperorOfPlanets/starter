@@ -147,24 +147,33 @@ SERVER_TYPES = {
         }
     },
     'slam': {
-        'name': 'Навигация дронов',
-        'name_en': 'Drone Navigation',
-        'name_cn': '无人机导航',
-        'description': 'Картографирование и локализация в реальном времени (ORB-SLAM3)',
-        'description_en': 'Mapping and real-time localization (ORB-SLAM3)',
-        'description_cn': '地图构建和实时定位（ORB-SLAM3）',
+        'name': 'SLAM — карта комнаты',
+        'name_en': 'SLAM Room Mapping',
+        'name_cn': 'SLAM 房间建图',
+        'description': 'Карта комнаты с камеры телефона: визуальная одометрия, детекция объектов, память «где что находится»',
+        'description_en': 'Room mapping from phone camera: visual odometry, object detection, "where is it" memory',
+        'description_cn': '用手机摄像头进行房间建图：视觉里程计、物体检测、「东西在哪」记忆',
         'requires_reverse_proxy': False,
         'requires_auth': False,
         'is_reverse_proxy': False,
         'has_web_interface': False,
-        'default_port': 8007,
+        'default_port': 8009,
         'order': 6,
         'can_have_multiple': True,
-        'default_folder': 'slam-api',
+        # Репозиторий содержит code/ с тремя сервисами и docker/ с композом
+        'default_folder': 'slam_server',
         'repository': {
-            'url': 'https://gitflic.ru/project/imperor/slam-api.git',
+            'url': 'https://gitflic.ru/project/imperor/slam-server.git',
             'branch': 'master'
-        }
+        },
+        # Подсказка для UI: какие порты занимает стек
+        'ports': {
+            'slam': 8007,
+            'yolo': 8008,
+            'api': 8009,
+        },
+        # Зависимости: кадры можно складывать в файловый сервер
+        'optional_servers': ['fileserver'],
     },
     'yolo': {
         'name': 'Детекция объектов',
@@ -230,9 +239,9 @@ SERVER_TYPES = {
         'name': 'Файловое хранилище',
         'name_en': 'File Storage',
         'name_cn': '文件存储',
-        'description': 'Хранение и раздача файлов: фото, видео, документы (Laravel)',
-        'description_en': 'File storage and sharing: photos, videos, documents (Laravel)',
-        'description_cn': '文件存储和共享：照片、视频、文档（Laravel）',
+        'description': 'Хранение и раздача файлов: фото, видео, документы. Выбор размера хранилища или FTP',
+        'description_en': 'File storage and sharing: photos, videos, documents. Choose storage size or FTP',
+        'description_cn': '文件存储和共享：照片、视频、文档。可选择存储容量或 FTP',
         'requires_reverse_proxy': True,
         'requires_auth': False,
         'is_reverse_proxy': False,
@@ -244,7 +253,27 @@ SERVER_TYPES = {
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/files-server.git',
             'branch': 'master'
-        }
+        },
+        'ports': {
+            'nginx_http': 8000,
+            'nginx_https': 8001,
+            'php': 8002,
+            'mariadb': 8003,
+        },
+        # Кто обращается к файловому серверу за кадрами/файлами
+        'used_by': ['slam', 'clientv2'],
+        # Пользователь выбирает при установке: размер хранилища ИЛИ FTP.
+        # Эти значения попадают в docker/.env при установке сервера.
+        'storage_settings': {
+            'STORAGE_TYPE': 'local',        # local | ftp
+            'STORAGE_QUOTA_GB': '50',       # размер хранилища, ГБ (0 = без лимита)
+            'STORAGE_QUOTA_GB_CHOICES': ['10', '50', '100', '500', '1000', '0'],
+            'FTP_HOST': '',
+            'FTP_PORT': '21',
+            'FTP_USER': '',
+            'FTP_PASSWORD': '',
+            'FTP_PATH': '/upload',
+        },
     },
     'phone': {
         'name': 'Мобильное приложение',

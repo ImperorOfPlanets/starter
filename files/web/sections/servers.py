@@ -885,6 +885,64 @@ def install_module(data, session_obj):
     }
 
 
+def _apply_storage_settings(server_type: str, type_info: dict, docker_path: Path,
+                            server_name: str = None) -> dict:
+    """Применяет настройки хранилища (тип local/ftp, квота) в docker/.env.
+
+    Приоритет источников:
+      1. type_info['config']['storage'] — из myidon.site (новое)
+      2. type_info['storage_settings']  — из server_types.py (локальный дефолт)
+    Возвращает применённые значения {КЛЮЧ: значение} или {} если нечего применять.
+    """
+    applied = {}
+
+    storage_cfg = (type_info.get('config') or {}).get('storage') or {}
+    ftp_cfg = (type_info.get('config') or {}).get('ftp') or {}
+    defaults = type_info.get('storage_settings') or {}
+
+    if storage_cfg or defaults:
+        stype = storage_cfg.get('type') or defaults.get('STORAGE_TYPE') or 'local'
+        quota = storage_cfg.get('quota_gb')
+        if quota is None:
+            quota = defaults.get('STORAGE_QUOTA_GB', '50')
+        applied['STORAGE_TYPE'] = str(stype)
+        applied['STORAGE_QUOTA_GB'] = str(quota)
+
+        path = storage_cfg.get('path') or defaults.get('STORAGE_PATH')
+        if path:
+            applied['STORAGE_PATH'] = str(path)
+        max_size = storage_cfg.get('max_file_size')
+        if max_size:
+            applied['MAX_FILE_SIZE'] = str(max_size)
+
+    # FTP-настройки применяем только когда выбран ftp
+    if applied.get('STORAGE_TYPE') == 'ftp' or ftp_cfg.get('host'):
+        applied['FTP_HOST'] = str(ftp_cfg.get('host') or defaults.get('FTP_HOST') or '')
+        applied['FTP_PORT'] = str(ftp_cfg.get('port') or defaults.get('FTP_PORT') or '21')
+        applied['FTP_USER'] = str(ftp_cfg.get('user') or defaults.get('FTP_USER') or '')
+        applied['FTP_PASSWORD'] = str(ftp_cfg.get('password') or defaults.get('FTP_PASSWORD') or '')
+        applied['FTP_PATH'] = str(ftp_cfg.get('path') or defaults.get('FTP_PATH') or '/upload')
+        if ftp_cfg.get('tls') is not None:
+            applied['FTP_TLS'] = 'true' if ftp_cfg['tls'] else 'false'
+
+    if not applied:
+        return {}
+
+    # Пишем в .env (перезаписывая значения из .env.example) и в .env.example
+    env_file = docker_path / '.env'
+    if env_file.exists():
+        content = env_file.read_text(encoding='utf-8')
+        for key, value in applied.items():
+            if re.search(rf'^{re.escape(key)}=', content, flags=re.MULTILINE):
+                content = re.sub(rf'^{re.escape(key)}=.*$', f'{key}={value}',
+                                 content, flags=re.MULTILINE)
+            else:
+                content += f'\n{key}={value}'
+        env_file.write_text(content, encoding='utf-8')
+
+    return applied
+
+
 def install_server(data, session_obj):
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
@@ -1089,6 +1147,14 @@ def install_server(data, session_obj):
             env_vars['PROJECTNAME'] = project_name
             if network_prefix:
                 env_vars['DOCKER_NETWORK_PREFIX'] = network_prefix
+
+            # 5a. Настройки хранилища из myidon.site (тип сервера: local/ftp, квота)
+            #     Значения приходят в type_info['config'] / ['services'] из API.
+            storage_applied = _apply_storage_settings(server_type, type_info, docker_path, server_name)
+            if storage_applied:
+                logger.info(f"Applied storage settings for {server_type}: {storage_applied}")
+                for k, v in storage_applied.items():
+                    env_vars[k] = str(v)
 
             # Подставляем все переменные из .env (включая ${VAR:-default} синтаксис)
             for key, value in env_vars.items():

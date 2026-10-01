@@ -241,6 +241,10 @@ def merge_server_types(local_types: Dict, api_servers: List[Dict], user_servers:
             'repository': repository,
             'from_api': True,  # маркер что из API
             'api_id': server.get('id'),
+            # Настройки сервиса из myidon.site: режим local/api, эндпоинты,
+            # параметры хранилища (квота, FTP), настройки памяти объектов
+            'services': server.get('services') or {},
+            'config': server.get('config') or {},
         }
         
         # Если slug уже есть в локальных — обновляем репозиторий
