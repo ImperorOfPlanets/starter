@@ -862,23 +862,35 @@ def install_module(data, session_obj):
             'output': tail,
         }
 
-    # миграции модуля
-    try:
-        subprocess.run(['php', 'artisan', 'migrate', '--force'],
-                       cwd=str(code_dir), **_subprocess_kwargs(600))
-    except Exception as e:
-        logger.warning(f'artisan migrate failed: {e}')
+    # Миграции модуля. На хосте PHP нет, поэтому artisan выполняется
+    # внутри контейнера php-<project>. Ошибку не глотаем: без таблиц
+    # модуль формально установлен, но не работает.
+    project = _compose_project_name(host, '')
+    container = 'php-' + project
+    migrate_error = None
 
-    # перезапуск клиента
+    try:
+        mig = subprocess.run(
+            ['docker', 'exec', container, 'php', 'artisan', 'migrate', '--force'],
+            **_subprocess_kwargs(600)
+        )
+        if mig.returncode != 0:
+            migrate_error = (mig.stderr or mig.stdout or '')[-1500:]
+            logger.warning('artisan migrate failed in %s: %s', container, migrate_error)
+    except Exception as e:
+        migrate_error = str(e)
+        logger.warning('artisan migrate could not run: %s', e)
+
+    # перезапуск клиента, чтобы новые сервис-провайдеры и виды подхватились
     docker_path = host / 'docker'
     compose = docker_path / 'docker-compose.yml'
     if compose.exists():
         try:
             subprocess.run(
-                _compose_cmd(host, 'up', '-d', '--force-recreate', 'php-' + _compose_project_name(host, '')),
+                _compose_cmd(host, 'up', '-d', '--force-recreate', 'php-' + project),
                 cwd=str(docker_path), **_subprocess_kwargs(300))
         except Exception as e:
-            logger.warning(f'restart failed: {e}')
+            logger.warning('restart failed: %s', e)
 
     # отмечаем в реестре
     registry = get('registry')
@@ -887,6 +899,18 @@ def install_module(data, session_obj):
             registry.add_module_install(server_type, str(host), package)
         except Exception as e:
             logger.warning(f'registry module install failed: {e}')
+
+    if migrate_error:
+        return {
+            'status': 'error',
+            'message': (f'{package} установлен в {host.name}, но миграции не прошли. '
+                        f'Без таблиц модуль не работает — выполните вручную: '
+                        f'docker exec {container} php artisan migrate --force'),
+            'code': 'MIGRATE_FAILED',
+            'package': package,
+            'host': str(host),
+            'output': migrate_error,
+        }
 
     return {
         'status': 'success',
