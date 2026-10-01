@@ -131,6 +131,36 @@
     </div>
 </div>
 
+<!-- ==================== МОДУЛЬ КЛИЕНТА ==================== -->
+<div class="modal fade" id="moduleInstallModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-box-seam me-1"></i>
+                    <span id="moduleModalTitle">Модуль</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">
+                    Модуль ставится внутрь клиента через <code>composer require</code>
+                    и подключается автоматически. Выберите клиент:
+                </p>
+                <div id="moduleHostList" class="list-group">
+                    <div class="text-muted p-3 text-center">
+                        <span class="spinner-border spinner-border-sm me-1"></span> Загрузка клиентов...
+                    </div>
+                </div>
+                <div id="moduleInstallResult" class="d-none mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 var t = function(key) {
     var translations = {
@@ -308,7 +338,10 @@ function renderServerTypes(types) {
         if (info.default_port) card += '<span class="badge bg-dark">:' + info.default_port + '</span>';
         if (isApi) card += '<span class="badge bg-primary">MyIDon</span>';
         card += '</div>';
-        if (hasRepo) {
+        if (info.is_module) {
+            card += '<button class="btn btn-primary btn-sm w-100" data-bs-toggle="modal" data-bs-target="#moduleInstallModal" onclick="openModuleModal(\'' + info.key + '\', \'' + info.name.replace(/'/g, "\\'") + '\')">';
+            card += '<i class="bi bi-box-seam me-1"></i> Установить в клиент</button>';
+        } else if (hasRepo) {
             card += '<button class="btn btn-outline-primary btn-sm w-100" data-bs-toggle="modal" data-bs-target="#serverInstallModal" onclick="setInstallType(\'' + info.key + '\', \'' + info.name + '\')">';
             card += '<i class="bi bi-download me-1"></i> ' + t('btn_confirm_install');
             card += '</button>';
@@ -959,3 +992,109 @@ $(document).on('click', '#saveConfigBtn', function() {
         </div>
     </div>
 </div>
+
+<script>
+// ==================== УСТАНОВКА МОДУЛЯ В КЛИЕНТ ====================
+// Модули (wall/shop/pages/payments/roles) не ставятся как отдельный docker-проект,
+// а подключаются внутрь уже установленного клиента через composer require.
+
+var moduleState = {key: null, name: null, pkg: null, installedIn: []};
+
+function postSection(section, action, data) {
+    var body = new URLSearchParams(data || {});
+    body.set('section', section);
+    body.set('action', action);
+    return fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: body
+    }).then(function(r) { return r.json(); });
+}
+
+function openModuleModal(key, name) {
+    moduleState.key = key;
+    moduleState.name = name;
+    document.getElementById('moduleModalTitle').textContent = 'Модуль: ' + name;
+    var res = document.getElementById('moduleInstallResult');
+    res.classList.add('d-none');
+    res.innerHTML = '';
+    loadModuleHosts();
+}
+
+function loadModuleHosts() {
+    var box = document.getElementById('moduleHostList');
+    box.innerHTML = '<div class="text-muted p-3 text-center">' +
+        '<span class="spinner-border spinner-border-sm me-1"></span> Загрузка клиентов...</div>';
+
+    postSection('servers', 'list_module_hosts', {server_type: moduleState.key})
+        .then(function(res) {
+            if (!res || res.status !== 'success' || !res.hosts || !res.hosts.length) {
+                box.innerHTML = '<div class="alert alert-warning mb-0">' +
+                    '<i class="bi bi-exclamation-triangle me-1"></i> ' +
+                    'Нет установленных клиентов. Сначала установите клиент.</div>';
+                return;
+            }
+            moduleState.pkg = res.package;
+            moduleState.installedIn = res.installed_in || [];
+
+            var html = '';
+            res.hosts.forEach(function(h) {
+                var busy = moduleState.installedIn.indexOf(h.path) !== -1;
+                var badge = '';
+                if (busy) {
+                    badge = '<span class="badge bg-success ms-2">уже установлен</span>';
+                } else if (h.status === 'running') {
+                    badge = '<span class="badge bg-primary ms-2">работает</span>';
+                } else {
+                    badge = '<span class="badge bg-secondary ms-2">' + h.status + '</span>';
+                }
+                html += '<div class="list-group-item list-group-item-action' +
+                        (busy ? ' disabled' : '') + '"' +
+                        (busy ? '' : ' onclick="installModuleInto(\'' + h.path.replace(/\\/g, '\\\\') + '\')"') + '>' +
+                        '<div class="d-flex justify-content-between align-items-center">' +
+                        '<div><strong>' + h.name + '</strong>' +
+                        '<br><small class="text-muted">' + h.path + '</small></div>' + badge +
+                        '</div></div>';
+            });
+            box.innerHTML = html;
+        })
+        .catch(function(e) {
+            box.innerHTML = '<div class="alert alert-danger mb-0">Ошибка: ' + e.message + '</div>';
+        });
+}
+
+function installModuleInto(hostPath) {
+    var res = document.getElementById('moduleInstallResult');
+    res.classList.remove('d-none');
+    res.innerHTML = '<div class="alert alert-info mb-0">' +
+        '<span class="spinner-border spinner-border-sm me-1"></span> ' +
+        'Выполняется composer require ' + moduleState.pkg + '... Это может занять 1-2 минуты.</div>';
+
+    postSection('servers', 'install_server', {
+        server_type: moduleState.key,
+        host_path: hostPath
+    })
+        .then(function(r) {
+            if (r.status === 'success') {
+                res.innerHTML = '<div class="alert alert-success mb-0">' +
+                    '<i class="bi bi-check-circle me-1"></i> ' + (r.message || 'Установлено') + '</div>';
+                setTimeout(function() { loadModuleHosts(); }, 1500);
+            } else if (r.code === 'TRANSFER_REQUIRES_APPLICATION') {
+                res.innerHTML = '<div class="alert alert-warning mb-0">' +
+                    '<i class="bi bi-arrow-left-right me-1"></i> ' + (r.message || '') +
+                    '<br><small>Подайте заявку на перенос модуля.</small></div>';
+            } else if (r.code === 'ALREADY_INSTALLED') {
+                res.innerHTML = '<div class="alert alert-info mb-0">' +
+                    '<i class="bi bi-info-circle me-1"></i> ' + (r.message || '') + '</div>';
+            } else {
+                var out = r.output ? '<pre class="mt-2 mb-0 small" style="white-space:pre-wrap;max-height:220px;overflow:auto">' +
+                    r.output.replace(/</g, '&lt;') + '</pre>' : '';
+                res.innerHTML = '<div class="alert alert-danger mb-0">' +
+                    '<i class="bi bi-x-circle me-1"></i> ' + (r.message || 'Ошибка') + out + '</div>';
+            }
+        })
+        .catch(function(e) {
+            res.innerHTML = '<div class="alert alert-danger mb-0">Ошибка: ' + e.message + '</div>';
+        });
+}
+</script>

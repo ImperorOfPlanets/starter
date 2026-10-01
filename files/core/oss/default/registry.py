@@ -387,3 +387,61 @@ class RegistryModule(BaseModule):
             logger.info(f"Cleaned up {removed} old projects")
         
         return removed
+
+    def add_module_install(module_key: str, host_path: str, package: str) -> bool:
+        """Запомнить, что модуль установлен в клиент.
+
+        Модули ставятся через composer require внутрь клиента и не являются
+        отдельным docker-проектом, поэтому в projects они не попадают.
+        Храним их отдельно — по ним строим список «установлено на клиенте X».
+        """
+        registry = RegistryModule.load_registry()
+        modules = registry.setdefault("modules", [])
+
+        # уже записан?
+        for m in modules:
+            if m.get("module_key") == module_key and \
+               RegistryModule._normalize_path(m.get("host_path", "")) == \
+               RegistryModule._normalize_path(host_path):
+                return False
+
+        modules.append({
+            "module_key": module_key,
+            "package": package,
+            "host_path": host_path,
+            "host_name": os.path.basename(host_path.rstrip("\\/")),
+            "installed_at": datetime.utcnow().isoformat() + "Z",
+        })
+        RegistryModule.save_registry(registry)
+        logger.info(f"Module {module_key} ({package}) registered for {host_path}")
+        return True
+
+    def get_module_installs(module_key: str = None) -> List[Dict]:
+        """Список установленных модулей (по всем или по одному ключу)."""
+        registry = RegistryModule.load_registry()
+        modules = registry.get("modules", []) or []
+        if module_key:
+            return [m for m in modules if m.get("module_key") == module_key]
+        return modules
+
+    def remove_module_install(module_key: str, host_path: str = None) -> bool:
+        """Снять отметку об установке модуля."""
+        registry = RegistryModule.load_registry()
+        modules = registry.get("modules", []) or []
+        before = len(modules)
+
+        if host_path:
+            target = RegistryModule._normalize_path(host_path)
+            modules = [m for m in modules
+                       if not (m.get("module_key") == module_key and
+                               RegistryModule._normalize_path(m.get("host_path", "")) == target)]
+        else:
+            modules = [m for m in modules if m.get("module_key") != module_key]
+
+        if len(modules) == before:
+            return False
+
+        registry["modules"] = modules
+        RegistryModule.save_registry(registry)
+        logger.info(f"Module {module_key} unregistered (host={host_path})")
+        return True

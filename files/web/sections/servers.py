@@ -5,7 +5,9 @@
 - Управление серверами через servers.json
 """
 
+import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -33,6 +35,31 @@ this_section_in_control_panel = True
 section_icon = "bi-hdd-rack"
 section_name = "Servers"
 section_order = 2
+
+
+def _compose_project_name(server_path, server_type: str) -> str:
+    """Имя docker-compose проекта — из папки установки.
+
+    Должно быть уникальным на каждый сервер, иначе контейнеры
+    получат одинаковые container_name (php-<PROJECTNAME> и т.д.).
+    Допустимы только [a-z0-9-], как того требует Docker.
+    """
+    raw = os.path.basename(str(server_path).rstrip('\\/'))
+    name = re.sub(r'[^a-z0-9-]+', '-', raw.lower()).strip('-')
+    if not name:
+        name = re.sub(r'[^a-z0-9-]+', '-', str(server_type).lower()).strip('-')
+    return name or 'server'
+
+
+def _compose_cmd(server_path, *args):
+    """Команда docker compose с явным -p <имя папки>.
+
+    Без -p compose берёт проект из имени папки с docker-compose.yml,
+    а у всех серверов эта папка называется 'docker' — они начинают
+    управлять одними и теми же контейнерами и затирают друг друга.
+    """
+    project = _compose_project_name(server_path, '')
+    return ['docker', 'compose', '-p', project, *args]
 
 
 def t(key: str, **kwargs) -> str:
@@ -67,7 +94,8 @@ def _check_server_status(server_path, project_type):
         import subprocess
         kw = _subprocess_kwargs(15)
         result = subprocess.run(
-            ['docker', 'compose', '-f', str(compose_path), 'ps', '-a', '--format', '{{.State}}'],
+            ['docker', 'compose', '-p', _compose_project_name(compose_path.parent.parent, ''),
+             '-f', str(compose_path), 'ps', '-a', '--format', '{{.State}}'],
             **kw
         )
         if result.returncode == 0 and result.stdout.strip():
@@ -505,6 +533,8 @@ def list_server_types(data, session_obj):
             'from_application': key in approved_keys and key not in base_keys,
             'from_api': info.get('from_api', False),
             'repository': info.get('repository'),
+            'is_module': info.get('is_module', False),
+            'composer_package': info.get('composer_package'),
         })
     return jsonify({'status': 'success', 'server_types': types})
 
@@ -597,6 +627,264 @@ def _clone_repository(repo_url: str, repository: dict, target_dir: Path, logger,
         return {'success': False, 'error': str(e)}
 
 
+def _find_composer():
+    """Ищет composer на хосте — в PATH и в типовых местах.
+
+    Composer не входит в PATH системного Python, поэтому ищем явно.
+    """
+    # 1. shutil.which по PATH
+    found = shutil.which('composer')
+    if found:
+        return found
+
+    # 2. php-composer.phar
+    for base in (Path.home(), Path('C:/'), Path('C:/tools'), Path('C:/xampp')):
+        for rel in ('composer.phar', 'composer/composer.phar',
+                    'tools/composer/composer.phar', 'composer.phar'):
+            p = base / rel
+            if p.is_file():
+                return str(p)
+
+    # 3. .bat/.exe в PATH-подобных каталогах
+    for d in os.environ.get('PATH', '').split(os.pathsep):
+        if not d:
+            continue
+        for name in ('composer.bat', 'composer.exe', 'composer'):
+            p = Path(d) / name
+            if p.is_file():
+                return str(p)
+    return None
+
+
+def _composer_cmd():
+    """Команда запуска composer: .bat -> cmd /c, .phar -> php, иначе как есть."""
+    exe = _find_composer()
+    if not exe:
+        return None
+    if exe.lower().endswith('.phar'):
+        return ['php', exe]
+    if exe.lower().endswith('.bat'):
+        return ['cmd', '/c', exe]
+    return [exe]
+
+
+def _module_hosts(session_obj, type_info):
+    """Клиенты, в которые можно поставить модуль.
+
+    Берём из реестра только проекты, установленные стартером,
+    тип которых указан в installs_into.
+    """
+    allowed = type_info.get('installs_into') or []
+    registry = get('registry')
+    hosts = []
+    if not registry:
+        return hosts
+
+    try:
+        projects = registry.load_registry().get('projects', [])
+    except Exception:
+        return hosts
+
+    for p in projects:
+        if not p.get('installed_by_starter'):
+            continue
+        ptype = p.get('project_type', '')
+        path = p.get('path', '')
+        if not path:
+            continue
+        if allowed and ptype not in allowed:
+            continue
+        # модуль ставится только в клиент, у которого есть code/
+        if not (Path(path) / 'code' / 'composer.json').exists():
+            continue
+        hosts.append({
+            'path': path,
+            'name': Path(path).name,
+            'project_type': ptype,
+            'status': p.get('status', 'unknown'),
+        })
+    return hosts
+
+
+def _module_installed_hosts(server_type, type_info):
+    """Куда модуль уже установлен (папка vendor/imperor/<pkg>)."""
+    package = type_info.get('composer_package', '')
+    if not package:
+        return []
+    vendor_dir = package.replace('/', os.sep)
+    registry = get('registry')
+    if not registry:
+        return []
+    out = []
+    try:
+        projects = registry.load_registry().get('projects', [])
+    except Exception:
+        return out
+    for p in projects:
+        path = p.get('path', '')
+        if path and (Path(path) / 'code' / 'vendor' / vendor_dir).exists():
+            out.append(path)
+    return out
+
+
+def list_module_hosts(data, session_obj):
+    """Клиенты, доступные для установки модуля + где модуль уже стоит."""
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return {'status': 'error', 'message': 'Unauthorized'}
+
+    server_type = (data.get('server_type') or '').strip()
+    merged_types = _get_merged_server_types(session_obj)
+    if server_type not in merged_types:
+        return {'status': 'error', 'message': f'Unknown server type: {server_type}'}
+
+    type_info = merged_types[server_type]
+    if not type_info.get('is_module'):
+        return {'status': 'error', 'message': f'{server_type} не является модулем'}
+
+    return {
+        'status': 'success',
+        'package': type_info.get('composer_package'),
+        'module_path': type_info.get('module_path'),
+        'hosts': _module_hosts(session_obj, type_info),
+        'installed_in': _module_installed_hosts(server_type, type_info),
+    }
+
+
+def install_module(data, session_obj):
+    """Установка модуля внутрь клиента: composer require на хосте + перезапуск."""
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return {'status': 'error', 'message': 'Unauthorized'}
+
+    server_type = data.get('server_type', '').strip()
+    host_path = data.get('host_path', '').strip()
+
+    merged_types = _get_merged_server_types(session_obj)
+    if server_type not in merged_types:
+        return {'status': 'error', 'message': f'Unknown server type: {server_type}'}
+
+    type_info = merged_types[server_type]
+    package = type_info.get('composer_package')
+    module_path = type_info.get('module_path')
+
+    if not package:
+        return {'status': 'error', 'message': f'{server_type}: composer_package не задан'}
+
+    if not host_path:
+        hosts = _module_hosts(session_obj, type_info)
+        return {
+            'status': 'select_host',
+            'message': 'Выберите клиент для установки модуля',
+            'server_type': server_type,
+            'package': package,
+            'hosts': hosts,
+        }
+
+    host = Path(host_path)
+    code_dir = host / 'code'
+    if not (code_dir / 'composer.json').exists():
+        return {'status': 'error', 'message': f'В {host} нет code/composer.json'}
+
+    # уже стоит в этом клиенте?
+    vendor_dir = code_dir / 'vendor' / package.replace('/', os.sep)
+    if vendor_dir.exists():
+        return {
+            'status': 'error',
+            'message': f'{package} уже установлен в {host.name}',
+            'code': 'ALREADY_INSTALLED',
+        }
+
+    # уже стоит в другом клиенте? — нужен перенос (заявка)
+    others = [h for h in _module_installed_hosts(server_type, type_info)
+              if str(h).lower() != str(host).lower()]
+    if others:
+        names = ', '.join(Path(h).name for h in others)
+        return {
+            'status': 'error',
+            'message': f'{package} уже установлен в: {names}. '
+                       f'Для переноса нужна заявка.',
+            'code': 'TRANSFER_REQUIRES_APPLICATION',
+            'installed_in': others,
+        }
+
+    # регистрируем path-репозиторий модуля, если его ещё нет
+    cj_path = code_dir / 'composer.json'
+    try:
+        cj = json.loads(cj_path.read_text(encoding='utf-8'))
+    except Exception as e:
+        return {'status': 'error', 'message': f'Не читается composer.json: {e}'}
+
+    repos = cj.setdefault('repositories', [])
+    url = module_path or f'C:/control/{server_type.upper()}'
+    if not any(r.get('url') == url for r in repos):
+        repos.append({'type': 'path', 'url': url, 'options': {'symlink': False}})
+        cj_path.write_text(json.dumps(cj, indent=4, ensure_ascii=False) + '\n', encoding='utf-8')
+        logger.info(f"Added path repository {url} for {package}")
+
+    if not Path(url).exists():
+        return {'status': 'error', 'message': f'Каталог модуля не найден: {url}'}
+
+    # composer на хосте — в контейнере распаковка занимает минуты
+    composer = _composer_cmd()
+    if not composer:
+        return {'status': 'error', 'message': 'Composer не найден на хосте (PATH/composer.phar)'}
+
+    logger.info(f"Installing {package} into {code_dir} via host composer: {composer}")
+    try:
+        kw = _subprocess_kwargs(900)
+        proc = subprocess.run(
+            composer + ['require', f'{package}:@dev', '--no-interaction',
+                        '--working-dir=' + str(code_dir)],
+            **kw
+        )
+    except FileNotFoundError:
+        return {'status': 'error', 'message': f'Не удалось запустить: {composer[0]}'}
+    except subprocess.TimeoutExpired:
+        return {'status': 'error', 'message': 'composer require превысил 15 минут'}
+
+    if proc.returncode != 0:
+        tail = (proc.stdout or '')[-1500:]
+        return {
+            'status': 'error',
+            'message': f'composer require завершился с кодом {proc.returncode}',
+            'output': tail,
+        }
+
+    # миграции модуля
+    try:
+        subprocess.run(['php', 'artisan', 'migrate', '--force'],
+                       cwd=str(code_dir), **_subprocess_kwargs(600))
+    except Exception as e:
+        logger.warning(f'artisan migrate failed: {e}')
+
+    # перезапуск клиента
+    docker_path = host / 'docker'
+    compose = docker_path / 'docker-compose.yml'
+    if compose.exists():
+        try:
+            subprocess.run(
+                _compose_cmd(host, 'up', '-d', '--force-recreate', 'php-' + _compose_project_name(host, '')),
+                cwd=str(docker_path), **_subprocess_kwargs(300))
+        except Exception as e:
+            logger.warning(f'restart failed: {e}')
+
+    # отмечаем в реестре
+    registry = get('registry')
+    if registry:
+        try:
+            registry.add_module_install(server_type, str(host), package)
+        except Exception as e:
+            logger.warning(f'registry module install failed: {e}')
+
+    return {
+        'status': 'success',
+        'message': f'{package} установлен в {host.name}',
+        'package': package,
+        'host': str(host),
+    }
+
+
 def install_server(data, session_obj):
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
@@ -617,6 +905,11 @@ def install_server(data, session_obj):
         return {'status': 'error', 'message': f'Unknown server type: {server_type}'}
 
     type_info = merged_types[server_type]
+
+    # Модуль клиента — ставится внутрь (composer require), не как проект
+    if type_info.get('is_module'):
+        return install_module(data, session_obj)
+
     server_path = Path(install_path)
     docker_path = server_path / 'docker'
     code_path = server_path / 'code'
@@ -673,7 +966,9 @@ def install_server(data, session_obj):
                 try:
                     kw = _subprocess_kwargs(30)
                     subprocess.run(
-                        ['docker', 'compose', '-f', str(compose_file), 'down'],
+                        ['docker', 'compose', '-p',
+                         _compose_project_name(server_path, server_type),
+                         '-f', str(compose_file), 'down'],
                         **kw
                     )
                 except Exception:
@@ -727,7 +1022,10 @@ def install_server(data, session_obj):
                     break
 
         port = type_info.get('default_port', 8000)
-        project_name = server_type.replace('_', '-')
+        # PROJECTNAME берётся из имени папки установки, а не из server_type:
+        # иначе все клиенты (clientv2/client-core/client-city/...) получают
+        # одинаковые container_name php-clientv2 и не могут сосуществовать.
+        project_name = _compose_project_name(server_path, server_type)
 
         # docker-compose.example ДОЛЖЕН быть в репозитории
         # Ищем в разных местах: code/docker/, code/, просто docker/
@@ -1061,7 +1359,9 @@ def _generate_env_example(server_type, type_info, server_name, subnet_octet=0, p
     """Генерирует .env.example с переменными для docker-compose"""
     port = port or type_info.get('default_port', 8000)
     network_prefix = f"172.{subnet_octet}" if subnet_octet > 0 else ""
-    project_name = server_type.replace('_', '-')
+    # Имя проекта — из папки установки, иначе все серверы одного типа
+    # получат одинаковые container_name
+    project_name = _compose_project_name(server_path or server_type, server_type)
 
     env = f"""# {type_info['name']}
 PROJECTNAME={project_name}
@@ -1291,7 +1591,7 @@ def start_server(data, session_obj):
     if not has_errors:
         try:
             kw = _subprocess_kwargs(30)
-            r = subprocess.run(['docker', 'compose', 'config', '--quiet'], cwd=docker_path, **kw)
+            r = subprocess.run(_compose_cmd(server_path, 'config', '--quiet'), cwd=docker_path, **kw)
             if r.returncode == 0:
                 checks.append({'step': 'compose', 'status': 'ok', 'message': 'docker-compose.yml is valid'})
             else:
@@ -1329,14 +1629,14 @@ def start_server(data, session_obj):
     if not has_errors:
         try:
             kw = _subprocess_kwargs(60)
-            r = subprocess.run(['docker', 'compose', 'images', '--format', 'json'], cwd=docker_path, capture_output=True, text=True, timeout=60, encoding='utf-8', errors='replace')
+            r = subprocess.run(_compose_cmd(server_path, 'images', '--format', 'json'), cwd=docker_path, capture_output=True, text=True, timeout=60, encoding='utf-8', errors='replace')
             if r.returncode == 0 and r.stdout.strip():
                 checks.append({'step': 'images', 'status': 'ok', 'message': 'Images are available'})
             else:
                 # Need to build
                 checks.append({'step': 'images', 'status': 'info', 'message': 'Building images...'})
                 build_kw = _subprocess_kwargs(600)
-                build_r = subprocess.run(['docker', 'compose', 'build'], cwd=docker_path, **build_kw)
+                build_r = subprocess.run(_compose_cmd(server_path, 'build'), cwd=docker_path, **build_kw)
                 if build_r.returncode == 0:
                     checks.append({'step': 'images', 'status': 'ok', 'message': 'Images built successfully'})
                 else:
@@ -1353,7 +1653,7 @@ def start_server(data, session_obj):
     try:
         kw = _subprocess_kwargs(120)
         result = subprocess.run(
-            ['docker', 'compose', 'up', '-d'],
+            _compose_cmd(server_path, 'up', '-d'),
             cwd=docker_path, **kw
         )
         if result.returncode == 0:
@@ -1396,10 +1696,10 @@ def get_server_logs(data, session_obj):
     logs = {}
     try:
         # Get container names for this project
-        project_name = os.path.basename(server_path).lower().replace(' ', '-')
+        project_name = _compose_project_name(server_path, '')
         kw = _subprocess_kwargs(30)
         r = subprocess.run(
-            ['docker', 'compose', 'ps', '-a', '--format', 'json'],
+            _compose_cmd(server_path, 'ps', '-a', '--format', 'json'),
             cwd=docker_path, capture_output=True, text=True, timeout=30, encoding='utf-8', errors='replace'
         )
         if r.returncode == 0 and r.stdout.strip():
@@ -1457,7 +1757,7 @@ def stop_server(data, session_obj):
     try:
         kw = _subprocess_kwargs(60)
         result = subprocess.run(
-            ['docker', 'compose', 'down'],
+            _compose_cmd(server_path, 'down'),
             cwd=docker_path, **kw
         )
         if result.returncode == 0:
@@ -1488,7 +1788,8 @@ def remove_server(data, session_obj):
         try:
             kw = _subprocess_kwargs(30)
             subprocess.run(
-                ['docker', 'compose', '-f', str(compose_file), 'down', '-v'],
+                ['docker', 'compose', '-p', _compose_project_name(server_path, ''),
+                 '-f', str(compose_file), 'down', '-v'],
                 **kw
             )
         except Exception:
@@ -1638,7 +1939,7 @@ def update_server(data, session_obj):
             if compose_file.exists():
                 kw2 = _subprocess_kwargs(120)
                 docker_result = subprocess.run(
-                    ['docker', 'compose', 'up', '-d'],
+                    _compose_cmd(server_path, 'up', '-d'),
                     cwd=str(server_path / 'docker'), **kw2
                 )
                 if docker_result.returncode == 0:
