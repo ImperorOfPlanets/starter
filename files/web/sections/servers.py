@@ -200,7 +200,7 @@ def _get_user_servers(session_obj):
                     'path': path,
                     'type': project_type,
                     'status': real_status,
-                    'port': p.get('port', 0),
+                    'port': _server_port(p.get('path', ''), p.get('port', 0)),
                     'subnet_octet': p.get('subnet_octet', 0),
                     'has_web_interface': has_web_interface,
                     'has_git': has_git,
@@ -1178,8 +1178,9 @@ def install_server(data, session_obj):
             #     зашиты на первый экземпляр).
             reserved_ports = _collect_reserved_ports()
 
+            instance_env = {}
             try:
-                _apply_instance_env(
+                instance_env = _apply_instance_env(
                     docker_path,
                     Path(str(server_path)),
                     project_name,
@@ -1266,7 +1267,11 @@ def install_server(data, session_obj):
             for p in reg.get('projects', []):
                 if p.get('path') == norm:
                     p['project_type'] = server_type
-                    p['port'] = port
+                    # Реальный порт экземпляра, а не default_port типа:
+                    # проверка после обновления идёт по этому значению
+                    p['port'] = int(instance_env.get('PORT_SSL')
+                                      or instance_env.get('PORT')
+                                      or port or 0)
                     p['subnet_octet'] = subnet_octet
                     p['docker_network_prefix'] = f"172.{subnet_octet}" if subnet_octet > 0 else ""
                     p['installed_by_starter'] = True
@@ -2454,6 +2459,38 @@ def _ensure_php_dependencies(code_dir: Path, server_path: Path = None, logger=No
     return {'status': 'ok', 'output': output[-500:]}
 
 
+def _server_port(server_path, fallback=0):
+    """Порт, на котором сервер реально отвечает.
+
+    Приоритет: PORT_SSL из docker/.env, затем PORT, затем значение из
+    реестра. Порт из типа (default_port) не годится: он не учитывает
+    выделенный экземпляру порт, и проверка обновления после этого
+    уходит на незанятый порт и приводит к откату.
+    """
+    env_path = Path(server_path) / 'docker' / '.env'
+
+    try:
+        if env_path.exists():
+            values = {}
+            for line in env_path.read_text(encoding='utf-8', errors='replace').split('\n'):
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    k, _, v = line.partition('=')
+                    values[k.strip()] = v.strip()
+
+            for key in ('PORT_SSL', 'PORT'):
+                value = values.get(key, '')
+                if value.isdigit() and int(value) > 0:
+                    return int(value)
+    except Exception:
+        pass
+
+    try:
+        return int(fallback or 0)
+    except Exception:
+        return 0
+
+
 def _path_state(path):
     """Состояние пути без исключений: 'file' | 'dir' | 'other' | 'missing'.
 
@@ -2717,7 +2754,8 @@ def update_plan(data, session_obj):
         'status': 'success',
         'server_id': server_id,
         'server_type': server_type,
-        'port': entry.get('port', 0),
+        # порт из docker/.env, а не default_port типа из реестра
+        'port': _server_port(server_id, entry.get('port', 0)),
         'plan': ServerstrategyModule.describe(server_type, type_info),
     }
 
@@ -2741,7 +2779,7 @@ def update_preflight(data, session_obj):
 
     pre = ServerstrategyModule.preflight(
         server_id, server_type, type_info,
-        port=entry.get('port', 0))
+        port=_server_port(server_id, entry.get('port', 0)))
 
     status = 'success' if pre.get('ok') else 'error'
     return {'status': status, 'preflight': pre}
@@ -2785,7 +2823,7 @@ def update_server(data, session_obj):
         return {'status': 'error',
                 'message': f'Обновление для типа {server_type} отключено в конфигурации'}
 
-    port = entry.get('port', 0)
+    port = _server_port(server_path, entry.get('port', 0))
 
     # ---------- ФАЗА 0: PREFLIGHT ----------
     pre = ServerstrategyModule.preflight(server_id, server_type, type_info, port=port)
@@ -2925,11 +2963,18 @@ def update_module(data, session_obj):
     dry_run = str(data.get('dry_run', '')).lower() in ('1', 'true', 'yes')
 
     # где лежит исходник пакета
-    module_path = type_info.get('module_path') or ''
+    #
+    # Держим два значения: строка - для ответа (её ожидает jsonify),
+    # Path - для работы с файлами. Раньше здесь была только строка, и
+    # выражение module_path / '.git' падало с
+    #   TypeError: unsupported operand type(s) for /: 'str' and 'str'
+    module_path_str = type_info.get('module_path') or ''
+    module_path = Path(module_path_str) if module_path_str else None
+
     installed_version, available_version, has_update = None, None, None
 
-    if module_path and Path(module_path).exists():
-        src_cj = Path(module_path) / 'composer.json'
+    if module_path and module_path.exists():
+        src_cj = module_path / 'composer.json'
         if src_cj.exists():
             available_version = _json_get(src_cj, 'version') or 'dev'
 
@@ -2938,9 +2983,10 @@ def update_module(data, session_obj):
         installed_version = _json_get(cj, f'packages.{package}.version')
 
     installed_sha = ''
-    if (module_path / '.git').exists():
-        r = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=module_path,
-                           capture_output=True, text=True)
+    if module_path and (module_path / '.git').exists():
+        r = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=str(module_path),
+                           capture_output=True, text=True, encoding='utf-8',
+                           errors='replace')
         installed_sha = (r.stdout or '').strip()[:12]
 
     if dry_run:
@@ -2948,10 +2994,11 @@ def update_module(data, session_obj):
             'status': 'success', 'dry_run': True,
             'message': f'Проверка модуля {package} в {host.name}, изменения не применялись',
             'module': {'package': package, 'host': str(host),
-                       'module_path': module_path, 'installed_version': installed_version,
+                       'module_path': module_path_str,
+                       'installed_version': installed_version,
                        'available_version': available_version,
                        'installed_commit': installed_sha,
-                       'path_exists': Path(module_path).exists()},
+                       'path_exists': bool(module_path and module_path.exists())},
         }
 
     from files.core.software.default.serverstrategy import ServerstrategyModule
