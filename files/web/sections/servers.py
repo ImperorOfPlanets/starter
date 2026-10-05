@@ -1200,7 +1200,14 @@ def install_server(data, session_obj):
                 logger.warning('Failed to copy docker payload for %s: %s',
                                server_path, e)
 
-            # 4. Копируем docker-compose.example
+            # 4. Копируем docker-compose.example.
+            #     Шаблон нужен в двух местах: .yml - то, с чем compose
+            #     работает сейчас, .example - то, из чего .yml
+            #     пересобирается при каждом start и откуда берётся
+            #     откат. Без .example в папке docker условие регенерации
+            #     в start_server не выполнялось, и изменения шаблона из
+            #     репозитория после git pull не применялись.
+            shutil.copy2(compose_example, docker_path / 'docker-compose.example')
             shutil.copy2(compose_example, docker_path / 'docker-compose.yml')
 
             # 5. Подставляем ВСЕ переменные из .env в docker-compose.yml

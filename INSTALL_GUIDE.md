@@ -182,6 +182,18 @@ DELETE /api/v1/servers/C%3A%2Fcontrol%2FCLIENTv2/remove
 {"type": "path", "url": "C:/control/WALL", "options": {"symlink": false}}
 ```
 
+### API модулей
+
+```
+GET  /api/v1/servers/modules                     типы модулей + composer_package
+GET  /api/v1/servers/modules/hosts?server_type   клиенты, куда можно поставить
+POST /api/v1/servers/modules/install             {"server_type": "wall", "host_path": "C:/control/client-city"}
+POST /api/v1/servers/modules/update              {"server_type": "wall", "host_path": "...", "dry_run": false}
+```
+
+`host_path` допускает и прямые, и обратные слэши — пути сверяются
+нормализованно.
+
 ### Порядок работы
 
 ```
@@ -241,11 +253,74 @@ POST /api/v1/servers/update-clients                      # все клиенты
 Модули обновляются отдельно:
 
 ```
-update_module(server_type, host_path, dry_run)
+POST /api/v1/servers/modules/update
 ```
 
 Перед обновлением клиента полезно сначала прогнать `plan` и `preflight` —
 они ничего не меняют.
+
+### Грязное дерево: что мешает обновлению, а что нет
+
+`preflight` останавливает обновление, если в `code/` есть незакоммиченные
+изменения. Но после установки модуля они есть всегда, поэтому изменения
+разделены на два класса.
+
+**Штатные** — обновлению не мешают, попадают в `dirty_benign`:
+
+| Путь | Откуда берётся |
+|---|---|
+| `composer.json`, `composer.lock` | `composer require` при установке модуля |
+| `package-lock.json`, `yarn.lock` | `npm install` |
+| `public/build/**`, `public/hot`, `public/mix-manifest.json` | `npm run build` |
+| `public/css/app.css`, `public/js/app.js` | `docker/configs/init/client-init.sh` копирует их при каждом старте |
+| `public/storage` | `artisan storage:link` |
+| `storage/framework/**`, `bootstrap/cache/**` | кэши Laravel |
+| `.env`, `.env.backup` | конфигурация экземпляра |
+
+**Блокирующие** — останавливают обновление с кодом `DIRTY_TREE`. Это
+изменения кода приложения: `app/`, `routes/`, `config/`,
+`database/migrations/`, `resources/`, `.env.example`, `.github/`.
+
+В ответе preflight видно, что именно мешает:
+
+```json
+{"preflight": {
+  "code": "UP_TO_DATE",
+  "dirty": true,
+  "dirty_benign": [" M composer.json", " M public/build/manifest.json"],
+  "dirty_benign_count": 28,
+  "dirty_blocking": [],
+  "dirty_blocking_count": 0}}
+```
+
+Если изменения блокирующие, обновление останавливается:
+
+```json
+{"code": "DIRTY_TREE",
+ "message": "Рабочее дерево содержит 2 незакоммиченных изменений. Обновление остановлено — зафиксируйте или отмените их.",
+ "preflight": {"blocking_sample": [" M app/Models/User.php", "?? routes/evil.php"]}}
+```
+
+### Порт при проверке после обновления
+
+Проверка «сервер отвечает» идёт по порту из `docker/.env` (`PORT_SSL`),
+а не по `default_port` типа. Значение из реестра используется только как
+запасное. Если бы проверка шла по порту типа, она всегда уходила бы на
+свободный порт и откатывала уже применённое обновление.
+
+### Ожидаемый 502 после установки или обновления модуля
+
+Установка и обновление модуля пересоздают контейнер `php-<проект>`. При
+старте контейнера заново выполняется `client-init.sh`: `composer install`,
+миграции, `npm install`, `npm run build`, очистка кэша. На примонтированном
+каталоге Windows это занимает 5–10 минут, и всё это время сайт отдаёт 502.
+
+Это ожидаемо. Проверять готовность нужно по состоянию контейнера, а не по
+коду ответа:
+
+```bash
+docker ps --filter "name=php-" --format "{{.Names}} {{.Status}}"
+```
 
 ---
 
@@ -314,7 +389,64 @@ SSL в 9400–9599. Перед подбором собираются занят�
 
 ---
 
-## 9. Известные проблемы
+## 9. Проверки состояния контейнеров
+
+`docker ps` показывает `healthy` / `unhealthy` по healthcheck из
+`docker-compose.yml`. Проверки должны соответствовать тому, что сервис
+реально делает, иначе «здоровый» контейнер ничего не значит.
+
+| Контейнер | Проверка | Что проверяет |
+|---|---|---|
+| `php-*` | `php -r 'exit(@fsockopen("127.0.0.1", 9000) ? 0 : 1);'` | php-fpm принимает соединения — к нему ходит nginx |
+| `worker-*` | `supervisorctl status \| grep -q RUNNING` | supervisord работает и программы живы |
+| `nginx-*` | `curl -k -f https://localhost/` | сайт отвечает |
+| `mariadb-*` | — | проверяется запросом из приложения |
+| `redis-*` | `redis-cli ping` | отвечает |
+| `qdrant-*` | `bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'` | порт 6333 принимает соединения |
+| `vpn-*` | `sh /var/scripts/healthcheck-vpn.sh` | скрипт из репозитория |
+
+У `php`, `worker`, `nginx`, `qdrant` задан `start_period`. При старте
+контейнера выполняется `client-init.sh`: `composer install`, миграции,
+`npm install`, `npm run build`, `artisan view:cache`. На примонтированном
+каталоге Windows это занимает 5–10 минут, и всё это время проверки нужно
+игнорировать.
+
+> Что было раньше. `php` проверял `php-fpm -t` — это проверка синтаксиса
+> конфигурации, она проходит и когда php-fpm не слушает порт. `worker`
+> выполнял `supervisorctl status > log 2>&1`, то есть завершался
+> перенаправлением вывода и всегда возвращал 0. У `qdrant` стояло `true`.
+> В итоге контейнер php объявлялся здоровым при 502 на сайте, и проверка
+> «сервер отвечает» после обновления проходила, ничего не проверяя.
+
+## 10. Как обновляется docker-compose.yml
+
+`docker-compose.yml` не хранится в репозитории — он собирается из
+`docker-compose.example` подстановкой значений из `docker/.env`.
+
+Пересборка происходит при каждом `start`:
+
+```
+docker/docker-compose.example   <- шаблон из репозитория (через git pull)
+docker/.env                     <- конфигурация экземпляра
+        |
+        v  подстановка ${ПЕРЕМЕННАЯ}
+docker/docker-compose.yml       <- то, с чем работает compose
+```
+
+Поэтому оба файла кладутся в `docker/` при установке. Без
+`docker-compose.example` регенерация не выполнялась, и изменения шаблона
+из репозитория после `git pull` не применялись: сервер продолжал работать
+на том `docker-compose.yml`, который был собран при установке.
+
+Проверить, что подстановка не оставила переменных:
+
+```bash
+docker compose -p <проект> -f docker/docker-compose.yml config --quiet
+```
+
+---
+
+## 11. Известные проблемы
 
 | Симптом | Причина | Что делать |
 |---|---|---|
@@ -322,7 +454,7 @@ SSL в 9400–9599. Перед подбором собираются занят�
 | Клиент не стартует, в логах `mariadb-clientv2` | в `.env` хост чужого экземпляра | проверить `DB_HOST` / `REDIS_HOST` в `docker/.env` |
 | Модуль установлен, таблиц нет | миграции не прошли | `docker exec php-<проект> php artisan migrate --force`, в ответе смотреть `MIGRATE_FAILED` |
 | `Interface "App\Models\X" not found` | интерфейс использован без `use` | PHP валиден синтаксически, но падает при загрузке класса; проверять через `artisan optimize` на копии |
-| Почта не уходит | сертификат SMTP и пароль | см. раздел 10 |
+| Почта не уходит | сертификат SMTP и пароль | см. раздел 12 |
 | `exec: start-supervisor.sh: Permission denied` | в `docker/configs/` нет файлов, compose создал на их месте каталоги | перенести конфиги: `_copy_docker_payload()` при установке |
 | `require(/var/www/html/vendor/autoload.php): Failed to open stream` | не установлены зависимости PHP | `composer install` в `path/code` на хосте |
 | `Access denied for user 'root'@... (using password: YES)` | `MARIADB_USER=root` в образе MariaDB не создаёт пароль руту | в шаблоне используется `MARIADB_ROOT_PASSWORD` |
@@ -334,7 +466,7 @@ SSL в 9400–9599. Перед подбором собираются занят�
 
 ---
 
-## 10. Почта
+## 12. Почта
 
 Почта — общая инфраструктура, а не часть клиента, но без неё не работает
 подтверждение адреса.
@@ -360,7 +492,7 @@ peer — это временная мера, а не решение.
 
 ---
 
-## 11. Скрипт сквозного теста
+## 13. Скрипт сквозного теста
 
 Полный прогон удаление → установка → модули → обновления:
 
