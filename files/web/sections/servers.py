@@ -2068,6 +2068,26 @@ def start_server(data, session_obj):
             server['status'] = 'running'
             registry.save_registry(reg_data)
             checks.append({'step': 'start', 'status': 'ok', 'message': 'Server started'})
+
+            # Первый запуск: контейнеры поднялись, но Laravel ещё не
+            # инициализирован (APP_KEY пуст, миграции не выполнялись),
+            # поэтому сайт отдаёт 502. Делаем это только для PHP-серверов
+            # и только если в code/ есть artisan.
+            provision = None
+            try:
+                if _path_state(Path(server_path) / 'code' / 'artisan') == 'file':
+                    provision = _provision_laravel(Path(server_path), logger=logger)
+                    checks.append({
+                        'step': 'laravel',
+                        'status': 'ok' if provision.get('ok') else 'warn',
+                        'message': ('Laravel инициализирован' if provision.get('ok')
+                                    else f"Laravel: {provision.get('error') or 'миграции не прошли'}"),
+                        'details': provision.get('steps'),
+                    })
+            except Exception as e:
+                checks.append({'step': 'laravel', 'status': 'warn',
+                               'message': f'Laravel init failed: {e}'})
+
             return jsonify({'status': 'success', 'message': 'Сервер запущен', 'checks': checks})
         else:
             err_msg = (result.stderr or '').strip()[:500]
@@ -2432,6 +2452,128 @@ def _ensure_php_dependencies(code_dir: Path, server_path: Path = None, logger=No
         logger.info('composer install OK in %s', code_dir)
 
     return {'status': 'ok', 'output': output[-500:]}
+
+
+def _path_state(path):
+    """Состояние пути без исключений: 'file' | 'dir' | 'other' | 'missing'.
+
+    Обычный Path.exists() бросает OSError на путях, которые Windows не
+    может опросить, - например на Linux-ссылках внутри примонтированного
+    каталога (code/public/storage после storage:link). Для наших целей
+    важно лишь различать «есть» и «нет», поэтому все проверки состояния
+    идут через эту функцию.
+    """
+    try:
+        import os as _os
+        _os.stat(path)
+    except FileNotFoundError:
+        return 'missing'
+    except NotADirectoryError:
+        # часть пути - файл, а не каталог: для нас это тоже «нет»
+        return 'missing'
+    except OSError:
+        # путь есть, но Windows не может его опросить (например,
+        # Linux-ссылка в примонтированном каталоге). Считаем, что он
+        # существует: иначе попытаемся создать его повторно.
+        return 'other'
+
+    try:
+        return 'dir' if path.is_dir() else 'file'
+    except OSError:
+        return 'other'
+
+
+def _provision_laravel(server_path: Path, logger=None, timeout=1800,
+                       wait_container=120):
+    """Инициализировать Laravel после первого запуска контейнеров.
+
+    Выполняется внутри контейнера php-<project>: только там есть
+    PHP и доступ к сети compose, где лежит БД. На хосте PHP может быть
+    другим, а БД всё равно недоступна.
+
+    Возвращает {'ok': bool, 'steps': [{'step':..,'ok':..,'output':..}]}
+    """
+    import subprocess
+    import time
+
+    code_path = Path(server_path) / 'code'
+    project = _compose_project_name(server_path, '')
+    container = f'php-{project}'
+
+    steps = []
+
+    def art(*args, wait=timeout):
+        cmd = ['docker', 'exec', container, 'php', 'artisan', *args]
+        try:
+            proc = subprocess.run(
+                cmd, **_subprocess_kwargs(min(wait, timeout)),
+            )
+        except Exception as e:
+            steps.append({'step': ' '.join(args), 'ok': False, 'output': str(e)[:300]})
+            return False
+
+        out = ((proc.stdout or '') + (proc.stderr or '')).strip()
+        ok = proc.returncode == 0
+        steps.append({'step': ' '.join(args), 'ok': ok,
+                      'output': out[-400:] if not ok else out[-160:]})
+
+        return ok
+
+    if _path_state(code_path / 'artisan') != 'file':
+        return {'ok': True, 'skipped': 'нет artisan', 'steps': []}
+
+    # ждём готовности контейнера: сразу после up он ещё поднимается
+    deadline = time.time() + wait_container
+    while time.time() < deadline:
+        try:
+            r = subprocess.run(['docker', 'exec', container, 'php', '-v'],
+                               **_subprocess_kwargs(20))
+            if r.returncode == 0:
+                break
+        except Exception:
+            pass
+        time.sleep(3)
+    else:
+        return {'ok': False, 'error': f'контейнер {container} не отвечает',
+                'steps': steps}
+
+    art('config:clear')
+
+    # APP_KEY пустой -> генерируем. Непустой не трогаем: смена ключа
+    # делает нечитаемыми сессии, cookie и зашифрованные значения.
+    env_path = code_path / '.env'
+    key_empty = True
+
+    if _path_state(env_path) == 'file':
+        try:
+            for line in env_path.read_text(encoding='utf-8', errors='replace').splitlines():
+                if line.strip().startswith('APP_KEY='):
+                    key_empty = len(line.split('=', 1)[1].strip().strip('"')) < 10
+                    break
+        except Exception:
+            pass
+
+    if key_empty:
+        art('key:generate', '--force')
+    else:
+        steps.append({'step': 'key:generate', 'ok': True, 'output': 'ключ уже задан'})
+
+    # storage:link создаёт Linux-ссылку, которую Windows не опрашивает,
+    # поэтому exists() здесь бросает WinError 1920. Состояние спрашиваем
+    # через _path_state().
+    link = code_path / 'public' / 'storage'
+    if _path_state(link) == 'missing':
+        art('storage:link')
+    else:
+        steps.append({'step': 'storage:link', 'ok': True, 'output': 'ссылка уже есть'})
+
+    ok = art('migrate', '--force')
+
+    if logger:
+        logger.info('Laravel provisioned for %s: %s', project,
+                    'ok' if ok else 'migrate failed')
+
+    return {'ok': ok, 'container': container, 'steps': steps}
 
 
 def _copy_docker_payload(code_path: Path, docker_path: Path, logger=None):
