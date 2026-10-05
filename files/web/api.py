@@ -481,3 +481,120 @@ def list_folders():
         return result
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ======================== МОДУЛИ ========================
+# Модуль ставится внутрь клиента через composer require на хосте.
+# Отдельный префикс /servers/modules, чтобы путь модуля не путался
+# с путём сервера: /servers/<path>/update относится к серверу,
+# а /servers/modules/install - к модулю.
+
+
+@api.route('/servers/modules', methods=['GET'])
+@require_api_key
+def list_modules():
+    """Типы модулей, которые можно поставить внутрь клиента"""
+    try:
+        from files.configs.server_types import SERVER_TYPES, get_sorted_server_types
+
+        modules = []
+        for key, info in get_sorted_server_types():
+            if not info.get('is_module'):
+                continue
+            modules.append({
+                'key': key,
+                'name': info.get('name', key),
+                'description': info.get('description', ''),
+                'composer_package': info.get('composer_package'),
+                'module_path': info.get('module_path'),
+                'default_folder': info.get('default_folder', key),
+            })
+
+        return jsonify({'success': True, 'modules': modules, 'count': len(modules)})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/servers/modules/hosts', methods=['GET'])
+@require_api_key
+def module_hosts():
+    """Клиенты, в которые можно поставить модуль"""
+    try:
+        server_type = request.args.get('server_type', '').strip()
+
+        if not server_type:
+            return jsonify({'success': False, 'error': 'server_type required'}), 400
+
+        from files.web.sections.servers import list_module_hosts as do_hosts
+
+        result = do_hosts({'server_type': server_type}, API_SESSION)
+
+        if isinstance(result, tuple):
+            result, status = result
+            return result, status
+
+        return result
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/servers/modules/install', methods=['POST'])
+@require_api_key
+def install_module_api():
+    """Поставить модуль внутрь клиента"""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        server_type = data.get('server_type', '').strip()
+        host_path = data.get('host_path', '').strip()
+
+        if not server_type or not host_path:
+            return jsonify({'success': False,
+                            'error': 'server_type and host_path required'}), 400
+
+        from files.web.sections.servers import install_module as do_install
+
+        result = do_install({'server_type': server_type, 'host_path': host_path},
+                            API_SESSION)
+
+        if isinstance(result, tuple):
+            result, status = result
+            return result, status
+
+        return result
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/servers/modules/update', methods=['POST'])
+@require_api_key
+def update_module_api():
+    """Обновить модуль (в т.ч. перенести его в другого клиента)"""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        server_type = data.get('server_type', '').strip()
+        host_path = data.get('host_path', '').strip()
+        dry_run = data.get('dry_run', False)
+
+        if not server_type:
+            return jsonify({'success': False, 'error': 'server_type required'}), 400
+
+        payload = {'server_type': server_type, 'dry_run': 'true' if dry_run else 'false'}
+
+        if host_path:
+            payload['host_path'] = host_path
+
+        from files.web.sections.servers import update_module as do_update
+
+        result = do_update(payload, API_SESSION)
+
+        if isinstance(result, tuple):
+            result, status = result
+            return result, status
+
+        return result
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
