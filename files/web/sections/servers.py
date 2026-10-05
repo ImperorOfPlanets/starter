@@ -1104,6 +1104,17 @@ def install_server(data, session_obj):
                 'message': 'Репозиторий не настроен для этого сервера'
             }
 
+        # Зависимости PHP. Без них контейнеры стартуют, но artisan
+        # падает на отсутствии vendor/autoload.php, поэтому ставим
+        # сразу после клонирования. Composer работает на хосте.
+        deps = None
+        if (code_path / 'composer.json').exists():
+            deps = _ensure_php_dependencies(code_path, server_path, logger=logger)
+            if deps.get('status') == 'error':
+                # не молчим: сервер без зависимостей не рабочий
+                logger.warning('PHP dependencies not installed for %s: %s',
+                               server_path, deps.get('message'))
+
         # Выделяем подсеть если нужна (не для reverse-proxy)
         subnet_octet = 0
         if not type_info.get('is_reverse_proxy', False):
@@ -1177,6 +1188,16 @@ def install_server(data, session_obj):
                 )
             except Exception as e:
                 logger.warning('Failed to apply instance env for %s: %s', project_name, e)
+
+            # 3c. Переносим конфиги из репозитория в docker/.
+            #     compose монтирует их по ${PATH_APP_DOCKER}, а каталога
+            #     с файлами после клонирования там нет — compose создаст
+            #     на месте файлов каталоги и контейнеры не запустятся.
+            try:
+                _copy_docker_payload(code_path, docker_path, logger=logger)
+            except Exception as e:
+                logger.warning('Failed to copy docker payload for %s: %s',
+                               server_path, e)
 
             # 4. Копируем docker-compose.example
             shutil.copy2(compose_example, docker_path / 'docker-compose.yml')
@@ -1279,12 +1300,21 @@ def install_server(data, session_obj):
         # =================== КОНЕЦ ФИКСАЦИИ =================
 
         action = 'Переустановлен' if is_reinstall else 'Установлен'
-        return {'status': 'success', 'message': f'{type_info["name"]} {action} в {install_path}'}
+        result = {'status': 'success',
+                  'message': f'{type_info["name"]} {action} в {install_path}'}
+
+        # Установка без vendor/ формально успешна, но artisan в контейнерах
+        # не запустится, поэтому предупреждение возвращаем явно
+        if deps and deps.get('status') == 'error':
+            result['warnings'] = [f"PHP-зависимости не установлены: {deps.get('message')}"]
+        if deps and deps.get('status') == 'skipped':
+            result['php_dependencies'] = deps.get('reason', '')
+
+        return result
 
     except Exception as e:
         logger.error(f"Install server error: {e}")
         return {'status': 'error', 'message': str(e)}
-        return jsonify({'status': 'error', 'message': str(e)})
 
 
 def list_drives(data, session_obj):
@@ -1910,9 +1940,12 @@ def start_server(data, session_obj):
         return jsonify({'status': 'error', 'message': 'Registry not found'})
 
     reg_data = registry.load_registry()
-    server = next((s for s in reg_data.get('projects', []) if s.get('path') == server_id), None)
+    server = _find_server(reg_data, server_id)
     if not server:
-        return jsonify({'status': 'error', 'message': 'Server not found'})
+        return jsonify({'status': 'error',
+                    'message': f'Server not found: {server_id}',
+                    'server_id': server_id,
+                    'hint': 'Путь сверяется с реестром; проверьте значение server_id'}), 404
 
     server_path = server.get('path')
     docker_path = os.path.join(server_path, 'docker')
@@ -2060,9 +2093,12 @@ def get_server_logs(data, session_obj):
         return jsonify({'status': 'error', 'message': 'Registry not found'})
 
     reg_data = registry.load_registry()
-    server = next((s for s in reg_data.get('projects', []) if s.get('path') == server_id), None)
+    server = _find_server(reg_data, server_id)
     if not server:
-        return jsonify({'status': 'error', 'message': 'Server not found'})
+        return jsonify({'status': 'error',
+                    'message': f'Server not found: {server_id}',
+                    'server_id': server_id,
+                    'hint': 'Путь сверяется с реестром; проверьте значение server_id'}), 404
 
     server_path = server.get('path')
     docker_path = os.path.join(server_path, 'docker')
@@ -2120,9 +2156,12 @@ def stop_server(data, session_obj):
         return jsonify({'status': 'error', 'message': 'Registry not found'})
 
     reg_data = registry.load_registry()
-    server = next((s for s in reg_data.get('projects', []) if s.get('path') == server_id), None)
+    server = _find_server(reg_data, server_id)
     if not server:
-        return jsonify({'status': 'error', 'message': 'Server not found'})
+        return jsonify({'status': 'error',
+                    'message': f'Server not found: {server_id}',
+                    'server_id': server_id,
+                    'hint': 'Путь сверяется с реестром; проверьте значение server_id'}), 404
 
     server_path = server.get('path')
     docker_path = os.path.join(server_path, 'docker')
@@ -2174,17 +2213,54 @@ def remove_server(data, session_obj):
     registry = get('registry')
     if registry:
         reg_data = registry.load_registry()
-        reg_data['projects'] = [p for p in reg_data['projects'] if p.get('path') != server_id]
+        reg_data['projects'] = [p for p in reg_data['projects'] if not _paths_equal(p.get('path'), server_id)]
         registry.save_registry(reg_data)
 
-    # Удаляем папку сервера
+    # Удаляем папку сервера.
+    #
+    # Файлы .git создаются read-only, и на Windows shutil.rmtree на них
+    # падает с WinError 5, оставляя папку на месте. Раньше исключение
+    # глоталось, а вызывающий получал 200 и думал, что сервер удалён,
+    # из-за чего следующая установка шла поверх недоудалённой папки.
     import shutil
+    import stat as _stat
+
+    def _remove_readonly(func, path, exc_info):
+        """Снять «только чтение» и повторить удаление."""
+        try:
+            os.chmod(path, _stat.S_IWRITE | _stat.S_IREAD)
+            func(path)
+        except Exception:
+            # файл уже мог исчезнуть — тогда это не ошибка
+            if not os.path.exists(path):
+                return
+            raise exc_info[1]
+
     if server_path.exists():
         try:
-            shutil.rmtree(server_path)
-            return jsonify({'status': 'success', 'message': f'Сервер и папка {server_id} удалены'})
+            shutil.rmtree(server_path, onerror=_remove_readonly)
+
+            if server_path.exists():
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Сервер убран из реестра, но папка {server_id} осталась на месте',
+                    'path': str(server_path),
+                }), 500
+
+            return jsonify({
+                'status': 'success',
+                'success': True,
+                'message': f'Сервер и папка {server_id} удалены',
+            })
+
         except Exception as e:
-            return jsonify({'status': 'success', 'message': f'Сервер удалён из реестра, но папка не удалена: {str(e)}'})
+            return jsonify({
+                'status': 'error',
+                'success': False,
+                'message': f'Сервер убран из реестра, но папка не удалена: {str(e)}',
+                'path': str(server_path),
+                'error': str(e),
+            }), 500
 
     return jsonify({'status': 'success', 'message': 'Сервер удалён'})
 
@@ -2297,6 +2373,170 @@ def _json_get(path, dotted_key):
             return None
         node = node[part]
     return node
+
+
+def _ensure_php_dependencies(code_dir: Path, server_path: Path = None, logger=None,
+                            timeout=1800, force=False):
+    """Поставить зависимости PHP через composer на хосте.
+
+    Без этого контейнеры стартуют, но artisan не работает: нет
+    vendor/autoload.php. Composer запускается на хосте, а не в контейнере —
+    так быстрее, и vendor сразу виден в примонтированном code/.
+
+    Возвращает dict: {'status': 'ok'|'skipped'|'error', ...}
+    """
+    import subprocess
+
+    code_dir = Path(code_dir)
+
+    if not (code_dir / 'composer.json').exists():
+        return {'status': 'skipped', 'reason': 'нет composer.json'}
+
+    autoload = code_dir / 'vendor' / 'autoload.php'
+    if autoload.exists() and not force:
+        return {'status': 'skipped', 'reason': 'vendor/ уже есть'}
+
+    composer = _composer_cmd()
+    if not composer:
+        return {'status': 'error',
+                'message': 'composer не найден (PATH или composer.phar в проекте)'}
+
+    args = composer + ['install', '--no-interaction', '--prefer-dist',
+                       '--optimize-autoloader']
+
+    if logger:
+        logger.info('composer install in %s via %s', code_dir, composer[0])
+
+    try:
+        # _subprocess_kwargs уже содержит timeout, поэтому отдельно
+        # его не передаём — иначе subprocess.run получит его дважды
+        proc = subprocess.run(
+            args, cwd=str(code_dir), **_subprocess_kwargs(timeout),
+        )
+    except subprocess.TimeoutExpired:
+        return {'status': 'error', 'message': f'composer install не уложился в {timeout} с'}
+    except Exception as e:
+        return {'status': 'error', 'message': f'composer install: {str(e)}'}
+
+    output = ((proc.stdout or '') + (proc.stderr or '')).strip()
+
+    if proc.returncode != 0 or not autoload.exists():
+        if logger:
+            logger.warning('composer install failed in %s (rc=%s)', code_dir, proc.returncode)
+        return {'status': 'error',
+                'returncode': proc.returncode,
+                'message': f'composer install завершился с кодом {proc.returncode}',
+                'output': output[-2000:]}
+
+    if logger:
+        logger.info('composer install OK in %s', code_dir)
+
+    return {'status': 'ok', 'output': output[-500:]}
+
+
+def _copy_docker_payload(code_path: Path, docker_path: Path, logger=None):
+    """Перенести из репозитория в docker/ то, что монтируется в контейнеры.
+
+    docker-compose.yml монтирует ${PATH_APP_DOCKER}/configs/... и
+    ${PATH_APP_DOCKER}/dockerfiles/... . Если эти файлы на хосте
+    отсутствуют, docker compose создаёт на их месте каталоги, и внутри
+    контейнера exec падает с "Permission denied".
+
+    Каталоги времени выполнения (data, logs, nginx-runtime) только
+    создаются: там лежат база и логи, их перезаписывать нельзя.
+    """
+    import shutil
+
+    result = {'copied': {}, 'created': [], 'removed_stub_dirs': []}
+
+    src_docker = Path(code_path) / 'docker'
+    if not src_docker.is_dir():
+        return result
+
+    def copy_file(src, dst):
+        # compose мог создать каталог на месте файла — убираем, иначе
+        # копирование не пройдёт, а файл останется недоступным
+        if dst.is_dir():
+            try:
+                shutil.rmtree(dst)
+                result['removed_stub_dirs'].append(str(dst))
+            except Exception:
+                return
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+
+    # каталоги конфигурации: переносим всё, включая вложенные
+    for name in ('configs', 'dockerfiles', 'db'):
+        src = src_docker / name
+
+        if not src.is_dir():
+            continue
+
+        count = 0
+
+        for f in src.rglob('*'):
+            if f.is_file():
+                rel = f.relative_to(src)
+                copy_file(f, Path(docker_path) / name / rel)
+                count += 1
+
+        result['copied'][name] = count
+
+    # каталоги времени выполнения: создаём, если нет
+    for name in ('data', 'data/mysql', 'logs', 'nginx-runtime', 'nginx-runtime/conf.d'):
+        p = Path(docker_path) / name
+        if not p.exists():
+            p.mkdir(parents=True, exist_ok=True)
+            result['created'].append(name)
+
+    if logger:
+        logger.info('Docker payload for %s: copied=%s created=%s stub_dirs_removed=%d',
+                    docker_path, result['copied'], result['created'],
+                    len(result['removed_stub_dirs']))
+
+    return result
+
+
+def _norm_path(value):
+    """Привести путь к сравнимому виду: слэши, регистр, хвостовые разделители."""
+    if value is None:
+        return ''
+    s = str(value).strip().strip('"').strip("'")
+    if not s:
+        return ''
+    s = s.replace('/', os.sep).replace('\\', os.sep)
+    try:
+        s = os.path.normpath(s)
+    except Exception:
+        pass
+    return os.path.normcase(s)
+
+
+def _paths_equal(a, b):
+    """Один и тот же путь, записанный по-разному (слэши, регистр)."""
+    na, nb = _norm_path(a), _norm_path(b)
+    if na and nb:
+        return na == nb
+    return str(a) == str(b)
+
+
+def _find_server(reg_data, server_id):
+    """Запись реестра по пути установки.
+
+    server_id может прийти из URL с прямыми слэшами, а в реестре путь
+    записан с обратными, поэтому сравниваем нормализованно.
+    """
+    projects = (reg_data or {}).get('projects', [])
+    for s in projects:
+        if _paths_equal(s.get('path'), server_id):
+            return s
+    # запасной вариант: совпадение по имени папки установки
+    name = os.path.basename(_norm_path(server_id))
+    if name:
+        for s in projects:
+            if os.path.basename(_norm_path(s.get('path'))) == name:
+                return s
+    return None
 
 
 def _registry_entry(server_id):
