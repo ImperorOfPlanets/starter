@@ -1158,6 +1158,26 @@ def install_server(data, session_obj):
                 env_content = env_content.replace('${PATH_APP_PROJECT}', str(server_path / 'code'))
                 env_path.write_text(env_content, encoding='utf-8')
 
+            # 3b. Приводим .env к этому экземпляру.
+            #     Обязательно до шага 5: переменные из .env подставляются
+            #     в docker-compose.yml, поэтому пути, хосты БД/Redis/Qdrant
+            #     и порты должны быть уже окончательными.
+            #     Без этого шага второй клиент получает те же порты и
+            #     те же хосты, что и первый (в шаблоне клиента они жёстко
+            #     зашиты на первый экземпляр).
+            reserved_ports = _collect_reserved_ports()
+
+            try:
+                _apply_instance_env(
+                    docker_path,
+                    Path(str(server_path)),
+                    project_name,
+                    reserved_ports=reserved_ports,
+                    logger=logger,
+                )
+            except Exception as e:
+                logger.warning('Failed to apply instance env for %s: %s', project_name, e)
+
             # 4. Копируем docker-compose.example
             shutil.copy2(compose_example, docker_path / 'docker-compose.yml')
 
@@ -1454,6 +1474,260 @@ networks:
 """
 
     return services
+
+
+def _collect_reserved_ports():
+    """Порты, уже занятые установленными серверами.
+
+    Берётся из docker/.env каждого проекта в реестре (PORT, PORT_SSL и
+    производные *_PLUS). Без этого второй клиент получил бы тот же порт,
+    что и первый, и compose упал бы с "port is already allocated".
+    """
+    reserved = set()
+
+    try:
+        from files.core.oss.default.registry import RegistryModule
+        reg = RegistryModule.load_registry()
+    except Exception:
+        return reserved
+
+    for project in reg.get('projects', []):
+        env_path = Path(project.get('path', '')) / 'docker' / '.env'
+
+        if not env_path.exists():
+            continue
+
+        try:
+            content = env_path.read_text(encoding='utf-8', errors='replace')
+        except Exception:
+            continue
+
+        base_http = None
+        base_ssl = None
+
+        for line in content.replace('\r\n', '\n').split('\n'):
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+
+            key, _, value = line.partition('=')
+            key = key.strip()
+            value = value.strip()
+
+            if not value.isdigit():
+                continue
+
+            port = int(value)
+
+            if key == 'PORT':
+                base_http = port
+                reserved.add(port)
+            elif key == 'PORT_SSL':
+                base_ssl = port
+                reserved.add(port)
+            elif key.endswith('_PLUS') and base_http:
+                # смещение от базового порта
+                try:
+                    reserved.add(base_http + port)
+                except Exception:
+                    pass
+
+    return reserved
+
+
+def _port_is_free(port: int) -> bool:
+    """Занят ли TCP-порт на хосте."""
+    import socket
+
+    for family, socktype, proto, _canon, sa in socket.getaddrinfo(
+            socket.gethostname(), port, 0, socket.SOCK_STREAM):
+        try:
+            s = socket.socket(family, socktype, proto)
+            s.settimeout(0.3)
+            s.connect(sa)
+            s.close()
+            return False
+        except Exception:
+            continue
+
+    return True
+
+
+def _allocate_client_ports(reserved, http_range=(9000, 9199), ssl_range=(9400, 9599)):
+    """Подобрать свободные порты HTTP и SSL для клиента.
+
+    reserved — множество занятых портов (уже выделенные в этой установке).
+    Возвращает (http_port, ssl_port). Если свободного порта в диапазоне
+    нет — поднимаемся выше диапазона, но всё равно проверяем занятость.
+    """
+    used = set(reserved or ())
+
+    def pick(rng):
+        lo, hi = rng
+        for port in range(lo, hi):
+            if port in used:
+                continue
+            if _port_is_free(port):
+                used.add(port)
+                return port
+        # диапазон исчерпан — идём дальше подряд
+        port = hi
+        while port in used or not _port_is_free(port):
+            port += 1
+        used.add(port)
+        return port
+
+    return pick(http_range), pick(ssl_range)
+
+
+def _read_env_file(path):
+    """Разбор .env в OrderedDict-подобный dict + сохраняет порядок."""
+    lines = path.read_text(encoding='utf-8', errors='replace').replace('\r\n', '\n').split('\n')
+    values, order, comments = {}, [], {}
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith('#') and '=' in stripped:
+            key, _, value = stripped.partition('=')
+            key = key.strip()
+            values[key] = value.strip()
+            order.append(key)
+
+    return lines, values, order
+
+
+def _apply_instance_env(docker_path: Path, server_path: Path, project_name: str,
+                        reserved_ports=None, logger=None):
+    """Привести docker/.env к конкретному экземпляру.
+
+    Что делает:
+      - пути -> в папку этого экземпляра
+      - PROJECTNAME / COMPOSE_PROJECT_NAME -> имя папки
+      - DB_HOST / REDIS_HOST / QDRANT_HOST -> сервисы этого compose-проекта
+        (в compose ключи сервисов имеют вид <svc>-${PROJECTNAME})
+      - PORT / PORT_SSL -> свободные порты хоста
+      - добирает отсутствующие переменные, нужные compose
+      - генерирует пустые секреты, если их нет
+
+    Возвращает dict с применёнными значениями (для лога и отчёта).
+    """
+    env_path = docker_path / '.env'
+    if not env_path.exists():
+        return {}
+
+    lines, values, order = _read_env_file(env_path)
+    applied = {}
+
+    def put(key, value):
+        if key not in order:
+            order.append(key)
+        values[key] = str(value)
+        applied[key] = str(value)
+
+    code_dir = server_path / 'code'
+    docker_dir = server_path / 'docker'
+
+    # --- пути: в шаблоне могут быть как ${PATH_APP_*}, так и готовые пути
+    put('PATH_APP_CODE', code_dir)
+    put('PATH_APP_PROJECT', code_dir)
+    put('PATH_APP_DOCKER', docker_dir)
+    put('PATH_APP_DOCKER_LOGS', docker_dir / 'logs')
+    put('PATH_APP_STARTER', docker_dir / 'starter')
+
+    # --- имя проекта
+    put('PROJECTNAME', project_name)
+    put('COMPOSE_PROJECT_NAME', project_name)
+
+    # --- сервисы своего compose-проекта.
+    # Ключи сервисов в docker-compose: <svc>-${PROJECTNAME}, поэтому
+    # второй экземпляр обязан смотреть в свои контейнеры, а не в чужие.
+    put('DB_HOST', f'mariadb-{project_name}')
+    put('REDIS_HOST', f'redis-{project_name}')
+    put('QDRANT_HOST', f'http://qdrant-{project_name}:6333')
+
+    # --- порты
+    http_port, ssl_port = _allocate_client_ports(reserved_ports)
+    put('PORT', http_port)
+    put('PORT_SSL', ssl_port)
+
+    # смещения для второстепенных сервисов (redis, reverb, vite, ...)
+    for key, offset in (('PORT_REDIS_PLUS', 1), ('PORT_REVERB_PLUS', 2),
+                        ('PORT_VITE_PLUS', 3), ('PORT_MAIL_PLUS', 4),
+                        ('PORT_PGADMIN_PLUS', 5), ('PORT_QDRANT_HTTP_PLUS', 6),
+                        ('PORT_QDRANT_GRPC_PLUS', 7)):
+        if key in values or key not in order:
+            if not values.get(key):
+                put(key, offset)
+
+    # --- переменные, которых нет вовсе, но compose их использует
+    put('DIR_COPY', values.get('DIR_COPY') or '.')
+    put('PHP_CONTAINER', values.get('PHP_CONTAINER') or f'php-{project_name}')
+
+    # --- секреты: генерируем, если пусто
+    import secrets as _secrets
+
+    def ensure_secret(key, length=48):
+        if not values.get(key):
+            put(key, _secrets.token_urlsafe(length)[:length])
+        else:
+            applied.setdefault(key, values[key])
+
+    ensure_secret('DB_PASSWORD', 24)
+    ensure_secret('REVERB_APP_ID', 24)
+    ensure_secret('REVERB_APP_KEY', 48)
+    ensure_secret('REVERB_APP_SECRET', 48)
+    ensure_secret('OAUTH_SECRET', 48)
+
+    if not values.get('OAUTH_CLIENT_ID'):
+        # id клиента выдаёт myidon.site; пока пусто, но ключ должен существовать,
+        # иначе подстановка в compose убирает всю строку
+        put('OAUTH_CLIENT_ID', '')
+    else:
+        applied.setdefault('OAUTH_CLIENT_ID', values['OAUTH_CLIENT_ID'])
+
+    if not values.get('OAUTH_REDIRECT_URI'):
+        put('OAUTH_REDIRECT_URI', values.get('APP_URL', 'https://localhost') + '/oauth/callback')
+    else:
+        applied.setdefault('OAUTH_REDIRECT_URI', values['OAUTH_REDIRECT_URI'])
+
+    if not values.get('REVERB_HOST'):
+        put('REVERB_HOST', f'0.0.0.0')
+    else:
+        applied.setdefault('REVERB_HOST', values['REVERB_HOST'])
+
+    # REVERB_PORT — внутренний порт контейнера, хост не публикуется,
+    # поэтому конфликта между экземплярами нет
+    if not values.get('REVERB_PORT'):
+        put('REVERB_PORT', 8080)
+
+    if 'PORT_REVERB' not in values:
+        put('PORT_REVERB', 8080)
+
+    # --- сохраняем, сохраняя комментарии и порядок файла
+    out = []
+    written = set()
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith('#') and '=' in stripped:
+            key = stripped.partition('=')[0].strip()
+            if key in values:
+                out.append(f'{key}={values[key]}')
+                written.add(key)
+                continue
+        out.append(line)
+
+    for key in order:
+        if key not in written and key in values:
+            out.append(f'{key}={values[key]}')
+
+    env_path.write_text('\n'.join(out) + '\n', encoding='utf-8')
+
+    if logger:
+        logger.info('Instance env applied for %s: ports=%s/%s db=%s redis=%s',
+                    project_name, http_port, ssl_port,
+                    applied.get('DB_HOST'), applied.get('REDIS_HOST'))
+
+    return applied
 
 
 def _generate_env_example(server_type, type_info, server_name, subnet_octet=0, port=None, server_path=''):
@@ -2010,8 +2284,38 @@ def server_repo_info(data, session_obj):
         return {'status': 'error', 'message': str(e)}
 
 
-def update_server(data, session_obj):
-    """Обновить сервер через git pull"""
+def _json_get(path, dotted_key):
+    """Безопасное чтеение вложенного ключа из JSON — None вместо исключения."""
+    import json as _json
+    try:
+        data = _json.loads(Path(path).read_text(encoding='utf-8'))
+    except Exception:
+        return None
+    node = data
+    for part in (dotted_key or '').split('.'):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
+def _registry_entry(server_id):
+    """Запись реестра по пути установки."""
+    registry = get('registry')
+    if not registry:
+        return {}
+    try:
+        norm = str(Path(server_id).resolve())
+        for p in registry.load_registry().get('projects', []):
+            if p.get('path') == norm:
+                return p
+    except Exception as e:
+        logger.warning('registry read failed: %s', e)
+    return {}
+
+
+def update_plan(data, session_obj):
+    """Что именно будет сделано при обновлении этого сервера. Ничего не меняет."""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
         return {'status': 'error', 'message': 'Unauthorized'}
@@ -2020,40 +2324,375 @@ def update_server(data, session_obj):
     if not server_id:
         return {'status': 'error', 'message': 'Server ID required'}
 
-    import subprocess
+    from files.core.software.default.serverstrategy import ServerstrategyModule
 
+    entry = _registry_entry(server_id)
+    server_type = entry.get('project_type') or data.get('project_type') or ''
+    merged = _get_merged_server_types(session_obj)
+    type_info = merged.get(server_type) or SERVER_TYPES.get(server_type) or {}
+
+    return {
+        'status': 'success',
+        'server_id': server_id,
+        'server_type': server_type,
+        'port': entry.get('port', 0),
+        'plan': ServerstrategyModule.describe(server_type, type_info),
+    }
+
+
+def update_preflight(data, session_obj):
+    """Фаза 0 без изменений: коммиты, ветка, грязное дерево, что изменится."""
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return {'status': 'error', 'message': 'Unauthorized'}
+
+    server_id = data.get('server_id')
+    if not server_id:
+        return {'status': 'error', 'message': 'Server ID required'}
+
+    from files.core.software.default.serverstrategy import ServerstrategyModule
+
+    entry = _registry_entry(server_id)
+    server_type = entry.get('project_type') or data.get('project_type') or ''
+    merged = _get_merged_server_types(session_obj)
+    type_info = merged.get(server_type) or SERVER_TYPES.get(server_type) or {}
+
+    pre = ServerstrategyModule.preflight(
+        server_id, server_type, type_info,
+        port=entry.get('port', 0))
+
+    status = 'success' if pre.get('ok') else 'error'
+    return {'status': status, 'preflight': pre}
+
+
+def update_server(data, session_obj):
+    """Обновить сервер — по стратегии типа из SERVER_TYPES.
+
+    Фазы: preflight -> backup -> pull -> deps -> docker-конфиг -> migrate
+          -> restart -> verify, с откатом при провале проверки.
+    dry_run=1 выполняет только preflight.
+    """
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return {'status': 'error', 'message': 'Unauthorized'}
+
+    server_id = data.get('server_id')
+    if not server_id:
+        return {'status': 'error', 'message': 'Server ID required'}
+
+    from files.core.software.default.serverstrategy import ServerstrategyModule
+
+    dry_run = str(data.get('dry_run', '')).lower() in ('1', 'true', 'yes')
     server_path = Path(server_id)
-    code_path = server_path / 'code'
 
-    if not (code_path / '.git').exists():
-        return {'status': 'error', 'message': 'Not a git repository'}
+    # модуль ставится внутрь клиента — у него другой путь обновления
+    entry = _registry_entry(server_id)
+    server_type = entry.get('project_type') or data.get('project_type') or ''
+    merged = _get_merged_server_types(session_obj)
+    type_info = merged.get(server_type) or SERVER_TYPES.get(server_type) or {}
 
+    if type_info.get('is_module'):
+        return update_module({**data, 'dry_run': '1' if dry_run else '0'}, session_obj)
+
+    if not type_info:
+        return {'status': 'error',
+                'message': f'Тип {server_type!r} не найден в SERVER_TYPES — обновление невозможно'}
+
+    plan = ServerstrategyModule.get_update_plan(server_type, type_info)
+    if not plan.get('enabled', True):
+        return {'status': 'error',
+                'message': f'Обновление для типа {server_type} отключено в конфигурации'}
+
+    port = entry.get('port', 0)
+
+    # ---------- ФАЗА 0: PREFLIGHT ----------
+    pre = ServerstrategyModule.preflight(server_id, server_type, type_info, port=port)
+    if not pre.get('ok'):
+        return {'status': 'error', 'message': pre.get('error', 'preflight failed'),
+                'code': pre.get('code'), 'preflight': pre}
+
+    if dry_run:
+        return {'status': 'success', 'dry_run': True,
+                'message': 'Проверка завершена, изменения не применялись',
+                'preflight': pre, 'plan': ServerstrategyModule.describe(server_type, type_info)}
+
+    if pre.get('no_changes'):
+        return {'status': 'success', 'message': 'Обновлений нет — сервер на последнем коммите',
+                'preflight': pre}
+
+    report = {'phases': {}, 'server_type': server_type,
+              'strategy': plan['strategy'], 'path': str(server_path)}
+
+    # ---------- БЭКАП ----------
+    bk = ServerstrategyModule.backup(server_path, pre, plan)
+    report['backup'] = bk
+    if not bk.get('ok'):
+        return {'status': 'error',
+                'message': 'Не удалось создать резервную копию — обновление остановлено',
+                **report}
+
+    def rollback(reason):
+        if not plan.get('rollback_on_failure'):
+            return
+        report['rollback'] = ServerstrategyModule.rollback(server_path, pre, bk)
+        report['rollback_reason'] = reason
+
+    # ---------- ФАЗА 1: PULL ----------
+    res = ServerstrategyModule.pull(server_path, pre, plan)
+    report['phases']['pull'] = res
+    if not res.get('ok'):
+        return {'status': 'error',
+                'message': f"git pull не удался: {res.get('error', '')}", **report}
+
+    # ---------- ФАЗА 2: ЗАВИСИМОСТИ ----------
+    if plan['strategy'] in (ServerstrategyModule.STRATEGY_PHP,
+                            ServerstrategyModule.STRATEGY_PYTHON):
+        res = ServerstrategyModule.run_dependencies(server_path, pre, plan)
+        report['phases']['dependencies'] = res
+        for step in res.get('steps', []):
+            if step.get('warning'):
+                report.setdefault('warnings', []).append(step['warning'])
+        if not res.get('ok'):
+            rollback('dependencies_failed')
+            return {'status': 'error',
+                    'message': 'Зависимости не установились — выполнен откат', **report}
+
+    # ---------- ФАЗА 3: DOCKER-КОНФИГ ----------
+    if (plan.get('docker') or {}).get('regenerate_compose') or \
+       (plan.get('docker') or {}).get('merge_env_example'):
+        res = ServerstrategyModule.regenerate_docker_config(
+            server_path, pre, plan, type_info, server_type)
+        report['phases']['docker_config'] = res
+        if res.get('env', {}).get('added'):
+            report.setdefault('env_added', []).extend(res['env']['added'])
+        if not res.get('compose', {}).get('ok', True):
+            rollback('docker_config_failed')
+            return {'status': 'error',
+                    'message': f"Не удалось обновить docker-compose.yml: "
+                               f"{res['compose'].get('reason', '')}", **report}
+
+    # ---------- ФАЗА 4: МИГРАЦИИ ----------
+    if plan['strategy'] == ServerstrategyModule.STRATEGY_PHP:
+        res = ServerstrategyModule.run_migrations(server_path, plan)
+        report['phases']['migrate'] = res
+        if not res.get('ok'):
+            rollback('migrate_failed')
+            return {'status': 'error',
+                    'message': f"Миграции не прошли: {res.get('error', '')}. "
+                               f"{res.get('hint', '')}", **report}
+
+    # ---------- ФАЗА 5: ПЕРЕЗАПУСК ----------
+    res = ServerstrategyModule.restart(server_path, plan, pre)
+    report['phases']['restart'] = res
+    if not res.get('ok'):
+        rollback('restart_failed')
+        return {'status': 'error', 'message': 'Не удалось перезапустить контейнеры — '
+                                             'выполнен откат', **report}
+
+    # ---------- ФАЗА 6: ПРОВЕРКА ----------
+    res = ServerstrategyModule.verify(server_path, port, server_type, plan)
+    report['phases']['verify'] = res
+    if not res.get('ok'):
+        rollback('verify_failed')
+        return {'status': 'error',
+                'message': 'После обновления сервер не отвечает — выполнен откат',
+                **report}
+
+    report['message'] = f"{type_info.get('name', server_type)} обновлён"
+
+    if report.get('env_added'):
+        report['message'] += f". Добавлено новых переменных в .env: {len(report['env_added'])}"
+
+    return {'status': 'success', **report}
+
+
+def update_module(data, session_obj):
+    """Обновить модуль клиента (wall/shop/pages/payments/roles).
+
+    Модуль не клонируется в свой путь — он лежит в code/ хоста как
+    composer-пакет. Поэтому обновление = composer update пакета +
+    artisan migrate + пересоздание php-контейнера.
+    """
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return {'status': 'error', 'message': 'Unauthorized'}
+
+    server_type = (data.get('server_type') or '').strip()
+    host_path = (data.get('host_path') or data.get('server_id') or '').strip()
+
+    merged = _get_merged_server_types(session_obj)
+    if server_type not in merged:
+        return {'status': 'error', 'message': f'Unknown server type: {server_type}'}
+
+    type_info = merged[server_type]
+    package = type_info.get('composer_package')
+    if not package:
+        return {'status': 'error', 'message': f'{server_type}: composer_package не задан'}
+    if not host_path:
+        return {'status': 'error',
+                'message': 'Укажите host_path — клиент, в котором установлен модуль'}
+
+    host = Path(host_path)
+    code_dir = host / 'code'
+    vendor_dir = code_dir / 'vendor' / package.replace('/', os.sep)
+
+    if not vendor_dir.exists():
+        return {'status': 'error', 'code': 'NOT_INSTALLED',
+                'message': f'{package} не установлен в {host.name}'}
+
+    dry_run = str(data.get('dry_run', '')).lower() in ('1', 'true', 'yes')
+
+    # где лежит исходник пакета
+    module_path = type_info.get('module_path') or ''
+    installed_version, available_version, has_update = None, None, None
+
+    if module_path and Path(module_path).exists():
+        src_cj = Path(module_path) / 'composer.json'
+        if src_cj.exists():
+            available_version = _json_get(src_cj, 'version') or 'dev'
+
+    cj = code_dir / 'composer.json'
+    if cj.exists():
+        installed_version = _json_get(cj, f'packages.{package}.version')
+
+    installed_sha = ''
+    if (module_path / '.git').exists():
+        r = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=module_path,
+                           capture_output=True, text=True)
+        installed_sha = (r.stdout or '').strip()[:12]
+
+    if dry_run:
+        return {
+            'status': 'success', 'dry_run': True,
+            'message': f'Проверка модуля {package} в {host.name}, изменения не применялись',
+            'module': {'package': package, 'host': str(host),
+                       'module_path': module_path, 'installed_version': installed_version,
+                       'available_version': available_version,
+                       'installed_commit': installed_sha,
+                       'path_exists': Path(module_path).exists()},
+        }
+
+    from files.core.software.default.serverstrategy import ServerstrategyModule
+    plan = ServerstrategyModule.get_update_plan(server_type, type_info)
+
+    composer = _composer_cmd()
+    if not composer:
+        return {'status': 'error', 'message': 'Composer не найден на хосте'}
+
+    logger.info(f'Updating module {package} in {code_dir}')
+    proc = subprocess.run(
+        composer + ['update', package, '--no-interaction',
+                    '--working-dir=' + str(code_dir)],
+        **_subprocess_kwargs(plan['timeout']['deps'])
+    )
+    if proc.returncode != 0:
+        tail = ((proc.stdout or '') + (proc.stderr or ''))[-1500:]
+        return {'status': 'error', 'module_update_failed': True,
+                'message': f'composer update {package} вернул код {proc.returncode}',
+                'output': tail}
+
+    project = _compose_project_name(host, '')
+    container = 'php-' + project
+
+    migrate_error = None
     try:
-        kw = _subprocess_kwargs(60)
-        result = subprocess.run(
-            ['git', 'pull'],
-            cwd=str(code_path), **kw
-        )
-
-        if result.returncode == 0:
-            compose_file = server_path / 'docker' / 'docker-compose.yml'
-            if compose_file.exists():
-                kw2 = _subprocess_kwargs(120)
-                docker_result = subprocess.run(
-                    _compose_cmd(server_path, 'up', '-d'),
-                    cwd=str(server_path / 'docker'), **kw2
-                )
-                if docker_result.returncode == 0:
-                    return {'status': 'success', 'message': 'Сервер обновлён и перезапущен'}
-                else:
-                    return {'status': 'success', 'message': 'Код обновлён, но ошибка перезапуска: ' + docker_result.stderr[:300]}
-            else:
-                return {'status': 'success', 'message': 'Код обновлён: ' + result.stdout[:200]}
-        else:
-            return {'status': 'error', 'message': 'Ошибка git pull: ' + result.stderr[:300]}
-
+        mig = subprocess.run(['docker', 'exec', container, 'php', 'artisan', 'migrate', '--force'],
+                             **_subprocess_kwargs(plan['timeout']['migrate']))
+        if mig.returncode != 0:
+            migrate_error = (mig.stderr or mig.stdout or '')[-1500:]
     except Exception as e:
-        return {'status': 'error', 'message': str(e)}
+        migrate_error = str(e)
+
+    compose = host / 'docker' / 'docker-compose.yml'
+    restarted = False
+    if compose.exists():
+        try:
+            up = subprocess.run(
+                _compose_cmd(host, 'up', '-d', '--force-recreate', container),
+                cwd=str(host / 'docker'), **_subprocess_kwargs(300))
+            restarted = up.returncode == 0
+        except Exception as e:
+            logger.warning('module restart failed: %s', e)
+
+    if migrate_error:
+        return {'status': 'error', 'code': 'MIGRATE_FAILED',
+                'message': f'{package} обновлён в {host.name}, но миграции не прошли. '
+                           f'Вручную: docker exec {container} php artisan migrate --force',
+                'output': migrate_error, 'restarted': restarted}
+
+    return {'status': 'success', 'restarted': restarted,
+            'message': f'{package} обновлён в {host.name}'}
+
+
+def update_all_clients(data, session_obj):
+    """Обновить все клиенты из реестра — по стратегии каждого.
+
+    По умолчанию — только dry_run по всем: сначала показываем, что
+    изменится, и лишь потом применяем.
+    """
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return {'status': 'error', 'message': 'Unauthorized'}
+
+    apply_changes = str(data.get('apply', '')).lower() in ('1', 'true', 'yes')
+    only = (data.get('project_type') or '').strip()
+
+    registry = get('registry')
+    if not registry:
+        return {'status': 'error', 'message': 'Registry not available'}
+
+    merged = _get_merged_server_types(session_obj)
+    results = []
+
+    for p in registry.load_registry().get('projects', []):
+        if not p.get('installed_by_starter'):
+            continue
+        stype = p.get('project_type', '')
+        type_info = merged.get(stype) or SERVER_TYPES.get(stype) or {}
+        if not type_info:
+            continue
+        if not (type_info.get('is_client') or type_info.get('is_module')):
+            continue
+        if only and stype != only:
+            continue
+
+        payload = {
+            'server_id': p['path'],
+            'project_type': stype,
+            'dry_run': '0' if apply_changes else '1',
+        }
+        if type_info.get('is_module'):
+            payload['server_type'] = stype
+            payload['host_path'] = p['path']
+            payload['server_id'] = p['path']
+
+        try:
+            res = update_server(payload, session_obj)
+        except Exception as e:
+            res = {'status': 'error', 'message': str(e)}
+
+        results.append({
+            'path': p['path'],
+            'name': Path(p['path']).name,
+            'project_type': stype,
+            'status': res.get('status'),
+            'message': res.get('message'),
+            'strategy': (res.get('strategy') or
+                         (res.get('plan') or {}).get('strategy')),
+            'preflight': res.get('preflight'),
+        })
+
+    ok = [r for r in results if r['status'] == 'success']
+    bad = [r for r in results if r['status'] != 'success']
+
+    return {
+        'status': 'success' if not bad else 'partial',
+        'apply': apply_changes,
+        'total': len(results),
+        'succeeded': len(ok),
+        'failed': len(bad),
+        'results': results,
+    }
 
 
 def server_git_log(data, session_obj):

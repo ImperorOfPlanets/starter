@@ -129,6 +129,17 @@ def list_server_types():
                 'default_port': info.get('default_port'),
                 'default_folder': info.get('default_folder', key),
                 'repository': info.get('repository'),
+
+                # Природа типа. Без этих полей потребитель не может
+                # отличить клиент от модуля и понять, что ставится
+                # внутрь клиента через composer, а что клонируется
+                # как отдельный сервер.
+                'is_client': bool(info.get('is_client')),
+                'is_module': bool(info.get('is_module')),
+
+                # Данные модуля (при is_module = true)
+                'composer_package': info.get('composer_package'),
+                'module_path': info.get('module_path'),
             })
 
         return jsonify({'success': True, 'server_types': types, 'count': len(types)})
@@ -239,20 +250,88 @@ def remove_server(server_id):
 @api.route('/servers/<path:server_id>/update', methods=['POST'])
 @require_api_key
 def update_server(server_id):
-    """Обновить сервер через git pull (не удаляет .env и docker configs)"""
+    """Обновить сервер по стратегии его типа из SERVER_TYPES.
+
+    Фазы: preflight -> backup -> pull -> deps -> docker-конфиг -> migrate
+          -> restart -> verify, с откатом при провале проверки.
+
+    Тело запроса (JSON или form):
+        dry_run       1 — только проверка, ничего не применяется
+        project_type  подсказка, если записи нет в реестре
+    """
     try:
         from files.web.sections.servers import update_server as do_update
 
-        result = do_update({'server_id': server_id}, API_SESSION)
+        payload = request.get_json(force=True, silent=True) or {}
+        if not payload:
+            payload = {k: v for k, v in request.form.items()}
+        payload['server_id'] = server_id
+
+        result = do_update(payload, API_SESSION)
 
         if isinstance(result, tuple):
             result, status = result
             return result, status
 
-        return result
+        status = 200 if result.get('status') == 'success' else 400
+        return jsonify(result), status
 
     except Exception as e:
         logger.error(f"API update_server error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/servers/<path:server_id>/update/plan', methods=['GET'])
+@require_api_key
+def update_server_plan(server_id):
+    """План обновления: какая стратегия и какие фазы выполнятся."""
+    try:
+        from files.web.sections.servers import update_plan
+
+        result = update_plan({'server_id': server_id}, API_SESSION)
+        status = 200 if result.get('status') == 'success' else 400
+        return jsonify(result), status
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/servers/<path:server_id>/update/preflight', methods=['GET'])
+@require_api_key
+def update_server_preflight(server_id):
+    """Фаза 0 без изменений: коммиты, ветка, грязное дерево, что приедет."""
+    try:
+        from files.web.sections.servers import update_preflight
+
+        result = update_preflight({'server_id': server_id}, API_SESSION)
+        status = 200 if result.get('status') == 'success' else 400
+        return jsonify(result), status
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api.route('/servers/update-clients', methods=['POST'])
+@require_api_key
+def update_all_clients():
+    """Обновить все клиенты из реестра — по стратегии каждого типа.
+
+    По умолчанию dry_run по всем: показываем, что изменится, ничего не трогая.
+    Тело: {"apply": 1, "project_type": "clientv2"} — применить (опционально фильтр).
+    """
+    try:
+        from files.web.sections.servers import update_all_clients as do_update_all
+
+        payload = request.get_json(force=True, silent=True) or {}
+        if not payload:
+            payload = {k: v for k, v in request.form.items()}
+
+        result = do_update_all(payload, API_SESSION)
+        status = 200 if result.get('status') == 'success' else 409
+        return jsonify(result), status
+
+    except Exception as e:
+        logger.error(f"API update_all_clients error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
