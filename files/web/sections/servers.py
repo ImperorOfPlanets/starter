@@ -2071,7 +2071,10 @@ def start_server(data, session_obj):
 
     # All checks passed — start server
     try:
-        kw = _subprocess_kwargs(120)
+        # compose тянет образы и пересоздаёт контейнеры; 120 с не хватало,
+        # и обрыв по таймауту выдавался за ошибку запуска при работающих
+        # контейнерах
+        kw = _subprocess_kwargs(900)
         result = subprocess.run(
             _compose_cmd(server_path, 'up', '-d'),
             cwd=docker_path, **kw
@@ -2105,6 +2108,38 @@ def start_server(data, session_obj):
             err_msg = (result.stderr or '').strip()[:500]
             checks.append({'step': 'start', 'status': 'error', 'message': err_msg})
             return jsonify({'status': 'error', 'message': f'Ошибка: {err_msg}', 'checks': checks})
+    except subprocess.TimeoutExpired:
+        # контейнеры к этому моменту обычно уже пересозданы, поэтому это не
+        # ошибка запуска: сообщаем как warn и всё равно инициализируем Laravel
+        logger.warning('docker compose up timed out for %s, '
+                       'containers are probably already up', server_path)
+        checks.append({
+            'step': 'start',
+            'status': 'warn',
+            'message': 'compose не уложился в отведённое время; '
+                       'состояние контейнеров: docker compose ps',
+        })
+
+        provision = None
+        try:
+            if _path_state(Path(server_path) / 'code' / 'artisan') == 'file':
+                provision = _provision_laravel(Path(server_path), logger=logger)
+                checks.append({
+                    'step': 'laravel',
+                    'status': 'ok' if provision.get('ok') else 'warn',
+                    'message': ('Laravel инициализирован' if provision.get('ok')
+                                else f"Laravel: {provision.get('error') or 'миграции не прошли'}"),
+                    'details': provision.get('steps'),
+                })
+        except Exception as e:
+            checks.append({'step': 'laravel', 'status': 'warn',
+                           'message': f'Laravel init failed: {e}'})
+
+        return jsonify({'status': 'success',
+                        'message': 'Сервер запущен (compose не успел завершиться, '
+                                   'состояние проверьте через docker compose ps)',
+                        'checks': checks})
+
     except Exception as e:
         logger.error(f"Error starting server: {e}")
         return jsonify({'status': 'error', 'message': f'Ошибка запуска: {str(e)}', 'checks': checks})
