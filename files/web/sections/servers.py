@@ -62,6 +62,32 @@ def _compose_cmd(server_path, *args):
     return ['docker', 'compose', '-p', project, *args]
 
 
+def _compose_env(docker_path):
+    """Окружение для docker compose — без «чужих» переменных стартера.
+
+    Стартер пишет свой веб-порт в os.environ (starter.py: PORT=2000).
+    У docker compose переменная окружения имеет приоритет над .env
+    проекта, поэтому ${PORT:-80} в compose-resolved в порт панели (2000),
+    а не в выделенный проекту (9000). Источник истины — docker/.env
+    проекта: убираем из наследуемого окружения всё, что там задано,
+    плюс служебные переменные compose.
+    """
+    env = os.environ.copy()
+    for key in ('COMPOSE_FILE', 'COMPOSE_PROJECT_NAME', 'COMPOSE_PROFILES',
+                'COMPOSE_CONVERT_WINDOWS_PATHS', 'COMPOSE_IGNORE_ORPHANS'):
+        env.pop(key, None)
+    try:
+        env_path = Path(docker_path) / '.env'
+        if env_path.exists():
+            for line in env_path.read_text(encoding='utf-8', errors='replace').splitlines():
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    env.pop(line.partition('=')[0].strip(), None)
+    except Exception:
+        pass
+    return env
+
+
 def t(key: str, **kwargs) -> str:
     i18n = get('i18n')
     if i18n and hasattr(i18n, 'translate'):
@@ -96,6 +122,7 @@ def _check_server_status(server_path, project_type):
         result = subprocess.run(
             ['docker', 'compose', '-p', _compose_project_name(compose_path.parent.parent, ''),
              '-f', str(compose_path), 'ps', '-a', '--format', '{{.State}}'],
+            env=_compose_env(compose_path.parent),
             **kw
         )
         if result.returncode == 0 and result.stdout.strip():
@@ -888,7 +915,8 @@ def install_module(data, session_obj):
         try:
             subprocess.run(
                 _compose_cmd(host, 'up', '-d', '--force-recreate', 'php-' + project),
-                cwd=str(docker_path), **_subprocess_kwargs(300))
+                cwd=str(docker_path), env=_compose_env(docker_path),
+                **_subprocess_kwargs(300))
         except Exception as e:
             logger.warning('restart failed: %s', e)
 
@@ -1062,6 +1090,7 @@ def install_server(data, session_obj):
                         ['docker', 'compose', '-p',
                          _compose_project_name(server_path, server_type),
                          '-f', str(compose_file), 'down'],
+                        env=_compose_env(compose_file.parent),
                         **kw
                     )
                 except Exception:
@@ -1983,8 +2012,15 @@ def start_server(data, session_obj):
                         env_vars[k.strip()] = v.strip()
             with open(compose_file, 'r', encoding='utf-8') as f:
                 content = f.read()
+            # Поддерживаем и ${VAR}, и ${VAR:-default} — иначе шаблон
+            # с дефолтом не заменяется, и порт решает сам compose
+            # при запуске (из окружения стартера, а не из .env проекта).
+            import re as _re
             for k, v in env_vars.items():
-                content = content.replace('${' + k + '}', v)
+                if not v:
+                    continue
+                pattern = r'\$\{' + _re.escape(k) + r'(:-[^}]*)?\}'
+                content = _re.sub(pattern, lambda m, val=v: val, content)
             with open(compose_file, 'w', encoding='utf-8') as f:
                 f.write(content)
 
@@ -2011,7 +2047,7 @@ def start_server(data, session_obj):
     if not has_errors:
         try:
             kw = _subprocess_kwargs(30)
-            r = subprocess.run(_compose_cmd(server_path, 'config', '--quiet'), cwd=docker_path, **kw)
+            r = subprocess.run(_compose_cmd(server_path, 'config', '--quiet'), cwd=docker_path, env=_compose_env(docker_path), **kw)
             if r.returncode == 0:
                 checks.append({'step': 'compose', 'status': 'ok', 'message': 'docker-compose.yml is valid'})
             else:
@@ -2049,14 +2085,14 @@ def start_server(data, session_obj):
     if not has_errors:
         try:
             kw = _subprocess_kwargs(60)
-            r = subprocess.run(_compose_cmd(server_path, 'images', '--format', 'json'), cwd=docker_path, capture_output=True, text=True, timeout=60, encoding='utf-8', errors='replace')
+            r = subprocess.run(_compose_cmd(server_path, 'images', '--format', 'json'), cwd=docker_path, env=_compose_env(docker_path), capture_output=True, text=True, timeout=60, encoding='utf-8', errors='replace')
             if r.returncode == 0 and r.stdout.strip():
                 checks.append({'step': 'images', 'status': 'ok', 'message': 'Images are available'})
             else:
                 # Need to build
                 checks.append({'step': 'images', 'status': 'info', 'message': 'Building images...'})
                 build_kw = _subprocess_kwargs(600)
-                build_r = subprocess.run(_compose_cmd(server_path, 'build'), cwd=docker_path, **build_kw)
+                build_r = subprocess.run(_compose_cmd(server_path, 'build'), cwd=docker_path, env=_compose_env(docker_path), **build_kw)
                 if build_r.returncode == 0:
                     checks.append({'step': 'images', 'status': 'ok', 'message': 'Images built successfully'})
                 else:
@@ -2077,7 +2113,7 @@ def start_server(data, session_obj):
         kw = _subprocess_kwargs(900)
         result = subprocess.run(
             _compose_cmd(server_path, 'up', '-d'),
-            cwd=docker_path, **kw
+            cwd=docker_path, env=_compose_env(docker_path), **kw
         )
         if result.returncode == 0:
             server['status'] = 'running'
@@ -2178,7 +2214,7 @@ def get_server_logs(data, session_obj):
         kw = _subprocess_kwargs(30)
         r = subprocess.run(
             _compose_cmd(server_path, 'ps', '-a', '--format', 'json'),
-            cwd=docker_path, capture_output=True, text=True, timeout=30, encoding='utf-8', errors='replace'
+            cwd=docker_path, env=_compose_env(docker_path), capture_output=True, text=True, timeout=30, encoding='utf-8', errors='replace'
         )
         if r.returncode == 0 and r.stdout.strip():
             for line in r.stdout.strip().split('\n'):
@@ -2239,7 +2275,7 @@ def stop_server(data, session_obj):
         kw = _subprocess_kwargs(60)
         result = subprocess.run(
             _compose_cmd(server_path, 'down'),
-            cwd=docker_path, **kw
+            cwd=docker_path, env=_compose_env(docker_path), **kw
         )
         if result.returncode == 0:
             # Обновляем статус в реестре
@@ -2271,6 +2307,7 @@ def remove_server(data, session_obj):
             subprocess.run(
                 ['docker', 'compose', '-p', _compose_project_name(server_path, ''),
                  '-f', str(compose_file), 'down', '-v'],
+                env=_compose_env(compose_file.parent),
                 **kw
             )
         except Exception:
@@ -2646,7 +2683,46 @@ def _provision_laravel(server_path: Path, logger=None, timeout=1800,
     else:
         steps.append({'step': 'storage:link', 'ok': True, 'output': 'ссылка уже есть'})
 
-    ok = art('migrate', '--force')
+    # Ждём БД: сразу после compose up mariadb ещё инициализируется,
+    # и migrate падает с Connection refused. Проверяем TCP-порт БД
+    # изнутри php-контейнера (в compose-сети он виден по имени сервиса).
+    db_host = f'mariadb-{project}'
+    db_port = 3306
+    try:
+        docker_env = server_path / 'docker' / '.env'
+        if docker_env.exists():
+            for line in docker_env.read_text(encoding='utf-8', errors='replace').splitlines():
+                line = line.strip()
+                if line.startswith('DB_HOST='):
+                    db_host = line.split('=', 1)[1].strip() or db_host
+                elif line.startswith('DB_PORT=') and line.split('=', 1)[1].strip().isdigit():
+                    db_port = int(line.split('=', 1)[1].strip())
+    except Exception:
+        pass
+
+    db_deadline = time.time() + 120
+    db_ready = False
+    while time.time() < db_deadline:
+        try:
+            r = subprocess.run(
+                ['docker', 'exec', container, 'php', '-r',
+                 'exit(@fsockopen(getenv("DB_HOST") ?: "%s", %d) ? 0 : 1);' % (db_host, db_port)],
+                **_subprocess_kwargs(15))
+            if r.returncode == 0:
+                db_ready = True
+                break
+        except Exception:
+            pass
+        time.sleep(3)
+    steps.append({'step': 'wait-db', 'ok': db_ready,
+                  'output': f'{db_host}:{db_port} ' + ('готова' if db_ready else 'не отвечает')})
+
+    ok = False
+    for _attempt in range(3):
+        ok = art('migrate', '--force')
+        if ok:
+            break
+        time.sleep(5)
 
     if logger:
         logger.info('Laravel provisioned for %s: %s', project,
@@ -3080,7 +3156,8 @@ def update_module(data, session_obj):
         try:
             up = subprocess.run(
                 _compose_cmd(host, 'up', '-d', '--force-recreate', container),
-                cwd=str(host / 'docker'), **_subprocess_kwargs(300))
+                cwd=str(host / 'docker'), env=_compose_env(host / 'docker'),
+                **_subprocess_kwargs(300))
             restarted = up.returncode == 0
         except Exception as e:
             logger.warning('module restart failed: %s', e)

@@ -221,6 +221,7 @@ def _kill_stale_starter_processes():
 
 def start_service_mode():
     """Режим работы как сервис/демон: веб-сервер + трей"""
+    global _web_spawn_in_progress
     from files.core.utils.loader_utils import get
     logger = LogManager.get_logger('main')
     logger.info("Запуск в сервисном режиме...")

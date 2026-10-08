@@ -100,6 +100,21 @@ def compose_cmd(server_path, *args):
     return ['docker', 'compose', '-p', compose_project_name(server_path, ''), *args]
 
 
+def _compose_env_for(docker_path):
+    """Окружение compose без переменных стартера (PORT=2000 и т.п.).
+
+    Иначе ${PORT:-80} в compose resolves в порт панели, а не в порт
+    проекта из docker/.env. Ленивый импорт — чтобы не было цикла
+    с web-слоем.
+    """
+    try:
+        from files.web.sections.servers import _compose_env
+        return _compose_env(docker_path)
+    except Exception:
+        import os
+        return os.environ.copy()
+
+
 def find_compose_example(server_path):
     """Ищет docker-compose.example в клоне. Три кандидата — как в install_server."""
     server_path = Path(server_path)
@@ -654,9 +669,11 @@ class ServerstrategyModule:
     # ==================== ФАЗА 2: ЗАВИСИМОСТИ ====================
 
     @staticmethod
-    def _run(cmd, cwd, timeout, log_tail=800):
+    def _run(cmd, cwd, timeout, log_tail=800, env=None):
         try:
             kw = _subprocess_kwargs(timeout, cwd=cwd)
+            if env is not None:
+                kw['env'] = env
             r = subprocess.run(cmd, **kw)
             out = ((r.stdout or '') + (r.stderr or '')).strip()
             return {'ok': r.returncode == 0, 'code': r.returncode, 'output': out[-log_tail:]}
@@ -839,9 +856,11 @@ class ServerstrategyModule:
         if need_build:
             steps.append({'name': 'build',
                           **ServerstrategyModule._run(compose_cmd(server_path, 'build'),
-                                                       docker_path, plan['timeout']['docker'])})
+                                                       docker_path, plan['timeout']['docker'],
+                                                       env=_compose_env_for(docker_path))})
         up = ServerstrategyModule._run(compose_cmd(server_path, 'up', '-d'),
-                                       docker_path, plan['timeout']['docker'])
+                                       docker_path, plan['timeout']['docker'],
+                                       env=_compose_env_for(docker_path))
         steps.append({'name': 'up', **up})
 
         return {'ok': up['ok'], 'steps': steps,
@@ -921,7 +940,8 @@ class ServerstrategyModule:
         try:
             up = ServerstrategyModule._run(
                 compose_cmd(server_path, 'up', '-d'),
-                server_path / 'docker', plan['timeout']['docker'])
+                server_path / 'docker', plan['timeout']['docker'],
+                env=_compose_env_for(server_path / 'docker'))
             out['restart'] = up
         except Exception as e:
             out['restart'] = {'ok': False, 'error': str(e)}
