@@ -626,24 +626,37 @@ class UpdatesModule:
 
     @staticmethod
     def get_current_server_info(data, session):
-        """Получает информацию о текущем сервере"""
+        """Информация о типах серверов и стратегиях их обновления.
+
+        Раньше здесь был импорт ServerUpdates (с неверным регистром —
+        класс называется ServerupdatesModule), поэтому функция всегда
+        падала в except. Теперь отдаём то, что реально есть.
+        """
         try:
-            from files.core.oss.default.serverupdates import ServerUpdates
             from files.configs.server_types import SERVER_TYPES
-            
-            server_type = ServerUpdates.get_current_server_type()
-            if not server_type or server_type not in SERVER_TYPES:
-                return jsonify({
-                    'success': False,
-                    'message': 'Server type not configured'
+            from files.core.software.default.serverstrategy import ServerstrategyModule
+
+            current = data.get('server_type') if isinstance(data, dict) else None
+
+            types = []
+            for stype, info in SERVER_TYPES.items():
+                plan = ServerstrategyModule.get_update_plan(stype, info)
+                types.append({
+                    'server_type': stype,
+                    'name': info.get('name', stype),
+                    'strategy': plan['strategy'],
+                    'update_enabled': plan.get('enabled', True),
+                    'auto_update': plan.get('auto_update', False),
+                    'steps': ServerstrategyModule.describe(stype, info)['steps'],
+                    'is_module': bool(info.get('is_module')),
+                    'is_client': bool(info.get('is_client')),
                 })
-            
-            server_info = SERVER_TYPES[server_type]
-            
+
             return jsonify({
                 'success': True,
-                'server_type': server_type,
-                'server_info': server_info
+                'server_type': current,
+                'server_info': SERVER_TYPES.get(current) if current else None,
+                'types': types,
             })
         except Exception as e:
             logger.error(f"Error in get_current_server_info: {str(e)}")

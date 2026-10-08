@@ -143,32 +143,109 @@ def update_starter_settings(settings):
 
 # =============================================================================
 # ФУНКЦИИ ДЛЯ СЕРВЕРНЫХ ПРОЕКТОВ
+#
+# Раньше здесь стоял ServerupdatesModule, но он был сломан в трёх местах:
+#   * отдавал ключ 'targets', а движок читал 'TARGETS' → 0 файлов;
+#   * get_global('server_<type>_path') = None → TypeError;
+#   * DOWNLOAD_URL был git-URL, а движок ждал zip-архив.
+# Плюс исключения глотались и наружу уходил success: true.
+#
+# Теперь обновление серверов идёт через ServerstrategyModule —
+# по стратегии типа из SERVER_TYPES. Эти функции оставлены как тонкие
+# обёртки, чтобы старые вызовы из UI продолжили работать.
 # =============================================================================
 
 def get_server_updates_status():
-    """Получает статус обновлений для всех серверов"""
-    from files.configs.server_types import SERVER_TYPES
-    from files.core.oss.default.serverupdates import ServerupdatesModule
-    
-    return ServerupdatesModule.get_all_server_updates_status()
+    """Статус обновлений по всем УСТАНОВЛЕННЫМ серверам (из реестра)."""
+    from files.core.oss.default.update_checker import UpdateCheckerModule
+
+    results = UpdateCheckerModule.check_all_installed_projects()
+    updates = [r for r in results if r.get('has_update')]
+
+    return {
+        'status': 'success',
+        'servers': results,
+        'has_any_update': bool(updates),
+        'updates_count': len(updates),
+        'total': len(results),
+    }
 
 
-def update_server(server_type):
-    """Обновляет сервер"""
-    from files.core.oss.default.serverupdates import ServerupdatesModule
-    return ServerupdatesModule.update_server(server_type)
+def update_server(server_type, server_id=None, dry_run=False):
+    """Обновляет сервер по стратегии его типа.
+
+    server_id — путь установки. Если не передан, берётся первый
+    установленный проект этого типа из реестра.
+    """
+    from files.core.oss.default.registry import RegistryModule
+
+    if not server_id:
+        registry = RegistryModule.load_registry()
+        for p in registry.get('projects', []):
+            if p.get('project_type') == server_type and p.get('installed_by_starter'):
+                server_id = p.get('path')
+                break
+
+    if not server_id:
+        return {'status': 'error',
+                'message': f'Не найден установленный сервер типа {server_type}'}
+
+    from files.web.sections.servers import update_server as do_update
+    return do_update({
+        'server_id': server_id,
+        'project_type': server_type,
+        'dry_run': '1' if dry_run else '0',
+    }, {'user': {'id': 'api', 'name': 'API'}})
 
 
 def check_server_updates(server_type):
-    """Проверяет обновления сервера"""
-    from files.core.oss.default.serverupdates import ServerupdatesModule
-    return ServerupdatesModule.check_server_updates(server_type)
+    """Проверяет обновления одного типа — реальным git, а не по таймеру."""
+    from files.configs.server_types import SERVER_TYPES
+    from files.core.oss.default.registry import RegistryModule
+    from files.core.oss.default.update_checker import UpdateCheckerModule
+
+    info = SERVER_TYPES.get(server_type)
+    if not info:
+        return {'status': 'error', 'message': f'Unknown server type: {server_type}'}
+
+    repo = info.get('repository') or {}
+    path = None
+    registry = RegistryModule.load_registry()
+    for p in registry.get('projects', []):
+        if p.get('project_type') == server_type and p.get('installed_by_starter'):
+            path = str(Path(p['path']) / 'code')
+            break
+
+    return UpdateCheckerModule.check_project_updates(
+        project_type=server_type,
+        repo_url=repo.get('url', ''),
+        branch=repo.get('branch', 'main'),
+        project_path=path,
+    )
 
 
 def get_server_update_history(server_type):
-    """Получает историю обновлений сервера"""
-    from files.core.oss.default.serverupdates import ServerupdatesModule
-    return ServerupdatesModule.get_server_update_history(server_type)
+    """История обновлений — последние 10 коммитов репозитория."""
+    from files.configs.server_types import SERVER_TYPES
+    from files.core.oss.default.registry import RegistryModule
+
+    info = SERVER_TYPES.get(server_type)
+    if not info:
+        return {'status': 'error', 'message': f'Unknown server type: {server_type}'}
+
+    path = None
+    registry = RegistryModule.load_registry()
+    for p in registry.get('projects', []):
+        if p.get('project_type') == server_type and p.get('installed_by_starter'):
+            path = p.get('path')
+            break
+
+    if not path:
+        return {'status': 'error', 'log': [], 'has_update': False,
+                'message': 'Сервер не установлен'}
+
+    from files.web.sections.servers import server_git_log
+    return server_git_log({'server_id': path}, {'user': {'id': 'api', 'name': 'API'}})
 
 
 # =============================================================================
@@ -188,24 +265,32 @@ def download_update_log(update_id):
 
 
 def check_all_updates():
-    """Проверяет обновления для всех компонентов"""
+    """Проверяет обновления для всех компонентов.
+
+    Серверы — только установленные (из реестра), реальным git.
+    Раньше перебирались все SERVER_TYPES и has_update считался
+    по времени с последней записи в лог, а не по коммитам.
+    """
     starter_info = check_starter_updates()
-    
-    from files.configs.server_types import SERVER_TYPES
-    from files.core.oss.default.serverupdates import ServerupdatesModule
-    
+
+    from files.core.oss.default.update_checker import UpdateCheckerModule
+
     server_status = []
-    for server_type in SERVER_TYPES.keys():
-        status = ServerupdatesModule.check_server_updates(server_type)
+    for r in UpdateCheckerModule.check_all_installed_projects():
         server_status.append({
-            'type': server_type,
-            'has_update': status.get('has_update', False),
-            'update_available': status.get('update_available', False)
+            'type': r.get('project_type'),
+            'name': r.get('name'),
+            'path': r.get('path'),
+            'strategy': r.get('strategy'),
+            'has_update': r.get('has_update', False),
+            'local_commit': (r.get('local_commit') or '')[:12],
+            'remote_commit': (r.get('remote_commit') or '')[:12],
         })
-    
+
     return {
         'starter': starter_info,
-        'servers': server_status
+        'servers': server_status,
+        'servers_with_updates': [s for s in server_status if s['has_update']],
     }
 
 

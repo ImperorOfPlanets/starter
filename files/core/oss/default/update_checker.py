@@ -127,37 +127,58 @@ class UpdateCheckerModule(BaseModule):
 
     @staticmethod
     def check_all_installed_projects() -> List[Dict]:
-        """Проверяет обновления для ВСЕХ установленных проектов"""
+        """Проверяет обновления для ВСЕХ УСТАНОВЛЕННЫХ проектов.
+
+        Раньше здесь перебирались SERVER_TYPES и путь искался подстрокой
+        имени папки — из-за этого неустановленные типы тоже опрашивались,
+        а tts/stt/voice/slam делили один тип. Теперь источник истины —
+        реестр, и тип берётся из project_path точным совпадением.
+        """
         from files.configs.server_types import SERVER_TYPES
         from files.core.oss.default.registry import RegistryModule
+        from files.core.software.default.serverstrategy import ServerstrategyModule
 
         results = []
         registry = RegistryModule.load_registry()
-        installed_paths = {Path(p['path']).name: p['path'] for p in registry.get('projects', [])}
 
-        for server_type, server_info in SERVER_TYPES.items():
-            repo = server_info.get('repository', {})
-            if not repo:
+        for project in registry.get('projects', []):
+            if not project.get('installed_by_starter'):
                 continue
 
-            repo_url = repo.get('url', '')
-            branch = repo.get('branch', 'main')
+            project_path = project.get('path', '')
+            server_type = project.get('project_type', '')
+            if not project_path or not server_type:
+                continue
 
-            project_path = installed_paths.get(server_type)
-            if not project_path:
-                for name, path in installed_paths.items():
-                    if server_type in name or name in server_type:
-                        project_path = path
-                        break
+            server_info = SERVER_TYPES.get(server_type)
+            if not server_info:
+                continue
+
+            repo = server_info.get('repository', {})
+            if not repo or not repo.get('url'):
+                continue
+
+            if server_info.get('is_module'):
+                # модуль лежит внутри чужого code/, обновляется иначе
+                continue
 
             result = UpdateCheckerModule.check_project_updates(
                 project_type=server_type,
-                repo_url=repo_url,
-                branch=branch,
-                project_path=project_path
+                repo_url=repo.get('url', ''),
+                branch=repo.get('branch', 'main'),
+                project_path=str(Path(project_path) / 'code')
             )
             result['name'] = server_info.get('name', server_type)
             result['description'] = server_info.get('description', '')
+            result['path'] = project_path
+            result['strategy'] = ServerstrategyModule.resolve_strategy(
+                server_type, server_info)
+            result['update_enabled'] = bool(
+                (ServerstrategyModule.get_update_plan(server_type, server_info)
+                 .get('enabled', True)))
+            result['auto_update'] = bool(
+                (ServerstrategyModule.get_update_plan(server_type, server_info)
+                 .get('auto_update', False)))
             results.append(result)
 
         return results

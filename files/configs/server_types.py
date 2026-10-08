@@ -1,5 +1,96 @@
 # files/configs/server_types.py
 
+"""
+Секция `update` в SERVER_TYPES — контракт обновления сервера.
+
+Значения по умолчанию живут в ServerstrategyModule.DEFAULT_UPDATE.
+Здесь переопределяется только то, что отличается для конкретного типа.
+
+Ключи:
+  strategy            php_docker | python_docker | static_docker | composer_module
+  auto_update         автообновление по расписанию (по умолчанию выкл)
+  allow_dirty         разрешить pull при незакоммиченных изменениях
+  force_reset         reset --hard вместо pull (ТЕРЯЕТ локальные правки)
+  pull_mode           --ff-only (по умолчанию) | --rebase
+  backup              git_bundle / docker_dir
+  deps                composer / npm / npm_build / pip: True|False|'auto'
+  docker              regenerate_compose / merge_env_example /
+                      apply_storage_settings / build / restart
+  migrate             True|False|'auto'  (artisan migrate --force)
+  health_check        enabled / retries / interval
+  rollback_on_failure откат на предыдущий коммит при провале проверки
+  timeout             pull / deps / docker / migrate, секунды
+"""
+
+# Общий профиль для всех клиентов на PHP/Laravel.
+# Клиенты отличаются только репозиторием и названием, порядок обновления
+# у них одинаковый.
+UPDATE_CLIENT_PHP = {
+    'strategy': 'php_docker',
+    'auto_update': False,
+    'allow_dirty': False,
+    'force_reset': False,
+    'pull_mode': '--ff-only',
+    'backup': {'git_bundle': True, 'docker_dir': True},
+    'deps': {
+        'composer': 'auto',   # только если composer.lock изменился
+        'npm': 'auto',        # только если package.json есть в code/
+        'npm_build': True,
+    },
+    'docker': {
+        'regenerate_compose': True,
+        'merge_env_example': True,
+        'apply_storage_settings': True,
+        'build': 'auto',      # только если Dockerfile изменился
+        'restart': True,
+    },
+    'migrate': 'auto',
+    'health_check': {'enabled': True, 'retries': 12, 'interval': 5},
+    'rollback_on_failure': True,
+    'timeout': {'pull': 180, 'deps': 900, 'docker': 900, 'migrate': 600},
+}
+
+# Профиль для python-сервисов: git + requirements.txt, без compose-регенерации
+UPDATE_PYTHON = {
+    'strategy': 'python_docker',
+    'auto_update': False,
+    'allow_dirty': False,
+    'pull_mode': '--ff-only',
+    'backup': {'git_bundle': True, 'docker_dir': True},
+    'deps': {
+        'composer': False,
+        'npm': False,
+        'pip': 'auto',        # только если requirements.txt изменился
+    },
+    'docker': {
+        'regenerate_compose': True,
+        'merge_env_example': True,
+        'apply_storage_settings': False,
+        'build': 'auto',
+        'restart': True,
+    },
+    'migrate': False,
+    'health_check': {'enabled': True, 'retries': 12, 'interval': 5},
+    'rollback_on_failure': True,
+    'timeout': {'pull': 180, 'deps': 600, 'docker': 900, 'migrate': 600},
+}
+
+# Модули, которые ставятся внутрь клиента через composer require.
+# Обновление модуля — это composer update пакета внутри чужого code/,
+# плюс миграции и пересоздание php-контейнера.
+UPDATE_COMPOSER_MODULE = {
+    'strategy': 'composer_module',
+    'auto_update': False,
+    'backup': {'git_bundle': False, 'docker_dir': False},
+    'deps': {'composer': True, 'npm': False, 'pip': False},
+    'migrate': True,
+    'docker': {'restart': False, 'regenerate_compose': False,
+               'merge_env_example': False, 'apply_storage_settings': False},
+    'rollback_on_failure': True,
+    'timeout': {'pull': 60, 'deps': 900, 'docker': 300, 'migrate': 600},
+}
+
+
 SERVER_TYPES = {
     'reverse_proxy': {
         'name': 'Reverse Proxy',
@@ -16,6 +107,12 @@ SERVER_TYPES = {
         'order': 0,
         'can_have_multiple': False,
         'default_folder': 'revers-proxy',
+        # Явная стратегия: nginx + сертификаты, зависимостей нет
+        'strategy': 'static_docker',
+        'update': {
+            'deps': {'composer': False, 'npm': False, 'pip': False},
+            'migrate': False,
+        },
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/revers-prroksi.git',
             'branch': 'master',
@@ -40,6 +137,7 @@ SERVER_TYPES = {
         'docker_compose_path': 'docker/docker-compose.yml',
         'env_example_path': 'docker/.env.example',
         'is_client': True,
+        'update': UPDATE_CLIENT_PHP,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/client.git',
             'branch': 'master'
@@ -63,6 +161,7 @@ SERVER_TYPES = {
         'docker_compose_path': 'docker/docker-compose.yml',
         'env_example_path': 'docker/.env.example',
         'is_client': True,
+        'update': UPDATE_CLIENT_PHP,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/clientv2.git',
             'branch': 'master'
@@ -86,6 +185,7 @@ SERVER_TYPES = {
         'docker_compose_path': 'docker/docker-compose.yml',
         'env_example_path': 'docker/.env.example',
         'is_client': True,
+        'update': UPDATE_CLIENT_PHP,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/clientv2.git',
             'branch': 'master'
@@ -109,6 +209,7 @@ SERVER_TYPES = {
         'docker_compose_path': 'docker/docker-compose.yml',
         'env_example_path': 'docker/.env.example',
         'is_client': True,
+        'update': UPDATE_CLIENT_PHP,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/clientv2.git',
             'branch': 'master'
@@ -132,6 +233,7 @@ SERVER_TYPES = {
         'docker_compose_path': 'docker/docker-compose.yml',
         'env_example_path': 'docker/.env.example',
         'is_client': True,
+        'update': UPDATE_CLIENT_PHP,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/clientv2.git',
             'branch': 'master'
@@ -152,6 +254,7 @@ SERVER_TYPES = {
         'order': 2,
         'can_have_multiple': True,
         'default_folder': 'embeddings',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/embeddings.git',
             'branch': 'master'
@@ -172,6 +275,7 @@ SERVER_TYPES = {
         'order': 3,
         'can_have_multiple': True,
         'default_folder': 'voice',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/voice.git',
             'branch': 'master'
@@ -192,6 +296,7 @@ SERVER_TYPES = {
         'order': 4,
         'can_have_multiple': True,
         'default_folder': 'voice',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/voice.git',
             'branch': 'master'
@@ -212,6 +317,7 @@ SERVER_TYPES = {
         'order': 5,
         'can_have_multiple': True,
         'default_folder': 'browser',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/browser.git',
             'branch': 'master'
@@ -235,6 +341,7 @@ SERVER_TYPES = {
         # Стартер клонирует его в <путь>/code, поэтому .py лежат в корне репо,
         # а docker/ — под docker/, как и требует install_server.
         'default_folder': 'slam_server',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/slam-api.git',
             'branch': 'master'
@@ -263,10 +370,39 @@ SERVER_TYPES = {
         'order': 7,
         'can_have_multiple': True,
         'default_folder': 'yolo',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/yolo.git',
             'branch': 'master'
         }
+    },
+    'carto_v2': {
+        'name': 'Картография v2',
+        'name_en': 'Cartography v2',
+        'name_cn': '制图 v2',
+        'description': 'Дистрибутивная картография и семантическое сканирование помещений v2: AR-поза клиента, EMA, многолучевая триангуляция, зоны OPEN/CLOSED/FORBIDDEN/PRIVATE, фолбэк-SLAM на LK-потоке. Интерфейс совместим с slam v1',
+        'description_en': 'Distributed mapping and semantic space scanning v2: client AR-pose, EMA, multi-ray triangulation, OPEN/CLOSED/FORBIDDEN/PRIVATE zones, LK-flow fallback SLAM. Interface compatible with slam v1',
+        'description_cn': '分布式制图与语义空间扫描 v2：客户端 AR 位姿、EMA、多射线三角测量、OPEN/CLOSED/FORBIDDEN/PRIVATE 区域、LK 流回退 SLAM。接口与 slam v1 兼容',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 8009,
+        'order': 8,
+        'can_have_multiple': True,
+        'default_folder': 'carto-v2',
+        'docker_compose_path': 'docker/docker-compose.yml',
+        'env_example_path': 'docker/.env.example',
+        'update': UPDATE_PYTHON,
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/carto-v2.git',
+            'branch': 'master'
+        },
+        'ports': {
+            'api': 8009,
+            'yolo': 8008,
+        },
+        'optional_servers': ['yolo', 'fileserver'],
     },
     'voice': {
         'name': 'Голосовой помощник',
@@ -283,6 +419,7 @@ SERVER_TYPES = {
         'order': 9,
         'can_have_multiple': True,
         'default_folder': 'voice',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/voice.git',
             'branch': 'master'
@@ -303,6 +440,7 @@ SERVER_TYPES = {
         'order': 10,
         'can_have_multiple': True,
         'default_folder': 'sfera',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/sfera.git',
             'branch': 'master'
@@ -323,6 +461,7 @@ SERVER_TYPES = {
         'order': 11,
         'can_have_multiple': True,
         'default_folder': 'filesserver',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/files-server.git',
             'branch': 'master'
@@ -363,6 +502,7 @@ SERVER_TYPES = {
         'order': 13,
         'can_have_multiple': True,
         'default_folder': 'phone',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/phono-app.git',
             'branch': 'master'
@@ -383,6 +523,7 @@ SERVER_TYPES = {
         'order': 14,
         'can_have_multiple': True,
         'default_folder': 'opencode-server',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/opencode-server.git',
             'branch': 'master'
@@ -403,6 +544,7 @@ SERVER_TYPES = {
         'order': 17,
         'can_have_multiple': True,
         'default_folder': 'wake_word',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/wake-word.git',
             'branch': 'master'
@@ -423,6 +565,7 @@ SERVER_TYPES = {
         'order': 18,
         'can_have_multiple': True,
         'default_folder': 'streams',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/sfera-strimer.git',
             'branch': 'master'
@@ -445,6 +588,7 @@ SERVER_TYPES = {
         'default_folder': 'social-router',
         'docker_compose_path': 'docker/docker-compose.yml',
         'env_example_path': 'docker/.env.example',
+        'update': UPDATE_PYTHON,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/social-bridge.git',
             'branch': 'master'
@@ -468,6 +612,7 @@ SERVER_TYPES = {
         'is_module': True,
         'composer_package': 'imperor/wall',
         'module_path': 'C:/control/WALL',
+        'update': UPDATE_COMPOSER_MODULE,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/client-wall.git',
             'branch': 'master'
@@ -491,6 +636,7 @@ SERVER_TYPES = {
         'is_module': True,
         'composer_package': 'imperor/shop',
         'module_path': 'C:/control/SHOP',
+        'update': UPDATE_COMPOSER_MODULE,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/client-shop.git',
             'branch': 'master'
@@ -514,6 +660,7 @@ SERVER_TYPES = {
         'is_module': True,
         'composer_package': 'imperor/pages',
         'module_path': 'C:/control/PAGES',
+        'update': UPDATE_COMPOSER_MODULE,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/client-pages.git',
             'branch': 'master'
@@ -537,6 +684,7 @@ SERVER_TYPES = {
         'is_module': True,
         'composer_package': 'imperor/payments',
         'module_path': 'C:/control/PAYMENTS',
+        'update': UPDATE_COMPOSER_MODULE,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/client-payments.git',
             'branch': 'master'
@@ -560,6 +708,7 @@ SERVER_TYPES = {
         'is_module': True,
         'composer_package': 'imperor/client-roles',
         'module_path': 'C:/control/ROLES',
+        'update': UPDATE_COMPOSER_MODULE,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/client-roles.git',
             'branch': 'master'
