@@ -115,6 +115,32 @@ def _compose_env_for(docker_path):
         return os.environ.copy()
 
 
+def git_root(server_path):
+    """Где лежит .git: code/ (Laravel-раскладка) или корень проекта.
+
+    CLIENTv2 и другие php-проекты клонируются в code/, у python-сервисов
+    (core, stt, streams, carto-v2) репозиторий — в корне проекта, в нём
+    уже лежат code/ и docker/. Обновление должно работать с обоими.
+    """
+    server_path = Path(server_path)
+    if (server_path / 'code' / '.git').exists():
+        return server_path / 'code'
+    if (server_path / '.git').exists():
+        return server_path
+    return server_path / 'code'
+
+
+def _in_changed(changed, name):
+    """Файл менялся в этом обновлении.
+
+    Пути в git diff корневые: для Laravel-раскладки 'composer.lock',
+    для корневой — 'code/requirements.txt' или 'docker/docker-compose.example'.
+    """
+    name = name.lower()
+    return any(f.lower() == name or f.lower().endswith('/' + name)
+               for f in changed)
+
+
 def find_compose_example(server_path):
     """Ищет docker-compose.example в клоне. Три кандидата — как в install_server."""
     server_path = Path(server_path)
@@ -466,6 +492,7 @@ class ServerstrategyModule:
         """
         server_path = Path(server_path)
         code_path = server_path / 'code'
+        git_path = git_root(server_path)
         plan = ServerstrategyModule.get_update_plan(server_type, type_info)
 
         result = {
@@ -474,11 +501,12 @@ class ServerstrategyModule:
             'server_type': server_type,
             'path': str(server_path),
             'code_path': str(code_path),
+            'git_path': str(git_path),
             'port': port,
         }
 
-        if not (code_path / '.git').exists():
-            return {**result, 'error': 'Не git-репозиторий: нет code/.git',
+        if not (git_path / '.git').exists():
+            return {**result, 'error': 'Не git-репозиторий: нет ни code/.git, ни .git в корне',
                     'code': 'NOT_A_REPO'}
 
         expected = (type_info or {}).get('repository') or {}
@@ -486,13 +514,13 @@ class ServerstrategyModule:
         want_url = expected.get('url', '')
 
         # --- текущее состояние
-        _, local_sha, _ = _git(code_path, 'rev-parse', 'HEAD')
-        _, branch, _ = _git(code_path, 'branch', '--show-current')
-        _, remote_url, _ = _git(code_path, 'remote', 'get-url', 'origin')
+        _, local_sha, _ = _git(git_path, 'rev-parse', 'HEAD')
+        _, branch, _ = _git(git_path, 'branch', '--show-current')
+        _, remote_url, _ = _git(git_path, 'remote', 'get-url', 'origin')
 
         # --- рабочее дерево
         # без strip: ведущие пробелы - часть кодов состояния porcelain
-        rc, dirty_raw, _ = _git(code_path, 'status', '--porcelain', strip=False)
+        rc, dirty_raw, _ = _git(git_path, 'status', '--porcelain', strip=False)
         dirty = [l for l in dirty_raw.splitlines() if l.strip()] if rc == 0 else []
 
         result.update({
@@ -543,40 +571,42 @@ class ServerstrategyModule:
         plan_fetch = {'fetch': True, 'behind': None, 'ahead': None,
                       'incoming': [], 'changed_files': []}
         if remote_url:
-            rc, _, err = _git(code_path, 'fetch', '--quiet', 'origin', timeout=plan['timeout']['pull'])
+            rc, _, err = _git(git_path, 'fetch', '--quiet', 'origin', timeout=plan['timeout']['pull'])
             if rc != 0:
                 result['warnings'] = warnings + [f'git fetch не удался: {err[:200]}']
             else:
-                _, remote_sha, _ = _git(code_path, 'rev-parse', '@{u}')
+                _, remote_sha, _ = _git(git_path, 'rev-parse', '@{u}')
                 plan_fetch['remote_commit'] = remote_sha
                 if local_sha and remote_sha:
-                    behind = _git(code_path, 'rev-list', '--count', 'HEAD..@{u}')[1]
-                    ahead = _git(code_path, 'rev-list', '--count', '@{u}..HEAD')[1]
+                    behind = _git(git_path, 'rev-list', '--count', 'HEAD..@{u}')[1]
+                    ahead = _git(git_path, 'rev-list', '--count', '@{u}..HEAD')[1]
                     plan_fetch['behind'] = int(behind) if behind.isdigit() else None
                     plan_fetch['ahead'] = int(ahead) if ahead.isdigit() else None
                     _, log, _ = _git(
-                        code_path, 'log', '--oneline', '--no-decorate',
+                        git_path, 'log', '--oneline', '--no-decorate',
                         '-20', f'HEAD..@{{u}}', timeout=30)
                     plan_fetch['incoming'] = log.splitlines()
                     _, files, _ = _git(
-                        code_path, 'diff', '--name-only', 'HEAD..@{u}', timeout=60)
+                        git_path, 'diff', '--name-only', 'HEAD..@{u}', timeout=60)
                     plan_fetch['changed_files'] = files.splitlines()
                     plan_fetch['up_to_date'] = (local_sha == remote_sha)
         result['fetch'] = plan_fetch
 
         # --- чего ждём по файлам (для решения "нужны ли зависимости")
+        # пути в diff корневые: для корневого репозитория requirements.txt
+        # приезжает как code/requirements.txt — сравниваем по последнему сегменту
         changed = set(plan_fetch['changed_files'])
         result['detected'] = {
             'composer': bool((code_path / 'composer.json').exists()),
             'composer_lock': (code_path / 'composer.lock').exists(),
-            'composer_lock_changed': 'composer.lock' in changed,
+            'composer_lock_changed': _in_changed(changed, 'composer.lock'),
             'package_json': (code_path / 'package.json').exists(),
-            'package_json_changed': 'package.json' in changed or 'package-lock.json' in changed,
+            'package_json_changed': _in_changed(changed, 'package.json') or _in_changed(changed, 'package-lock.json'),
             'requirements_txt': (code_path / 'requirements.txt').exists(),
-            'requirements_changed': 'requirements.txt' in changed,
+            'requirements_changed': _in_changed(changed, 'requirements.txt'),
             'artisan': (code_path / 'artisan').exists(),
             'dockerfile_changed': any(
-                f.lower().startswith(('dockerfile', 'code/docker/'))
+                f.lower().startswith(('dockerfile', 'code/docker/', 'docker/'))
                 for f in changed
             ),
             'compose_example_changed': any(
@@ -601,7 +631,7 @@ class ServerstrategyModule:
     def backup(server_path, preflight: dict, plan: dict) -> dict:
         """Бэкап перед обновлением. Возвращает пути для отката."""
         server_path = Path(server_path)
-        code_path = server_path / 'code'
+        code_path = git_root(server_path)
         stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         backup_dir = server_path / 'storage' / 'starter_backups' / stamp
         backup_cfg = (plan.get('backup') or {})
@@ -647,7 +677,7 @@ class ServerstrategyModule:
     def pull(server_path, preflight: dict, plan: dict) -> dict:
         """git pull --ff-only. Merge-коммит запрещён — иначе расхождение веток
         при следующем обновлении уже не разрешится."""
-        code_path = Path(server_path) / 'code'
+        code_path = git_root(Path(server_path))
 
         if plan.get('force_reset'):
             target = preflight.get('fetch', {}).get('remote_commit', '')

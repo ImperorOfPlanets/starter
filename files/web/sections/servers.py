@@ -51,6 +51,48 @@ def _compose_project_name(server_path, server_type: str) -> str:
     return name or 'server'
 
 
+def _ensure_fingerprint(docker_path: Path, logger=None) -> str:
+    """Стабильный идентификатор экземпляра сервера (клиента).
+
+    Записывается в docker/.env как CLIENT_FINGERPRINT и дублируется в
+    реестр. Нужен, чтобы отличать экземпляры клиентов независимо от пути:
+    путь меняется при переезде, fingerprint — нет.
+
+    force-переустановка пересоздаёт только code/, поэтому docker/.env с
+    fingerprint переживает её — клиент предъявляет тот же идентификатор.
+    Повторный вызов идемпотентен: если значение уже есть — возвращается оно.
+    """
+    import uuid
+
+    env_path = Path(docker_path) / '.env'
+    try:
+        content = env_path.read_text(encoding='utf-8') if env_path.exists() else ''
+    except Exception as e:
+        if logger:
+            logger.warning('Fingerprint: cannot read %s: %s', env_path, e)
+        content = ''
+
+    m = re.search(r'^CLIENT_FINGERPRINT=([A-Za-z0-9-]+)\s*$', content, flags=re.MULTILINE)
+    if m and m.group(1).strip():
+        return m.group(1).strip()
+
+    fingerprint = uuid.uuid4().hex
+
+    if env_path.exists():
+        try:
+            if content and not content.endswith('\n'):
+                content += '\n'
+            content += f'\n# Стабильный идентификатор экземпляра (starter). Не менять вручную.\nCLIENT_FINGERPRINT={fingerprint}\n'
+            env_path.write_text(content, encoding='utf-8')
+        except Exception as e:
+            if logger:
+                logger.warning('Fingerprint: cannot write %s: %s', env_path, e)
+
+    if logger:
+        logger.info('Fingerprint generated for %s: %s', docker_path, fingerprint)
+    return fingerprint
+
+
 def _compose_cmd(server_path, *args):
     """Команда docker compose с явным -p <имя папки>.
 
@@ -192,8 +234,10 @@ def _get_user_servers(session_obj):
                 # Проверяем git и обновления
                 has_git = False
                 has_update = False
-                code_path = Path(path) / 'code'
-                if (code_path / '.git').exists():
+                git_path = Path(path) / 'code'
+                if not (git_path / '.git').exists() and (Path(path) / '.git').exists():
+                    git_path = Path(path)
+                if (git_path / '.git').exists():
                     has_git = True
                     try:
                         import subprocess
@@ -201,21 +245,21 @@ def _get_user_servers(session_obj):
                         # Проверяем remote URL
                         remote_url = subprocess.run(
                             ['git', 'remote', 'get-url', 'origin'],
-                            cwd=str(code_path), **kw
+                            cwd=str(git_path), **kw
                         ).stdout.strip()
                         if remote_url:
                             # Fetch и сравниваем коммиты
                             subprocess.run(
                                 ['git', 'fetch', '--quiet'],
-                                cwd=str(code_path), **_subprocess_kwargs(10)
+                                cwd=str(git_path), **_subprocess_kwargs(10)
                             )
                             local = subprocess.run(
                                 ['git', 'rev-parse', 'HEAD'],
-                                cwd=str(code_path), **kw
+                                cwd=str(git_path), **kw
                             ).stdout.strip()
                             remote_hash = subprocess.run(
                                 ['git', 'rev-parse', '@{u}'],
-                                cwd=str(code_path), **kw
+                                cwd=str(git_path), **kw
                             ).stdout.strip()
                             has_update = bool(remote_hash) and local != remote_hash
                     except Exception:
@@ -1078,6 +1122,22 @@ def install_server(data, session_obj):
             }
         is_reinstall = True
 
+    # Корневой репозиторий (python-сервисы: core, stt, streams, carto-v2):
+    # git-репо содержит code/ и docker/ в корне, клонируется в сам проект,
+    # а не в code/ (как Laravel-проекты).
+    repo_root = bool(type_info.get('repo_root'))
+
+    def _remove_path(p: Path, logger=None):
+        import shutil
+        try:
+            if p.is_dir() and not p.is_symlink():
+                shutil.rmtree(p)
+            else:
+                p.unlink()
+        except Exception as e:
+            if logger:
+                logger.warning("Could not remove %s: %s", p, e)
+
     try:
         if is_reinstall:
             # Останавливаем контейнеры если есть docker-compose
@@ -1096,42 +1156,99 @@ def install_server(data, session_obj):
                 except Exception:
                     pass
 
-            # Очищаем code/ для переклонирования
-            if code_path.exists():
+            if repo_root:
+                # Корневой репозиторий: git-репо занимает весь проект.
+                # docker/.env — настройки этого экземпляра, их сохраняем,
+                # остальное чистим для переклонирования.
                 import shutil
-                try:
-                    shutil.rmtree(code_path)
-                    logger.info(f"Cleaned code directory: {code_path}")
-                except Exception as e:
-                    logger.warning(f"Could not clean code dir: {e}")
+                for entry in server_path.iterdir():
+                    if entry.name == 'docker':
+                        for sub in entry.iterdir():
+                            if sub.name == '.env':
+                                continue
+                            _remove_path(sub, logger)
+                        continue
+                    _remove_path(entry, logger)
+            else:
+                # Очищаем code/ для переклонирования
+                if code_path.exists():
+                    import shutil
+                    try:
+                        shutil.rmtree(code_path)
+                        logger.info(f"Cleaned code directory: {code_path}")
+                    except Exception as e:
+                        logger.warning(f"Could not clean code dir: {e}")
 
         server_path.mkdir(parents=True, exist_ok=True)
-        docker_path.mkdir(exist_ok=True)
-        code_path.mkdir(exist_ok=True)
 
         # Клонируем из репозитория (только если код отсутствует локально)
         repository = type_info.get('repository', {})
         repo_url = repository.get('url', '') if isinstance(repository, dict) else ''
-        
-        # Проверяем, есть ли уже код локально
-        has_local_code = code_path.exists() and any(code_path.iterdir())
-        
-        if has_local_code:
-            logger.info(f"Code already exists locally at {code_path}, skipping clone")
-        elif repo_url and not repo_url.startswith('https://github.com/your-org'):
-            import subprocess
-            clone_result = _clone_repository(repo_url, repository, code_path, logger)
-            if not clone_result.get('success'):
-                # В продакшене — ошибка если clone не удался
+
+        if repo_root:
+            # Корневой репозиторий: code/ и docker/ приходят из репо.
+            # docker/.env мог сохраниться при переустановке, а git clone
+            # требует пустую папку — клонируем во временную и переносим.
+            has_local_code = (server_path / '.git').exists()
+            if has_local_code:
+                logger.info(f"Git repo already exists at {server_path}, skipping clone")
+            elif repo_url and not repo_url.startswith('https://github.com/your-org'):
+                import shutil
+                tmp_clone = server_path / '.clone_tmp'
+                _remove_path(tmp_clone, logger)
+                clone_result = _clone_repository(repo_url, repository, tmp_clone, logger)
+                if not clone_result.get('success'):
+                    _remove_path(tmp_clone, logger)
+                    return {
+                        'status': 'error',
+                        'message': f'Ошибка клонирования репозитория: {clone_result.get("error", "unknown")}'
+                    }
+                for entry in tmp_clone.iterdir():
+                    dest = server_path / entry.name
+                    if entry.is_dir() and dest.is_dir() and entry.name != '.git':
+                        # merge: например, сохранённый docker/ из репо
+                        shutil.copytree(entry, dest, dirs_exist_ok=True)
+                        _remove_path(entry, logger)
+                        continue
+                    # На Windows move падает с WinError 32, если за файлом
+                    # закрепился дескриптор (антивирус, индексатор) —
+                    # тогда копируем и удаляем исходник.
+                    try:
+                        shutil.move(str(entry), str(dest))
+                    except OSError:
+                        if entry.is_dir():
+                            shutil.copytree(entry, dest, dirs_exist_ok=True)
+                        else:
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(entry, dest)
+                        _remove_path(entry, logger)
+                _remove_path(tmp_clone, logger)
+            else:
                 return {
-                    'status': 'error', 
-                    'message': f'Ошибка клонирования репозитория: {clone_result.get("error", "unknown")}'
+                    'status': 'error',
+                    'message': 'Репозиторий не настроен для этого сервера'
                 }
+            code_path.mkdir(exist_ok=True)
+            docker_path.mkdir(exist_ok=True)
         else:
-            return {
-                'status': 'error',
-                'message': 'Репозиторий не настроен для этого сервера'
-            }
+            code_path.mkdir(exist_ok=True)
+            has_local_code = code_path.exists() and any(code_path.iterdir())
+
+            if has_local_code:
+                logger.info(f"Code already exists locally at {code_path}, skipping clone")
+            elif repo_url and not repo_url.startswith('https://github.com/your-org'):
+                clone_result = _clone_repository(repo_url, repository, code_path, logger)
+                if not clone_result.get('success'):
+                    # В продакшене — ошибка если clone не удался
+                    return {
+                        'status': 'error', 
+                        'message': f'Ошибка клонирования репозитория: {clone_result.get("error", "unknown")}'
+                    }
+            else:
+                return {
+                    'status': 'error',
+                    'message': 'Репозиторий не настроен для этого сервера'
+                }
 
         # Зависимости PHP. Без них контейнеры стартуют, но artisan
         # падает на отсутствии vendor/autoload.php, поэтому ставим
@@ -1175,10 +1292,16 @@ def install_server(data, session_obj):
         if compose_example:
             import shutil
 
-            # 1. Копируем .env.example если есть рядом
+            # 1. Копируем .env.example если есть рядом.
+            #     При корневой раскладке (repo_root) compose_example уже лежит
+            #     в docker/ проекта, и копировать сам на себя нельзя —
+            #     Windows отдаёт WinError 32.
             env_example_src = compose_example.parent / '.env.example'
             if env_example_src.exists():
-                shutil.copy2(env_example_src, docker_path / '.env.example')
+                src_r = env_example_src.resolve()
+                dst_r = (docker_path / '.env.example').resolve()
+                if src_r != dst_r:
+                    shutil.copy2(env_example_src, docker_path / '.env.example')
 
             # 2. Создаём .env из .env.example если нет
             if not (docker_path / '.env').exists():
@@ -1236,8 +1359,13 @@ def install_server(data, session_obj):
             #     откат. Без .example в папке docker условие регенерации
             #     в start_server не выполнялось, и изменения шаблона из
             #     репозитория после git pull не применялись.
-            shutil.copy2(compose_example, docker_path / 'docker-compose.example')
-            shutil.copy2(compose_example, docker_path / 'docker-compose.yml')
+            #     При корневой раскладке источник уже в docker/ — копировать
+            #     сам на себя нельзя (WinError 32).
+            compose_src_r = compose_example.resolve()
+            if compose_src_r != (docker_path / 'docker-compose.example').resolve():
+                shutil.copy2(compose_example, docker_path / 'docker-compose.example')
+            if compose_src_r != (docker_path / 'docker-compose.yml').resolve():
+                shutil.copy2(compose_example, docker_path / 'docker-compose.yml')
 
             # 5. Подставляем ВСЕ переменные из .env в docker-compose.yml
             compose_path = docker_path / 'docker-compose.yml'
@@ -1287,6 +1415,12 @@ def install_server(data, session_obj):
                     env_content = re.sub(r'^DOCKER_NETWORK_PREFIX=.*$', f'DOCKER_NETWORK_PREFIX={network_prefix}', env_content, flags=re.MULTILINE)
                 env_content = re.sub(r'^PROJECTNAME=.*$', f'PROJECTNAME={project_name}', env_content, flags=re.MULTILINE)
                 env_path.write_text(env_content, encoding='utf-8')
+
+            # 7. Стабильный идентификатор экземпляра (CLIENT_FINGERPRINT).
+            #    Пишется в docker/.env, который переживает force-переустановку
+            #    (пересоздаётся только code/), поэтому клиент сохраняет свой
+            #    идентификатор. Дублируется в реестр ниже.
+            fingerprint = _ensure_fingerprint(docker_path, logger=logger)
         else:
             return {
                 'status': 'error',
@@ -1311,6 +1445,8 @@ def install_server(data, session_obj):
                     p['subnet_octet'] = subnet_octet
                     p['docker_network_prefix'] = f"172.{subnet_octet}" if subnet_octet > 0 else ""
                     p['installed_by_starter'] = True
+                    if fingerprint:
+                        p['fingerprint'] = fingerprint
                     break
             RegistryModule.save_registry(reg)
             logger.info(f"Server {'reinstalled' if is_reinstall else 'registered'}: {server_type} at {install_path} (subnet: {subnet_octet})")
@@ -1354,7 +1490,8 @@ def install_server(data, session_obj):
         return result
 
     except Exception as e:
-        logger.error(f"Install server error: {e}")
+        import traceback
+        logger.error("Install server error: %s\n%s", e, traceback.format_exc())
         return {'status': 'error', 'message': str(e)}
 
 
@@ -2117,6 +2254,13 @@ def start_server(data, session_obj):
         )
         if result.returncode == 0:
             server['status'] = 'running'
+            # Идемпотентно: при старте сервера его docker/.env получает
+            # CLIENT_FINGERPRINT, если его там ещё нет (старые установки),
+            # и значение фиксируется в реестре.
+            try:
+                server['fingerprint'] = _ensure_fingerprint(docker_path, logger=logger)
+            except Exception as e:
+                logger.warning('Fingerprint skipped for %s: %s', server_path, e)
             registry.save_registry(reg_data)
             checks.append({'step': 'start', 'status': 'ok', 'message': 'Server started'})
 
@@ -2418,6 +2562,8 @@ def server_repo_info(data, session_obj):
 
     server_path = Path(server_id)
     code_path = server_path / 'code'
+    if not (code_path / '.git').exists() and (server_path / '.git').exists():
+        code_path = server_path
 
     if not (code_path / '.git').exists():
         return {'status': 'success', 'repo': None, 'message': 'Not a git repository'}
@@ -3257,6 +3403,8 @@ def server_git_log(data, session_obj):
 
     server_path = Path(server_id)
     code_path = server_path / 'code'
+    if not (code_path / '.git').exists() and (server_path / '.git').exists():
+        code_path = server_path
 
     if not (code_path / '.git').exists():
         return {'status': 'success', 'log': [], 'has_update': False, 'message': 'Not a git repository'}

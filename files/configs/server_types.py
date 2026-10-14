@@ -391,11 +391,14 @@ SERVER_TYPES = {
         'order': 8,
         'can_have_multiple': True,
         'default_folder': 'carto-v2',
+        # Корневой репозиторий: git в корне проекта, code/ и docker/ — внутри
+        # (как у core/stt/streams), а не git внутри code/ (как у Laravel).
+        'repo_root': True,
         'docker_compose_path': 'docker/docker-compose.yml',
         'env_example_path': 'docker/.env.example',
         'update': UPDATE_PYTHON,
         'repository': {
-            'url': 'https://gitflic.ru/project/imperor/carto-v2.git',
+            'url': 'https://gitflic.ru/project/imperor/cartography.git',
             'branch': 'master'
         },
         'ports': {
@@ -445,6 +448,63 @@ SERVER_TYPES = {
             'url': 'https://gitflic.ru/project/imperor/sfera.git',
             'branch': 'master'
         }
+    },
+    'iskra': {
+        'name': 'ИСКРА — клинические рекомендации',
+        'name_en': 'ISKRA — Clinical Recommendations',
+        'name_cn': 'ИСКРА — 临床指南',
+        'description': 'Интеллектуальная система клинических рекомендаций Минздрава РФ: агент-секретарь, поиск по 755 КР, PWA, админка',
+        'description_en': 'Clinical recommendations system for Minzdrav: agent gate, search over 755 documents, PWA, admin panel',
+        'description_cn': '卫生部临床指南智能系统：智能体网关、755 份文档检索、PWA、管理后台',
+        'requires_reverse_proxy': True,
+        'requires_auth': True,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 8082,
+        'order': 13,
+        'can_have_multiple': False,
+        'default_folder': 'cr-on-opencode',
+        'update': UPDATE_PYTHON,
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/iskra.git',
+            'branch': 'master'
+        },
+        'ports': {
+            'https': 8082,
+            'http': 8084,
+            'nginx_http': 80,
+        },
+        # Справочник ОКПДТР подтягивается раз в месяц по расписанию,
+        # жёсткой зависимости от парсера нет — есть своя копия должностей.
+        'used_by': [],
+        'depends_on': [],
+        'references': [
+            {'path': '../cr-system/code/data', 'description': '755 клинических рекомендаций Минздрава РФ (только чтение)'},
+            {'path': '../OKPDTR-SYNC/code/data', 'description': 'Справочник ОКПДТР — обновление раз в месяц, опционально'},
+        ],
+    },
+    'okpdtr-sync': {
+        'name': 'ОКПДТР парсер',
+        'name_en': 'OKPDTR Parser',
+        'name_cn': 'ОКПДТР 解析器',
+        'description': 'Парсер классификатора профессий ОКПДТР (ОК 016-2025): скачивание, проверка, обновление, раздача по HTTP',
+        'description_en': 'OKPDTR classifier parser (OK 016-2025): download, verify, update, HTTP distribution',
+        'description_cn': 'ОКПДТР 分类解析器 (ОК 016-2025)：下载、校验、更新、HTTP 分发',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': False,
+        'default_port': 8083,
+        'order': 12,
+        'can_have_multiple': False,
+        'default_folder': 'OKPDTR-SYNC',
+        'update': UPDATE_PYTHON,
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/okpdtr-sync.git',
+            'branch': 'master'
+        },
+        # Данные ОКПДТР читают другие проекты (ИСКРА и др.)
+        'used_by': ['cr-on-opencode'],
     },
     'fileserver': {
         'name': 'Файловое хранилище',
