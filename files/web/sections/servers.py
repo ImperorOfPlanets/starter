@@ -200,6 +200,22 @@ def _check_server_status(server_path, project_type):
     return 'not_deployed'
 
 
+def _project_files_exist(path: str) -> bool:
+    """Проверяет, что папка проекта и её docker/код реально на месте.
+
+    Реестр мог устареть (проект удалён/перенесён вручную) — тогда файлов
+    нет, и сервер не должен считаться корректно установленным.
+    """
+    try:
+        from pathlib import Path
+        pp = Path(path)
+        if not pp.is_dir():
+            return False
+        return (pp / 'docker' / 'docker-compose.yml').exists() or (pp / 'code').is_dir()
+    except Exception:
+        return False
+
+
 def _get_user_servers(session_obj):
     """Получает серверы установленные через стартер с реальным статусом Docker"""
     user = session_obj.get('user') or session_obj.get('user_info')
@@ -219,8 +235,12 @@ def _get_user_servers(session_obj):
                 path = p.get('path', '')
                 project_type = p.get('project_type', 'unknown')
 
-                # Проверяем реальный статус
-                real_status = _check_server_status(path, project_type)
+                # Реестр мог устареть — если файлов проекта нет, помечаем ошибкой
+                if not _project_files_exist(path):
+                    real_status = 'missing_files'
+                else:
+                    # Проверяем реальный статус
+                    real_status = _check_server_status(path, project_type)
 
                 # Обновляем статус в реестре если изменился
                 registry_status = p.get('status', 'unknown')
@@ -677,7 +697,7 @@ def _clone_repository(repo_url: str, repository: dict, target_dir: Path, logger,
                 log_msg(f"Clone failed with exit code {return_code}")
                 return {'success': False, 'error': f'Exit code {return_code}'}
         else:
-            kw = _subprocess_kwargs(120)
+            kw = _subprocess_kwargs(600)
             kw['env'] = env
             result = subprocess.run(
                 ['git', 'clone', '--branch', branch, '--depth', '1', clone_url, str(target_dir)],
@@ -691,7 +711,7 @@ def _clone_repository(repo_url: str, repository: dict, target_dir: Path, logger,
                 return {'success': False, 'error': result.stderr}
 
     except subprocess.TimeoutExpired:
-        return {'success': False, 'error': 'Clone timed out (120s)'}
+        return {'success': False, 'error': 'Clone timed out (600s)'}
     except FileNotFoundError:
         return {'success': False, 'error': 'Git not installed'}
     except Exception as e:
@@ -1291,6 +1311,12 @@ def install_server(data, session_obj):
         
         if compose_example:
             import shutil
+
+            # Каталог docker/ для Laravel-проектов (не repo_root) может
+            # отсутствовать: репозиторий клонируется в code/, а его docker/
+            # переносится на шаге 3c. Без mkdir копирование .env.example
+            # падает с WinError 3 (путь не найден).
+            docker_path.mkdir(parents=True, exist_ok=True)
 
             # 1. Копируем .env.example если есть рядом.
             #     При корневой раскладке (repo_root) compose_example уже лежит

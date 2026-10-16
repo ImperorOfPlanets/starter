@@ -14,6 +14,12 @@ from files.core.utils.globalVars_utils import get_global, set_global
 from files.core.utils.log_utils import LogManager
 from files.core.oss.default.system import SystemModule
 
+# На Windows подпроцессы (docker, git, sc, nssm, ...) не должны создавать
+# видимые консольные окна — стартер это демон. Ставим патч ДО любой другой
+# работы с subprocess, в каждой точке входа (--service, --no-tray, --task).
+from files.core.utils import subprocess_hidden
+subprocess_hidden.install()
+
 # ❌ НЕ ИМПОРТИРУЕМ get ЗДЕСЬ! Он будет импортирован в функциях где нужен
 
 

@@ -3,6 +3,8 @@
 Кеширует результаты чтобы не дёргать API при каждом действии.
 """
 
+import json
+import os
 import time
 import requests
 from typing import Dict, List, Optional
@@ -12,7 +14,10 @@ logger = LogManager.get_logger('serverapi')
 
 # Кеш: {token_hash: {data, timestamp}}
 _cache = {}
-CACHE_TTL = 300  # 5 минут
+CACHE_TTL = 1800  # 30 минут — каталог серверов меняется редко
+# Персистентный кеш (переживает рестарт стартера)
+_CACHE_FILE = os.path.join(
+    os.environ.get('PROGRAMDATA', r'C:\ProgramData'), 'starter-serverapi-cache.json')
 
 
 def _cache_key(token: str) -> str:
@@ -21,22 +26,58 @@ def _cache_key(token: str) -> str:
     return hashlib.md5(token.encode()).hexdigest()
 
 
+def _load_cache_file():
+    """Загрузить персистентный кеш из файла (в _cache)."""
+    global _cache
+    try:
+        if os.path.exists(_CACHE_FILE):
+            with open(_CACHE_FILE, 'r', encoding='utf-8') as f:
+                _cache = json.load(f) or {}
+    except Exception as e:  # noqa: BLE001
+        logger.warning('serverapi cache load failed: %s', e)
+
+
+def _save_cache_file():
+    """Сохранить кеш в файл."""
+    try:
+        os.makedirs(os.path.dirname(_CACHE_FILE), exist_ok=True)
+        with open(_CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(_cache, f, ensure_ascii=False)
+    except Exception as e:  # noqa: BLE001
+        logger.warning('serverapi cache save failed: %s', e)
+
+
+# подгружаем кеш при импорте модуля
+_load_cache_file()
+
+
 def _get_cached(token: str) -> Optional[Dict]:
     """Получить из кеша если не протух"""
     key = _cache_key(token)
     if key in _cache:
         entry = _cache[key]
-        if time.time() - entry['timestamp'] < CACHE_TTL:
-            return entry['data']
+        if time.time() - entry.get('timestamp', 0) < CACHE_TTL:
+            return entry.get('data')
         else:
             del _cache[key]
+            _save_cache_file()
     return None
 
 
 def _set_cache(token: str, data: Dict):
-    """Сохранить в кеш"""
+    """Сохранить в кеш (память + файл). Логирует, если каталог изменился."""
     key = _cache_key(token)
+    old = _cache.get(key, {}).get('data')
     _cache[key] = {'data': data, 'timestamp': time.time()}
+    _save_cache_file()
+    # фиксируем изменение каталога (для наблюдаемости «когда обновилось»)
+    if old is not None and old != data:
+        try:
+            logger.info('serverapi catalog updated (%s -> %s entries)',
+                        len(old.get('available', [])) if isinstance(old, dict) else '?',
+                        len(data.get('available', [])) if isinstance(data, dict) else '?')
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def clear_cache(token: str = None):
@@ -46,6 +87,7 @@ def clear_cache(token: str = None):
         _cache.pop(key, None)
     else:
         _cache.clear()
+    _save_cache_file()
 
 
 def get_myidon_url() -> str:

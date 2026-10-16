@@ -12,7 +12,7 @@ from files.core.utils.log_utils import LogManager
 logger = LogManager.get_logger()
 
 this_section_in_control_panel = True
-section_icon = "bi-clipboard-list"
+section_icon = "bi-clipboard"
 section_name = "Applications"
 section_order = 5
 

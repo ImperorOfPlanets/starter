@@ -167,78 +167,6 @@ SERVER_TYPES = {
             'branch': 'master'
         }
     },
-    'client_core': {
-        'name': 'AI Помощник v2 — Ядро',
-        'name_en': 'AI Assistant v2 — Core',
-        'name_cn': 'AI 助手 v2 — 内核',
-        'description': 'Базовый клиент CLIENTv2 без отраслевых модулей — только ядро',
-        'description_en': 'Base CLIENTv2 client without domain modules — core only',
-        'description_cn': '基础 CLIENTv2 客户端，不含行业模块，仅核心',
-        'requires_reverse_proxy': True,
-        'requires_auth': False,
-        'is_reverse_proxy': False,
-        'has_web_interface': True,
-        'default_port': 80,
-        'order': 2,
-        'can_have_multiple': True,
-        'default_folder': 'client-core',
-        'docker_compose_path': 'docker/docker-compose.yml',
-        'env_example_path': 'docker/.env.example',
-        'is_client': True,
-        'update': UPDATE_CLIENT_PHP,
-        'repository': {
-            'url': 'https://gitflic.ru/project/imperor/clientv2.git',
-            'branch': 'master'
-        }
-    },
-    'client_city': {
-        'name': 'AI Помощник — Город',
-        'name_en': 'AI Assistant — City',
-        'name_cn': 'AI 助手 — 城市',
-        'description': 'Клиент для городских организаций: адреса, объекты, заявки',
-        'description_en': 'Client for city organizations: addresses, objects, applications',
-        'description_cn': '面向城市组织的客户端：地址、对象、申请',
-        'requires_reverse_proxy': True,
-        'requires_auth': False,
-        'is_reverse_proxy': False,
-        'has_web_interface': True,
-        'default_port': 80,
-        'order': 3,
-        'can_have_multiple': True,
-        'default_folder': 'client-city',
-        'docker_compose_path': 'docker/docker-compose.yml',
-        'env_example_path': 'docker/.env.example',
-        'is_client': True,
-        'update': UPDATE_CLIENT_PHP,
-        'repository': {
-            'url': 'https://gitflic.ru/project/imperor/clientv2.git',
-            'branch': 'master'
-        }
-    },
-    'client_medical': {
-        'name': 'AI Помощник — Медицина',
-        'name_en': 'AI Assistant — Medical',
-        'name_cn': 'AI 助手 — 医疗',
-        'description': 'Клиент для медицинских организаций',
-        'description_en': 'Client for medical organizations',
-        'description_cn': '面向医疗机构的客户端',
-        'requires_reverse_proxy': True,
-        'requires_auth': False,
-        'is_reverse_proxy': False,
-        'has_web_interface': True,
-        'default_port': 80,
-        'order': 4,
-        'can_have_multiple': True,
-        'default_folder': 'CLIENT-MEDICAL',
-        'docker_compose_path': 'docker/docker-compose.yml',
-        'env_example_path': 'docker/.env.example',
-        'is_client': True,
-        'update': UPDATE_CLIENT_PHP,
-        'repository': {
-            'url': 'https://gitflic.ru/project/imperor/clientv2.git',
-            'branch': 'master'
-        }
-    },
     'embeddings': {
         'name': 'Генератор векторов',
         'name_en': 'Vector Generator',
@@ -276,8 +204,9 @@ SERVER_TYPES = {
         'can_have_multiple': True,
         'default_folder': 'voice',
         'update': UPDATE_PYTHON,
+        'repo_root': True,
         'repository': {
-            'url': 'https://gitflic.ru/project/imperor/voice.git',
+            'url': 'https://gitflic.ru/project/imperor/genvoice.git',
             'branch': 'master'
         }
     },
@@ -297,6 +226,7 @@ SERVER_TYPES = {
         'can_have_multiple': True,
         'default_folder': 'voice',
         'update': UPDATE_PYTHON,
+        'repo_root': True,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/voice.git',
             'branch': 'master'
@@ -342,6 +272,7 @@ SERVER_TYPES = {
         # а docker/ — под docker/, как и требует install_server.
         'default_folder': 'slam_server',
         'update': UPDATE_PYTHON,
+        'repo_root': True,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/slam-api.git',
             'branch': 'master'
@@ -407,6 +338,31 @@ SERVER_TYPES = {
         },
         'optional_servers': ['yolo', 'fileserver'],
     },
+    'log_scanner': {
+        'name': 'Мониторинг логов',
+        'name_en': 'Log Scanner',
+        'name_cn': '日志扫描器',
+        'description': 'Сканирование логов всех проектов локальной моделью: правила + TF-IDL/LogReg классификация по уровням critical/error/security/warning',
+        'description_en': 'Scan logs of all projects with a local model: rules + TF-IDF/LogReg classification into critical/error/security/warning',
+        'description_cn': '使用本地模型扫描所有项目的日志：规则 + TF-IDF/LogReg 分类为 critical/error/security/warning',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 8011,
+        'order': 20,
+        'can_have_multiple': True,
+        'default_folder': 'log-scanner',
+        'repo_root': True,
+        'docker_compose_path': 'docker/docker-compose.yml',
+        'env_example_path': 'docker/.env.example',
+        'update': UPDATE_PYTHON,
+        'repository': {
+            'url': '',
+            'branch': 'master'
+        },
+        'ports': {'api': 8011},
+    },
     'voice': {
         'name': 'Голосовой помощник',
         'name_en': 'Voice Assistant',
@@ -423,8 +379,9 @@ SERVER_TYPES = {
         'can_have_multiple': True,
         'default_folder': 'voice',
         'update': UPDATE_PYTHON,
+        'repo_root': True,
         'repository': {
-            'url': 'https://gitflic.ru/project/imperor/voice.git',
+            'url': 'https://gitflic.ru/project/imperor/translator.git',
             'branch': 'master'
         }
     },
