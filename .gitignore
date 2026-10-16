@@ -47,3 +47,5 @@ fix_remote.py
 fix_update.py
 files/crypto/.api_key
 files/tasks/
+files/server_status.db*
+files/server_monitor.json

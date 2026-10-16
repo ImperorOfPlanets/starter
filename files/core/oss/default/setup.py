@@ -697,7 +697,7 @@ class SetupModule(BaseModule):
             
             server_path.mkdir(parents=True, exist_ok=True)
             docker_path.mkdir(parents=True, exist_ok=True)
-            (server_path / "code").mkdir(exist_ok=True)
+            (server_path / "src").mkdir(exist_ok=True)
             (server_path / "storage").mkdir(exist_ok=True)
             
             # Копируем starter
@@ -895,7 +895,7 @@ APPS_ROOT={apps_root}
             
             server_path.mkdir(parents=True, exist_ok=True)
             docker_path.mkdir(parents=True, exist_ok=True)
-            (server_path / "code").mkdir(exist_ok=True)
+            (server_path / "src").mkdir(exist_ok=True)
             (server_path / "storage").mkdir(exist_ok=True)
             
             # Копируем starter
@@ -906,7 +906,7 @@ APPS_ROOT={apps_root}
             if repo_info and repo_info.get('url'):
                 repo_url = repo_info.get('url')
                 branch = repo_info.get('branch', 'main')
-                code_path = server_path / "code"
+                code_path = server_path / "src"
                 
                 with tempfile.TemporaryDirectory() as tmpdir:
                     tmp_path = Path(tmpdir) / "repo"
@@ -956,7 +956,7 @@ APPS_ROOT={apps_root}
                 'path': str(server_path),
                 'docker_path': str(docker_path),
                 'starter_path': str(server_path / "starter"),
-                'code_path': str(server_path / "code"),
+                'code_path': str(server_path / "src"),
                 'storage_path': str(server_path / "storage"),
                 'folder_name': folder_name,
                 'apps_root': str(apps_root)

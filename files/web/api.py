@@ -68,14 +68,44 @@ def require_api_key(f):
 @api.route('/servers', methods=['GET'])
 @require_api_key
 def list_servers():
-    """Получить список установленных серверов"""
+    """Получить список установленных серверов.
+
+    По возможности читает SQLite-кеш фонового монитора (мгновенно);
+    при пустом кеше выполняет синхронную проверку.
+    """
     try:
         registry = get('registry')
         if not registry:
             return jsonify({'success': False, 'error': 'Registry not available'}), 500
 
         from files.configs.server_types import SERVER_TYPES
-        from files.web.sections.servers import _check_server_status
+
+        # Быстрый путь: кеш монитора
+        cached = None
+        cache_info = None
+        try:
+            from files.core.oss.default.server_monitor import ServerMonitorModule
+            cached = ServerMonitorModule.get_cached_servers()
+            cache_info = ServerMonitorModule.get_status()
+            if cached is None:
+                ServerMonitorModule.refresh_all(background=True)
+        except Exception as e:
+            logger.warning(f"server_monitor недоступен для API: {e}")
+
+        if cached is not None:
+            servers = []
+            for s in cached:
+                type_info = SERVER_TYPES.get(s['type'], {})
+                servers.append({
+                    **s,
+                    'type_name': type_info.get('name', s['type']),
+                    'description': type_info.get('description', ''),
+                })
+            return jsonify({'success': True, 'servers': servers, 'count': len(servers),
+                            'cache': {'updated_at': cache_info.get('updated_at') if cache_info else None}})
+
+        # Фолбэк: синхронная проверка
+        from files.web.sections.servers import _check_server_status, _project_files_exist
         data = registry.load_registry()
         projects = data.get('projects', [])
 
@@ -88,7 +118,10 @@ def list_servers():
             project_type = p.get('project_type', 'unknown')
             type_info = SERVER_TYPES.get(project_type, {})
 
-            real_status = _check_server_status(path, project_type)
+            if not _project_files_exist(path):
+                real_status = 'missing_files'
+            else:
+                real_status = _check_server_status(path, project_type)
 
             servers.append({
                 'id': path,

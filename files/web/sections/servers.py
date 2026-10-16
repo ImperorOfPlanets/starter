@@ -211,13 +211,51 @@ def _project_files_exist(path: str) -> bool:
         pp = Path(path)
         if not pp.is_dir():
             return False
-        return (pp / 'docker' / 'docker-compose.yml').exists() or (pp / 'code').is_dir()
+        return ((pp / 'docker' / 'docker-compose.yml').exists()
+                or (pp / 'src').is_dir())
     except Exception:
         return False
 
 
 def _get_user_servers(session_obj):
-    """Получает серверы установленные через стартер с реальным статусом Docker"""
+    """Получает серверы установленные через стартер с реальным статусом Docker.
+
+    Статусы опрашиваются фоновым ServerMonitorModule и кешируются в
+    SQLite — здесь только быстрое чтение. Если кеш ещё не наполнен
+    (первый запуск до фонового прохода), выполняется старый
+    синхронный расчёт, а монитор параллельно наполняет кеш.
+    """
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return []
+
+    # Быстрый путь: кеш фонового монитора (мгновенно)
+    try:
+        from files.core.oss.default.server_monitor import ServerMonitorModule
+        cached = ServerMonitorModule.get_cached_servers()
+        if cached is not None:
+            return cached
+        # Кеш пуст — будим монитор и считаем синхронно (один раз за жизнь)
+        ServerMonitorModule.refresh_all(background=True)
+    except Exception as e:
+        logger.warning(f"server_monitor недоступен, синхронный расчёт: {e}")
+
+    return _scan_user_servers_now(session_obj)
+
+
+def _monitor_refresh_path(path):
+    """Быстро перепроверяет один сервер в кеше монитора (после действия)"""
+    try:
+        import threading
+        from files.core.oss.default.server_monitor import ServerMonitorModule
+        threading.Thread(target=ServerMonitorModule.refresh_path,
+                         args=(path,), daemon=True).start()
+    except Exception as e:
+        logger.warning(f"monitor refresh_path({path}) failed: {e}")
+
+
+def _scan_user_servers_now(session_obj):
+    """Синхронный полный расчёт статусов (фолбэк, когда кеша ещё нет)"""
     user = session_obj.get('user') or session_obj.get('user_info')
 
     if user:
@@ -254,7 +292,7 @@ def _get_user_servers(session_obj):
                 # Проверяем git и обновления
                 has_git = False
                 has_update = False
-                git_path = Path(path) / 'code'
+                git_path = Path(path) / 'src'
                 if not (git_path / '.git').exists() and (Path(path) / '.git').exists():
                     git_path = Path(path)
                 if (git_path / '.git').exists():
@@ -374,24 +412,117 @@ def list_servers(data, session_obj):
     if not user:
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
-    import time
     force = data.get('force', False) in ('true', '1', True)
-    now = time.time()
-    cache = session_obj.get('_servers_cache', {})
-    cache_time = cache.get('time', 0)
-    cache_data = cache.get('servers', [])
 
-    # Кеш 60 секунд или принудительное обновление
-    if not force and cache_data and (now - cache_time) < 60:
-        return jsonify({'status': 'success', 'servers': cache_data, 'cached': True})
+    # force — лишь сигнал «будь свежим»: будим фоновый монитор,
+    # а сами читаем SQLite-кеш (мгновенно вместо docker/git на запросе)
+    if force:
+        try:
+            from files.core.oss.default.server_monitor import ServerMonitorModule
+            ServerMonitorModule.refresh_all(background=True)
+        except Exception:
+            pass
 
     servers = _get_user_servers(session_obj)
+    resp = {'status': 'success', 'servers': servers}
 
-    # Сохраняем в кеш сессии
-    session_obj['_servers_cache'] = {'servers': servers, 'time': now}
-    session_obj.modified = True
+    # Шапка панели: кеш на какое время и когда обновится
+    try:
+        from files.core.oss.default.server_monitor import ServerMonitorModule
+        info = ServerMonitorModule.get_status()
+        resp['cache'] = {
+            'updated_at': info['updated_at'],
+            'git_checked_at': info['git_checked_at'],
+            'status_interval': info['status_interval'],
+            'git_interval': info['git_interval'],
+            'monitor_running': info['monitor_running'],
+        }
+    except Exception as e:
+        logger.warning(f"monitor status unavailable: {e}")
+        resp['cache'] = None
 
-    return jsonify({'status': 'success', 'servers': servers})
+    return jsonify(resp)
+
+
+def get_monitor_settings(data, session_obj):
+    """Настройки мониторинга серверов.
+
+    Интервал статусов живёт в расписании задачи планировщика
+    server_status_refresh (управается из интерфейса); git_interval —
+    в конфиге server_monitor.json.
+    """
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    try:
+        from files.core.oss.default.server_monitor import ServerMonitorModule
+        from files.core.oss.default.scheduler import SchedulerModule
+
+        settings = ServerMonitorModule.get_settings()
+
+        # эффективный интервал — из расписания задачи планировщика
+        interval = settings.get('status_interval', 30)
+        try:
+            for t in SchedulerModule.get_tasks().get('tasks', []):
+                if t['name'] == 'server_status_refresh':
+                    interval = SchedulerModule.interval_seconds(t)
+                    break
+        except Exception:
+            pass
+
+        info = ServerMonitorModule.get_status()
+        return jsonify({'status': 'success',
+                        'settings': {'status_interval': interval,
+                                     'git_interval': settings.get('git_interval', 600)},
+                        'monitor_running': info['monitor_running']})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+
+def save_monitor_settings(data, session_obj):
+    """Сохраняет интервалы мониторинга (без рестарта).
+
+    status_interval -> расписание задачи server_status_refresh в
+    планировщике; git_interval -> server_monitor.json.
+    """
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    try:
+        from files.core.oss.default.server_monitor import ServerMonitorModule
+        from files.core.oss.default.scheduler import SchedulerModule
+
+        # валидация/сохранение обоих значений (status_interval — фолбэк)
+        settings = ServerMonitorModule.save_settings({
+            'status_interval': data.get('status_interval'),
+            'git_interval': data.get('git_interval'),
+        })
+
+        # интервал статусов -> расписание задачи планировщика
+        seconds = settings['status_interval']
+        task_data = {
+            'name': 'server_status_refresh',
+            'schedule': 'custom',
+            'custom_schedule': str(seconds),
+            'enabled': True,
+        }
+        res = SchedulerModule.update_task(task_data)
+        if res.get('status') != 'success':
+            # задачи ещё нет в конфиге — создаём с нужным расписанием
+            SchedulerModule.add_task({
+                'name': 'server_status_refresh',
+                'enabled': True,
+                'schedule': 'custom',
+                'custom_schedule': str(seconds),
+                'category': 'monitoring',
+                'events': ['on_schedule'],
+            })
+
+        return jsonify({'status': 'success', 'settings': settings})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
 
 
 def _get_approved_server_keys(session_obj):
@@ -794,8 +925,8 @@ def _module_hosts(session_obj, type_info):
         if not (is_client or ptype in allowed):
             continue
 
-        # модуль ставится только туда, где есть code/composer.json
-        if not (Path(path) / 'code' / 'composer.json').exists():
+        # модуль ставится только туда, где есть src/composer.json
+        if not (Path(path) / 'src' / 'composer.json').exists():
             continue
 
         hosts.append({
@@ -824,7 +955,7 @@ def _module_installed_hosts(server_type, type_info):
         return out
     for p in projects:
         path = p.get('path', '')
-        if path and (Path(path) / 'code' / 'vendor' / vendor_dir).exists():
+        if path and (Path(path) / 'src' / 'vendor' / vendor_dir).exists():
             out.append(path)
     return out
 
@@ -884,9 +1015,9 @@ def install_module(data, session_obj):
         }
 
     host = Path(host_path)
-    code_dir = host / 'code'
+    code_dir = host / 'src'
     if not (code_dir / 'composer.json').exists():
-        return {'status': 'error', 'message': f'В {host} нет code/composer.json'}
+        return {'status': 'error', 'message': f'В {host} нет src/composer.json'}
 
     # уже стоит в этом клиенте?
     vendor_dir = code_dir / 'vendor' / package.replace('/', os.sep)
@@ -1097,7 +1228,7 @@ def install_server(data, session_obj):
 
     server_path = Path(install_path)
     docker_path = server_path / 'docker'
-    code_path = server_path / 'code'
+    code_path = server_path / 'src'
 
     # =================== ПРОВЕРКА УСТАНОВКИ ЧЕРЕЗ MYIDON.SITE =================
     oauth_token = session_obj.get('oauth_token')
@@ -1298,11 +1429,11 @@ def install_server(data, session_obj):
         project_name = _compose_project_name(server_path, server_type)
 
         # docker-compose.example ДОЛЖЕН быть в репозитории
-        # Ищем в разных местах: code/docker/, code/, просто docker/
+        # Ищем в разных местах: src/docker/, src/, code/docker/, code/, docker/
         compose_example = None
         for candidate in [
-            server_path / 'code' / 'docker' / 'docker-compose.example',
-            server_path / 'code' / 'docker-compose.example',
+            server_path / 'src' / 'docker' / 'docker-compose.example',
+            server_path / 'src' / 'docker-compose.example',
             server_path / 'docker' / 'docker-compose.example',
         ]:
             if candidate.exists():
@@ -1341,10 +1472,10 @@ def install_server(data, session_obj):
             env_path = docker_path / '.env'
             if env_path.exists():
                 env_content = env_path.read_text(encoding='utf-8')
-                env_content = env_content.replace('${PATH_APP_CODE}', str(server_path / 'code'))
+                env_content = env_content.replace('${PATH_APP_CODE}', str(code_path))
                 env_content = env_content.replace('${PATH_APP_DOCKER}', str(server_path / 'docker'))
                 env_content = env_content.replace('${PATH_APP_DOCKER_LOGS}', str(server_path / 'docker' / 'logs'))
-                env_content = env_content.replace('${PATH_APP_PROJECT}', str(server_path / 'code'))
+                env_content = env_content.replace('${PATH_APP_PROJECT}', str(code_path))
                 env_path.write_text(env_content, encoding='utf-8')
 
             # 3b. Приводим .env к этому экземпляру.
@@ -1506,6 +1637,9 @@ def install_server(data, session_obj):
         result = {'status': 'success',
                   'message': f'{type_info["name"]} {action} в {install_path}'}
 
+        # Сразу вносим новый сервер в кеш монитора
+        _monitor_refresh_path(install_path)
+
         # Установка без vendor/ формально успешна, но artisan в контейнерах
         # не запустится, поэтому предупреждение возвращаем явно
         if deps and deps.get('status') == 'error':
@@ -1621,7 +1755,7 @@ def list_folders(data, session_obj):
                         'name': item.name,
                         'path': str(item),
                         'has_docker': (item / 'docker').exists(),
-                        'has_code': (item / 'code').exists(),
+                        'has_code': (item / 'src').exists(),
                         'writable': os.access(str(item), os.W_OK),
                     })
                 except (PermissionError, OSError):
@@ -1858,7 +1992,7 @@ def _apply_instance_env(docker_path: Path, server_path: Path, project_name: str,
         values[key] = str(value)
         applied[key] = str(value)
 
-    code_dir = server_path / 'code'
+    code_dir = server_path / 'src'
     docker_dir = server_path / 'docker'
 
     # --- пути: в шаблоне могут быть как ${PATH_APP_*}, так и готовые пути
@@ -2296,7 +2430,7 @@ def start_server(data, session_obj):
             # и только если в code/ есть artisan.
             provision = None
             try:
-                if _path_state(Path(server_path) / 'code' / 'artisan') == 'file':
+                if _path_state(Path(server_path) / 'src' / 'artisan') == 'file':
                     provision = _provision_laravel(Path(server_path), logger=logger)
                     checks.append({
                         'step': 'laravel',
@@ -2309,6 +2443,7 @@ def start_server(data, session_obj):
                 checks.append({'step': 'laravel', 'status': 'warn',
                                'message': f'Laravel init failed: {e}'})
 
+            _monitor_refresh_path(server_path)
             return jsonify({'status': 'success', 'message': 'Сервер запущен', 'checks': checks})
         else:
             err_msg = (result.stderr or '').strip()[:500]
@@ -2328,7 +2463,7 @@ def start_server(data, session_obj):
 
         provision = None
         try:
-            if _path_state(Path(server_path) / 'code' / 'artisan') == 'file':
+            if _path_state(Path(server_path) / 'src' / 'artisan') == 'file':
                 provision = _provision_laravel(Path(server_path), logger=logger)
                 checks.append({
                     'step': 'laravel',
@@ -2451,6 +2586,7 @@ def stop_server(data, session_obj):
             # Обновляем статус в реестре
             server['status'] = 'stopped'
             registry.save_registry(reg_data)
+            _monitor_refresh_path(server_path)
             return jsonify({'status': 'success', 'message': 'Сервер остановлен'})
         else:
             return jsonify({'status': 'error', 'message': f'Ошибка: {result.stderr[:500]}'})
@@ -2489,6 +2625,13 @@ def remove_server(data, session_obj):
         reg_data = registry.load_registry()
         reg_data['projects'] = [p for p in reg_data['projects'] if not _paths_equal(p.get('path'), server_id)]
         registry.save_registry(reg_data)
+
+    # Чистим запись в кеше монитора
+    try:
+        from files.core.oss.default.server_monitor import ServerMonitorModule
+        ServerMonitorModule.forget_path(server_id)
+    except Exception as e:
+        logger.warning(f"monitor forget_path failed: {e}")
 
     # Удаляем папку сервера.
     #
@@ -2587,7 +2730,7 @@ def server_repo_info(data, session_obj):
     import subprocess
 
     server_path = Path(server_id)
-    code_path = server_path / 'code'
+    code_path = server_path / 'src'
     if not (code_path / '.git').exists() and (server_path / '.git').exists():
         code_path = server_path
 
@@ -2680,6 +2823,19 @@ def _ensure_php_dependencies(code_dir: Path, server_path: Path = None, logger=No
     args = composer + ['install', '--no-interaction', '--prefer-dist',
                        '--optimize-autoloader']
 
+    # Пост-скрипты composer (package:discover) загружают приложение, а на
+    # чистом хосте .env в code/ ещё нет: Laravel берёт дефолты из конфига
+    # (CACHE_STORE=database, SESSION_DRIVER=database, sqlite) и падает,
+    # не найдя файл БД. Делаем окружение подпроцесса нейтральным — эти
+    # значения видит только composer, в .env проекта они не попадают,
+    # а в контейнере приложение получает реальные настройки из compose.
+    env = os.environ.copy()
+    env.setdefault('CACHE_STORE', 'array')
+    env.setdefault('SESSION_DRIVER', 'array')
+    env.setdefault('QUEUE_CONNECTION', 'sync')
+    env.setdefault('BROADCAST_CONNECTION', 'log')
+    env.setdefault('DB_CONNECTION', 'sqlite')
+
     if logger:
         logger.info('composer install in %s via %s', code_dir, composer[0])
 
@@ -2687,7 +2843,7 @@ def _ensure_php_dependencies(code_dir: Path, server_path: Path = None, logger=No
         # _subprocess_kwargs уже содержит timeout, поэтому отдельно
         # его не передаём — иначе subprocess.run получит его дважды
         proc = subprocess.run(
-            args, cwd=str(code_dir), **_subprocess_kwargs(timeout),
+            args, cwd=str(code_dir), env=env, **_subprocess_kwargs(timeout),
         )
     except subprocess.TimeoutExpired:
         return {'status': 'error', 'message': f'composer install не уложился в {timeout} с'}
@@ -2784,7 +2940,7 @@ def _provision_laravel(server_path: Path, logger=None, timeout=1800,
     import subprocess
     import time
 
-    code_path = Path(server_path) / 'code'
+    code_path = Path(server_path) / 'src'
     project = _compose_project_name(server_path, '')
     container = f'php-{project}'
 
@@ -3213,6 +3369,7 @@ def update_server(data, session_obj):
     if report.get('env_added'):
         report['message'] += f". Добавлено новых переменных в .env: {len(report['env_added'])}"
 
+    _monitor_refresh_path(server_path)
     return {'status': 'success', **report}
 
 
@@ -3243,7 +3400,7 @@ def update_module(data, session_obj):
                 'message': 'Укажите host_path — клиент, в котором установлен модуль'}
 
     host = Path(host_path)
-    code_dir = host / 'code'
+    code_dir = host / 'src'
     vendor_dir = code_dir / 'vendor' / package.replace('/', os.sep)
 
     if not vendor_dir.exists():
@@ -3428,7 +3585,7 @@ def server_git_log(data, session_obj):
     import subprocess
 
     server_path = Path(server_id)
-    code_path = server_path / 'code'
+    code_path = server_path / 'src'
     if not (code_path / '.git').exists() and (server_path / '.git').exists():
         code_path = server_path
 

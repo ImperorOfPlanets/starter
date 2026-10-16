@@ -179,6 +179,9 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label">{{ t('task_schedule') }}</label>
                             <select class="form-select" id="taskSchedule" required>
+                                <option value="every_10sec">{{ t('every_10sec') }}</option>
+                                <option value="every_30sec">{{ t('every_30sec') }}</option>
+                                <option value="every_1min">{{ t('every_1min') }}</option>
                                 <option value="every_5min">{{ t('every_5min') }}</option>
                                 <option value="every_30min">{{ t('every_30min') }}</option>
                                 <option value="hourly" selected>{{ t('hourly') }}</option>

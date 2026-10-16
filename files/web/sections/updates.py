@@ -213,7 +213,7 @@ def check_server_updates(server_type):
     registry = RegistryModule.load_registry()
     for p in registry.get('projects', []):
         if p.get('project_type') == server_type and p.get('installed_by_starter'):
-            path = str(Path(p['path']) / 'code')
+            path = str(Path(p['path']) / 'src')
             break
 
     return UpdateCheckerModule.check_project_updates(

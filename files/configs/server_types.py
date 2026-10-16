@@ -562,6 +562,7 @@ SERVER_TYPES = {
         'can_have_multiple': True,
         'default_folder': 'wake_word',
         'update': UPDATE_PYTHON,
+        'repo_root': True,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/wake-word.git',
             'branch': 'master'
@@ -583,6 +584,7 @@ SERVER_TYPES = {
         'can_have_multiple': True,
         'default_folder': 'streams',
         'update': UPDATE_PYTHON,
+        'repo_root': True,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/sfera-strimer.git',
             'branch': 'master'

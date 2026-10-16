@@ -22,7 +22,22 @@
     </div>
 
     <!-- Установленные серверы -->
-    <h6 class="text-muted mb-2">{{ t('installed_servers') }}</h6>
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="text-muted mb-0">{{ t('installed_servers') }}
+            <span id="cacheBadge" class="badge bg-secondary ms-2" style="font-weight:normal;font-size:11px;">
+                <i class="bi bi-database"></i> <span id="cacheTime">…</span>
+            </span>
+            <span id="cacheStale" class="badge bg-warning text-dark d-none ms-1" style="font-size:11px;">{{ t('cache_stale') }}</span>
+        </h6>
+        <div class="d-flex gap-1">
+            <button class="btn btn-outline-secondary btn-sm" id="refreshServersBtn" title="{{ t('btn_refresh_now') }}">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#monitorSettingsModal" title="{{ t('monitor_settings_title') }}">
+                <i class="bi bi-stopwatch"></i>
+            </button>
+        </div>
+    </div>
     <div id="serversList">
         <div class="text-center py-3">
             <div class="spinner-border spinner-border-sm text-primary" role="status">
@@ -117,6 +132,48 @@
     </div>
 </div>
 
+<!-- ==================== НАСТРОЙКИ МОНИТОРИНГА ==================== -->
+<div class="modal fade" id="monitorSettingsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-stopwatch me-2"></i>{{ t('monitor_settings_title') }}
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    Стартер опрашивает серверы в фоне и кеширует статусы.
+                    Здесь задаётся, как часто это происходит.
+                </p>
+                <div class="mb-3">
+                    <label class="form-label">{{ t('monitor_status_interval') }}</label>
+                    <div class="input-group input-group-sm">
+                        <input type="number" id="monitorStatusInterval" class="form-control" min="5" max="86400" value="10">
+                        <span class="input-group-text">сек</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">{{ t('monitor_git_interval') }}</label>
+                    <div class="input-group input-group-sm">
+                        <input type="number" id="monitorGitInterval" class="form-control" min="30" max="604800" value="600">
+                        <span class="input-group-text">сек</span>
+                    </div>
+                    <div class="form-text">git fetch ходит в сеть — чаще 30 секунд не рекомендуется</div>
+                </div>
+                <div id="monitorSaveResult" class="d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="monitorSaveBtn" onclick="saveMonitorSettings()">
+                    <i class="bi bi-check-lg me-1"></i>{{ t('monitor_save') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ==================== МОДУЛЬ КЛИЕНТА ==================== -->
 <div class="modal fade" id="moduleInstallModal" tabindex="-1">
     <div class="modal-dialog">
@@ -153,6 +210,17 @@ var t = function(key) {
         'status_running': '{{ t("status_running") }}',
         'status_stopped': '{{ t("status_stopped") }}',
         'status_not_deployed': '{{ t("status_not_deployed") }}',
+        'status_missing_files': '{{ t("status_missing_files") }}',
+        'cache_updated_at': '{{ t("cache_updated_at") }}',
+        'cache_git_checked': '{{ t("cache_git_checked") }}',
+        'cache_stale': '{{ t("cache_stale") }}',
+        'cache_unknown': '{{ t("cache_unknown") }}',
+        'btn_refresh_now': '{{ t("btn_refresh_now") }}',
+        'monitor_settings_title': '{{ t("monitor_settings_title") }}',
+        'monitor_status_interval': '{{ t("monitor_status_interval") }}',
+        'monitor_git_interval': '{{ t("monitor_git_interval") }}',
+        'monitor_save': '{{ t("monitor_save") }}',
+        'monitor_saved': '{{ t("monitor_saved") }}',
         'btn_start': '{{ t("btn_start") }}',
         'btn_stop': '{{ t("btn_stop") }}',
         'btn_delete': '{{ t("btn_delete") }}',
@@ -201,6 +269,8 @@ var t = function(key) {
 
 var selectedPath = '';
 var cachedServerTypes = [];
+var cacheRefreshTimer = null;
+var monitorInterval = 10; // сек, обновляется из ответа сервера
 
 function loadServerTypes() {
     fetch('/', {
@@ -227,12 +297,15 @@ function loadServers(force) {
         var cached = localStorage.getItem('servers_cache');
         if (cached) {
             try {
-                renderServers(JSON.parse(cached));
+                var parsed = JSON.parse(cached);
+                renderServers(parsed.servers || parsed);
+                if (parsed.cache) updateCacheBadge(parsed.cache);
             } catch(e) {}
         }
     }
 
-    // Загружаем свежие данные
+    // Загружаем свежие данные (force будит фоновый монитор,
+    // но ответ всегда берётся из SQLite-кеша — мгновенно)
     var body = {section: 'servers', action: 'list_servers'};
     if (force) body.force = 'true';
     fetch('/', {
@@ -243,13 +316,53 @@ function loadServers(force) {
     .then(function(r) { return r.json(); })
     .then(function(res) {
         if (res.status === 'success' && res.servers) {
-            localStorage.setItem('servers_cache', JSON.stringify(res.servers));
+            localStorage.setItem('servers_cache', JSON.stringify(res));
             renderServers(res.servers);
+            if (res.cache) updateCacheBadge(res.cache);
         }
     })
     .catch(function(err) {
         console.error('Ошибка загрузки серверов:', err);
     });
+}
+
+function updateCacheBadge(cache) {
+    var timeEl = document.getElementById('cacheTime');
+    var staleEl = document.getElementById('cacheStale');
+    var badge = document.getElementById('cacheBadge');
+    if (!timeEl) return;
+
+    // Интервал автообновления берём из настроек монитора
+    if (cache.status_interval) {
+        monitorInterval = Math.max(5, parseInt(cache.status_interval, 10) || 10);
+        scheduleAutoRefresh();
+    }
+
+    if (!cache.updated_at) {
+        timeEl.textContent = t('cache_unknown');
+        badge.className = 'badge bg-warning text-dark ms-2';
+        if (staleEl) staleEl.classList.add('d-none');
+        return;
+    }
+
+    var d = new Date(cache.updated_at * 1000);
+    var hh = ('0' + d.getHours()).slice(-2);
+    var mm = ('0' + d.getMinutes()).slice(-2);
+    var ss = ('0' + d.getSeconds()).slice(-2);
+    var ageSec = Math.max(0, Math.floor(Date.now() / 1000 - cache.updated_at));
+
+    timeEl.textContent = t('cache_updated_at') + ' ' + hh + ':' + mm + ':' + ss
+        + ' (' + ageSec + 's)';
+
+    // Данные старше 3 интервалов — подсвечиваем «устарело»
+    var isStale = !cache.monitor_running || ageSec > monitorInterval * 3;
+    badge.className = 'badge ' + (isStale ? 'bg-warning text-dark' : 'bg-success') + ' ms-2';
+    if (staleEl) staleEl.classList.toggle('d-none', !isStale);
+}
+
+function scheduleAutoRefresh() {
+    if (cacheRefreshTimer) clearInterval(cacheRefreshTimer);
+    cacheRefreshTimer = setInterval(function() { loadServers(true); }, monitorInterval * 1000);
 }
 
 function renderServers(servers) {
@@ -260,11 +373,12 @@ function renderServers(servers) {
     }
     var html = '';
     servers.forEach(function(s) {
-        var statusClass = s.status === 'running' ? 'bg-success' : s.status === 'stopped' ? 'bg-danger' : 'bg-warning text-dark';
-        var statusText = s.status === 'running' ? t('status_running') : s.status === 'stopped' ? t('status_stopped') : t('status_not_deployed');
+        var statusClass = s.status === 'running' ? 'bg-success' : s.status === 'stopped' ? 'bg-danger' : s.status === 'missing_files' ? 'bg-danger' : 'bg-warning text-dark';
+        var statusText = s.status === 'running' ? t('status_running') : s.status === 'stopped' ? t('status_stopped') : s.status === 'missing_files' ? t('status_missing_files') : t('status_not_deployed');
+        var pathHtml = s.status === 'missing_files' ? '<small class="text-danger">' + s.path + '</small>' : '<small class="text-muted">' + s.path + '</small>';
         html += '<div class="card mb-2" data-server-id="' + s.id + '">';
         html += '<div class="card-body py-2"><div class="d-flex justify-content-between align-items-center">';
-        html += '<div><strong>' + s.name + '</strong> <small class="text-muted">' + s.path + '</small> ';
+        html += '<div><strong>' + s.name + '</strong> ' + pathHtml + ' ';
         html += '<span class="badge bg-info ms-1">' + s.type + '</span> ';
         html += '<span class="badge ' + statusClass + ' ms-1 status-badge">' + statusText + '</span></div>';
         html += '<div class="d-flex gap-1 buttons">';
@@ -364,8 +478,70 @@ function renderInstallSelect(types) {
 loadServers();
 loadServerTypes();
 
-// Auto-refresh статуса серверов каждые 10 секунд
-setInterval(function() { loadServers(true); }, 10000);
+// Auto-refresh статуса серверов — интервал из настроек монитора
+// (по умолчанию 10с, обновляется из ответа list_servers)
+scheduleAutoRefresh();
+
+// Кнопка «Обновить сейчас» — будит фоновый монитор и перечитывает кеш
+document.getElementById('refreshServersBtn').addEventListener('click', function() {
+    var btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+    loadServers(true);
+    // Монитор обновляет кеш в фоне — перечитываем через пару секунд
+    setTimeout(function() {
+        loadServers(true);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+    }, 2500);
+});
+
+// Настройки монитора: загрузка при открытии модалки
+document.getElementById('monitorSettingsModal').addEventListener('show.bs.modal', function() {
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({section: 'servers', action: 'get_monitor_settings'})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        if (res.status === 'success' && res.settings) {
+            document.getElementById('monitorStatusInterval').value = res.settings.status_interval;
+            document.getElementById('monitorGitInterval').value = res.settings.git_interval;
+        }
+    })
+    .catch(function(err) { showErrorModal(err.message); });
+});
+
+function saveMonitorSettings() {
+    var btn = document.getElementById('monitorSaveBtn');
+    btn.disabled = true;
+    fetch('/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'},
+        body: new URLSearchParams({
+            section: 'servers',
+            action: 'save_monitor_settings',
+            status_interval: document.getElementById('monitorStatusInterval').value,
+            git_interval: document.getElementById('monitorGitInterval').value
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+        btn.disabled = false;
+        if (res.status === 'success' && res.settings) {
+            monitorInterval = Math.max(5, res.settings.status_interval || 10);
+            scheduleAutoRefresh();
+            var el = document.getElementById('monitorSaveResult');
+            el.classList.remove('d-none');
+            el.innerHTML = '<div class="alert alert-success py-1 mb-0"><i class="bi bi-check-circle me-1"></i> ' + t('monitor_saved') + '</div>';
+            setTimeout(function() { bootstrap.Modal.getInstance(document.getElementById('monitorSettingsModal')).hide(); }, 1200);
+        } else {
+            showErrorModal(res.message || 'Ошибка');
+        }
+    })
+    .catch(function(err) { btn.disabled = false; showErrorModal(err.message); });
+}
 
 // Загружаем диски при открытии модалки
 document.getElementById('serverInstallModal').addEventListener('show.bs.modal', function() {

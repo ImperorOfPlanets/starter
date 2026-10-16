@@ -190,7 +190,8 @@ class SchedulerModule(BaseModule):
     def _load_config() -> dict:
         config_path = SchedulerModule._get_config_path()
         if config_path and os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
+            # utf-8-sig: переживаем BOM, если файл правили внешним редактором
+            with open(config_path, 'r', encoding='utf-8-sig') as f:
                 return json.load(f)
         return {'version': 1, 'tasks': [], 'global_enabled': True}
 
@@ -198,6 +199,7 @@ class SchedulerModule(BaseModule):
     def _save_config(config: dict):
         config_path = SchedulerModule._get_config_path()
         if config_path:
+            # без BOM — json.load() на utf-8 падает на BOM-марке
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
 
@@ -227,8 +229,10 @@ class SchedulerModule(BaseModule):
                 'category': task_def.get('category', 'custom'),
                 'enabled': saved.get('enabled', task_def.get('default_enabled', False)),
                 'schedule': saved.get('schedule', task_def.get('default_schedule', 'daily')),
+                'custom_schedule': saved.get('custom_schedule'),
                 'params': saved.get('params', task_def.get('params', {})),
                 'events': saved.get('events', task_def.get('events', ['on_schedule'])),
+                'in_process': task_def.get('in_process', False),
                 'last_run': saved.get('last_run'),
                 'last_status': saved.get('last_status'),
                 'last_duration': saved.get('last_duration'),
@@ -246,9 +250,11 @@ class SchedulerModule(BaseModule):
                 'category': meta.get('category', 'custom'),
                 'enabled': saved.get('enabled', meta.get('default_enabled', False)),
                 'schedule': saved.get('schedule', meta.get('default_schedule', 'daily')),
+                'custom_schedule': saved.get('custom_schedule'),
                 'params': {p['name']: p.get('default') for p in meta.get('params', [])} if not saved.get('params') else saved.get('params'),
                 'param_schema': meta.get('params', []),
                 'events': saved.get('events', meta.get('events', ['on_schedule'])),
+                'in_process': meta.get('in_process', False),
                 'last_run': saved.get('last_run'),
                 'last_status': saved.get('last_status'),
                 'last_duration': saved.get('last_duration'),
@@ -499,16 +505,44 @@ class SchedulerModule(BaseModule):
             with open(log_file, 'a', encoding='utf-8') as f:
                 f.write(log_entry)
 
-        # Update task stats
-        config = SchedulerModule._load_config()
-        for task in config.get('tasks', []):
-            if task['name'] == task_name:
-                task['last_run'] = now
-                task['last_status'] = status
-                task['last_duration'] = f"{duration}s"
-                task['run_count'] = task.get('run_count', 0) + 1
-                break
-        SchedulerModule._save_config(config)
+        # Update task stats (upsert: кастомная задача могла ещё не быть
+        # сохранена в конфиг — тогда добавляем запись со статистикой)
+        with SchedulerModule._config_lock:
+            config = SchedulerModule._load_config()
+            task_entry = None
+            for task in config.get('tasks', []):
+                if task['name'] == task_name:
+                    task_entry = task
+                    break
+            if task_entry is None:
+                # берём дефолты из метаданных (встроенные/кастомные)
+                meta = {}
+                try:
+                    for m in SchedulerModule.get_tasks().get('tasks', []):
+                        if m['name'] == task_name:
+                            meta = m
+                            break
+                except Exception:
+                    pass
+                task_entry = {
+                    'name': task_name,
+                    'enabled': meta.get('enabled', True),
+                    'schedule': meta.get('schedule', 'daily'),
+                    'custom_schedule': meta.get('custom_schedule'),
+                    'module': None,
+                    'func': None,
+                    'params': params or {},
+                    'category': meta.get('category', 'custom'),
+                    'description': meta.get('description', {}),
+                    'events': meta.get('events', ['on_schedule']),
+                    'run_count': 0,
+                }
+                config.setdefault('tasks', []).append(task_entry)
+            task_entry['last_run'] = now
+            task_entry['last_status'] = status
+            task_entry['last_duration'] = f"{duration}s"
+            task_entry['run_count'] = task_entry.get('run_count', 0) + 1
+            SchedulerModule._save_config(config)
 
         print(f"[{now}] Task '{task_name}' completed: {status} ({duration}s)")
         return result
@@ -644,6 +678,145 @@ class SchedulerModule(BaseModule):
                         return {'status': 'error', 'message': str(e)}
                 return {'status': 'error', 'message': 'Module/func not configured'}
         return {'status': 'error', 'message': f'Task not found: {task_name}'}
+
+    # ===== Цикл выполнения по расписанию =====
+
+    SCHEDULE_INTERVALS = {
+        'every_10sec': 10,
+        'every_30sec': 30,
+        'every_1min': 60,
+        'every_5min': 300,
+        'every_30min': 1800,
+        'hourly': 3600,
+        'every_6h': 21600,
+        'daily': 86400,
+        'weekly': 604800,
+        'monthly': 2592000,
+    }
+    TICK_SECONDS = 10
+
+    _loop_thread: Optional[threading.Thread] = None
+    _loop_stop = threading.Event()
+    _running_tasks: set = set()
+    _running_lock = threading.Lock()
+    _config_lock = threading.Lock()
+
+    @staticmethod
+    def interval_seconds(task: dict) -> int:
+        """Интервал задачи в секундах: custom_schedule (сек) или schedule."""
+        custom = task.get('custom_schedule')
+        if custom:
+            try:
+                return max(5, int(custom))
+            except (TypeError, ValueError):
+                pass
+        return SchedulerModule.SCHEDULE_INTERVALS.get(task.get('schedule'), 3600)
+
+    @staticmethod
+    def is_running() -> bool:
+        """Крутится ли цикл планировщика в этом процессе"""
+        t = SchedulerModule._loop_thread
+        return bool(t and t.is_alive())
+
+    @staticmethod
+    def is_global_enabled() -> bool:
+        return bool(SchedulerModule._load_config().get('global_enabled', True))
+
+    @staticmethod
+    def _task_due(task: dict) -> bool:
+        last = task.get('last_run')
+        if not last:
+            return True
+        try:
+            last_ts = datetime.fromisoformat(last).timestamp()
+        except Exception:
+            return True
+        return (time.time() - last_ts) >= SchedulerModule.interval_seconds(task)
+
+    @staticmethod
+    def _launch_task(task: dict):
+        """Запуск просроченной задачи.
+
+        in_process=True — в отдельном потоке (лёгкие задачи, например
+        мониторинг серверов: без спавна процесса, кеш в SQLite общается
+        напрямую). Остальные — отдельным процессом, как задумано: падение
+        задачи не роняет стартер.
+        """
+        name = task['name']
+        params = task.get('params') or {}
+
+        with SchedulerModule._running_lock:
+            if name in SchedulerModule._running_tasks:
+                return
+            SchedulerModule._running_tasks.add(name)
+
+        if task.get('in_process'):
+            def _run():
+                try:
+                    SchedulerModule.execute_task(name, params)
+                except Exception as e:
+                    logger.error(f"scheduler: задача {name} упала: {e}")
+                finally:
+                    with SchedulerModule._running_lock:
+                        SchedulerModule._running_tasks.discard(name)
+            threading.Thread(target=_run, daemon=True, name=f'task-{name}').start()
+        else:
+            res = SchedulerModule.run_task_now({'name': name})
+            if res.get('status') != 'success':
+                with SchedulerModule._running_lock:
+                    SchedulerModule._running_tasks.discard(name)
+                logger.error(f"scheduler: не удалось запустить {name}: {res.get('message')}")
+                return
+
+            def _clear_after_interval():
+                # маркер снимаем через интервал — задача-процесс не должна
+                # перезапускаться раньше, чем отработает её расписание
+                time.sleep(SchedulerModule.interval_seconds(task))
+                with SchedulerModule._running_lock:
+                    SchedulerModule._running_tasks.discard(name)
+            threading.Thread(target=_clear_after_interval, daemon=True).start()
+
+    @staticmethod
+    def _run_due_tasks():
+        tasks = SchedulerModule.get_tasks().get('tasks', [])
+        for task in tasks:
+            if not task.get('enabled'):
+                continue
+            if 'on_schedule' not in (task.get('events') or ['on_schedule']):
+                continue
+            if not SchedulerModule._task_due(task):
+                continue
+            SchedulerModule._launch_task(task)
+
+    @staticmethod
+    def _scheduler_loop():
+        logger.info(f"Планировщик запущен (тик {SchedulerModule.TICK_SECONDS}с)")
+        while not SchedulerModule._loop_stop.is_set():
+            try:
+                if SchedulerModule.is_global_enabled():
+                    SchedulerModule._run_due_tasks()
+            except Exception as e:
+                logger.error(f"scheduler loop error: {e}")
+            SchedulerModule._loop_stop.wait(SchedulerModule.TICK_SECONDS)
+
+    @staticmethod
+    def start_scheduler():
+        """Запускает цикл выполнения задач по расписанию"""
+        if SchedulerModule._loop_thread and SchedulerModule._loop_thread.is_alive():
+            logger.info("scheduler: цикл уже запущен")
+            return
+        SchedulerModule._loop_stop.clear()
+        SchedulerModule._loop_thread = threading.Thread(
+            target=SchedulerModule._scheduler_loop, daemon=True, name='scheduler')
+        SchedulerModule._loop_thread.start()
+        logger.info("scheduler: цикл расписания инициирован")
+
+    @staticmethod
+    def stop_scheduler():
+        SchedulerModule._loop_stop.set()
+        if SchedulerModule._loop_thread:
+            SchedulerModule._loop_thread.join(timeout=5)
+        logger.info("scheduler: цикл остановлен")
 
     # ===== Event system =====
 
