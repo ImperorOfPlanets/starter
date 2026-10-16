@@ -984,6 +984,115 @@ def list_module_hosts(data, session_obj):
     }
 
 
+def _load_env_simple(env_file: Path) -> Dict[str, str]:
+    """Минимальный парсер KEY=VALUE для .env хоста (только для подстановки)."""
+    result = {}
+    try:
+        for line in env_file.read_text(encoding='utf-8', errors='ignore').splitlines():
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            k, v = line.split('=', 1)
+            result[k.strip()] = v.strip()
+    except OSError:
+        pass
+    return result
+
+
+def _install_docker_module(server_type: str, type_info: dict, host_path: str) -> dict:
+    """Docker-модуль: единый конвейер для любых серверов-хостов.
+
+    1) копируем пакет модуля в <host>/docker/modules/<key>/
+    2) дописываем недостающие ключи модуля в .env хоста
+    3) копируем nginx-шаблон модуля в templates хоста
+    4) дописываем сервисы модуля в текущий docker-compose.yml хоста
+       (при следующем рендере render_compose подмешает их автоматически
+       из реестра - docker-compose.yml генерируется, не редактируется вручную)
+    5) docker compose up -d --build
+    6) запись в registry.modules
+    """
+    host = Path(host_path)
+    docker_dir = host / 'docker'
+    if not (docker_dir / 'docker-compose.example').exists() and not (docker_dir / 'docker-compose.yml').exists():
+        return {'status': 'error',
+                'message': f'В {host} нет docker/compose - хост не подходит для docker-модуля'}
+
+    src = Path(type_info.get('module_path') or f'C:/control/{server_type}')
+    src_docker = src / 'docker'
+    if not src_docker.exists():
+        return {'status': 'error', 'message': f'Каталог модуля не найден: {src_docker}'}
+
+    key = server_type
+    mod_dir = docker_dir / 'modules' / key
+    shutil.copytree(src_docker, mod_dir, dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns('.env', 'docker-compose.yml',
+                                                  '__pycache__', 'modules'))
+
+    # env: дописываем недостающие ключи в .env хоста
+    env_example = mod_dir / '.env.example'
+    env_file = docker_dir / '.env'
+    if env_example.exists() and env_file.exists():
+        existing = env_file.read_text(encoding='utf-8', errors='ignore')
+        have = {l.split('=', 1)[0].strip()
+                for l in existing.splitlines() if '=' in l and not l.strip().startswith('#')}
+        add = [l for l in env_example.read_text(encoding='utf-8').splitlines()
+               if '=' in l and not l.strip().startswith('#')
+               and l.split('=', 1)[0].strip() not in have]
+        if add:
+            env_file.write_text(existing.rstrip() + '\n\n# --- модуль ' + key + ' ---\n'
+                                + '\n'.join(add) + '\n', encoding='utf-8')
+
+    # nginx-шаблон модуля -> templates хоста
+    tpl_dir = mod_dir / 'configs' / 'nginx'
+    tpl_dst = docker_dir / 'configs' / 'nginx' / 'confs' / 'templates'
+    if tpl_dir.exists() and tpl_dst.exists():
+        for tpl in tpl_dir.glob('*.template'):
+            shutil.copy2(tpl, tpl_dst / tpl.name)
+
+    # сервисы модуля -> в текущий docker-compose.yml хоста
+    compose = docker_dir / 'docker-compose.yml'
+    mod_compose = mod_dir / 'docker-compose.yml'
+    if compose.exists() and mod_compose.exists():
+        text = compose.read_text(encoding='utf-8')
+        marker = f'### MODULE {key} ###'
+        if marker not in text:
+            env_vars = _load_env_simple(env_file)
+            block = mod_compose.read_text(encoding='utf-8')
+            for k, v in env_vars.items():
+                if v:
+                    block = re.sub(r'\$\{' + re.escape(k) + r'(:-[^}]*)?\}',
+                                   lambda m, vv=v: vv, block)
+            compose.write_text(text.rstrip() + f'\n\n{marker}\n' + block, encoding='utf-8')
+
+    # поднимаем
+    up_out = ''
+    up_ok = False
+    try:
+        kw = _subprocess_kwargs(1800)
+        kw['cwd'] = str(docker_dir)
+        proc = subprocess.run(['docker', 'compose', '--env-file', '.env', 'up', '-d', '--build'], **kw)
+        up_ok = proc.returncode == 0
+        up_out = ((proc.stdout or '') + (proc.stderr or ''))[-2000:]
+    except Exception as e:
+        up_out = str(e)
+
+    registry = get('registry')
+    if registry:
+        try:
+            registry.add_module_install(server_type, str(host), f'module:{key}')
+        except Exception as e:
+            logger.warning('registry module install failed: %s', e)
+
+    return {
+        'status': 'success' if up_ok else 'error',
+        'message': (f'Модуль {key} установлен в {host.name}' if up_ok
+                    else f'Модуль {key} скопирован, но compose up завершился с ошибкой'),
+        'output': up_out,
+        'package': f'module:{key}',
+        'host': str(host),
+    }
+
+
 def install_module(data, session_obj):
     """Установка модуля внутрь клиента: composer require на хосте + перезапуск."""
     user = session_obj.get('user') or session_obj.get('user_info')
@@ -998,6 +1107,11 @@ def install_module(data, session_obj):
         return {'status': 'error', 'message': f'Unknown server type: {server_type}'}
 
     type_info = merged_types[server_type]
+
+    # ---- docker-модуль (сервис в compose хоста) ----
+    if (type_info.get('module') or {}).get('kind') == 'docker':
+        return _install_docker_module(server_type, type_info, host_path)
+
     package = type_info.get('composer_package')
     module_path = type_info.get('module_path')
 
@@ -1279,15 +1393,39 @@ def install_server(data, session_obj):
     repo_root = bool(type_info.get('repo_root'))
 
     def _remove_path(p: Path, logger=None):
+        """Удалить путь с учётом Windows-специфики.
+
+        .git создаёт read-only (WinError 5), а только что остановленные
+        контейнеры могут держать каталог занятым (WinError 32) — поэтому
+        снимаем атрибут и повторяем с паузой. Таймаут подпроцессов на
+        хосте не даёт им освободить файлы мгновенно.
+        """
         import shutil
-        try:
-            if p.is_dir() and not p.is_symlink():
-                shutil.rmtree(p)
-            else:
-                p.unlink()
-        except Exception as e:
-            if logger:
-                logger.warning("Could not remove %s: %s", p, e)
+        import stat as _stat
+        import time as _time
+
+        def _onerror(func, path, _exc):
+            try:
+                os.chmod(path, _stat.S_IWRITE | _stat.S_IREAD)
+                func(path)
+            except Exception:
+                if not os.path.exists(path):
+                    return
+                raise
+
+        for attempt in range(3):
+            try:
+                if p.is_dir() and not p.is_symlink():
+                    shutil.rmtree(p, onerror=_onerror)
+                else:
+                    p.unlink()
+                return
+            except Exception as e:
+                if attempt == 2:
+                    if logger:
+                        logger.warning("Could not remove %s: %s", p, e)
+                    return
+                _time.sleep(2)
 
     try:
         if is_reinstall:
@@ -1340,7 +1478,34 @@ def install_server(data, session_obj):
             # Корневой репозиторий: code/ и docker/ приходят из репо.
             # docker/.env мог сохраниться при переустановке, а git clone
             # требует пустую папку — клонируем во временную и переносим.
-            has_local_code = (server_path / '.git').exists()
+            #
+            # Наличие .git НЕ означает, что репозиторий цел: после
+            # неудачного удаления (WinError 32/5) папка остаётся
+            # полуразобранной. Проверяем git rev-parse — иначе install
+            # «пропускает клон» и собирает сервер из остатков без
+            # docker/ и compose-шаблона.
+            has_local_code = False
+            if (server_path / '.git').exists():
+                import subprocess
+                try:
+                    probe = subprocess.run(
+                        ['git', '-C', str(server_path), 'rev-parse', 'HEAD'],
+                        **_subprocess_kwargs(30))
+                    has_local_code = probe.returncode == 0
+                except Exception:
+                    has_local_code = False
+                # .git цел, но docker/ мог быть удалён наполовину — тогда
+                # compose-шаблона нет, и сервер не собрать. Считаем копию
+                # непригодной и переклонируем.
+                if has_local_code and not any(
+                        (server_path / d / 'docker-compose.example').exists()
+                        for d in ('docker', 'src')):
+                    logger.warning(
+                        f"docker-compose.example отсутствует в {server_path} — удаляю остатки и клонирую заново")
+                    has_local_code = False
+                if not has_local_code:
+                    _remove_path(server_path / '.git', logger)
+
             if has_local_code:
                 logger.info(f"Git repo already exists at {server_path}, skipping clone")
             elif repo_url and not repo_url.startswith('https://github.com/your-org'):
@@ -1411,6 +1576,16 @@ def install_server(data, session_obj):
                 # не молчим: сервер без зависимостей не рабочий
                 logger.warning('PHP dependencies not installed for %s: %s',
                                server_path, deps.get('message'))
+
+        # Фронтенд. Без собранного манифеста Vite Laravel отдаёт 500
+        # на каждой странице с @vite, поэтому шаг идёт сразу за composer
+        # и тоже работает на хосте.
+        frontend = None
+        if (code_path / 'package.json').exists():
+            frontend = _ensure_frontend_dependencies(code_path, logger=logger)
+            if frontend.get('status') == 'error':
+                logger.warning('Frontend not built for %s: %s',
+                               server_path, frontend.get('message'))
 
         # Выделяем подсеть если нужна (не для reverse-proxy)
         subnet_octet = 0
@@ -1642,10 +1817,17 @@ def install_server(data, session_obj):
 
         # Установка без vendor/ формально успешна, но artisan в контейнерах
         # не запустится, поэтому предупреждение возвращаем явно
+        warnings = []
         if deps and deps.get('status') == 'error':
-            result['warnings'] = [f"PHP-зависимости не установлены: {deps.get('message')}"]
+            warnings.append(f"PHP-зависимости не установлены: {deps.get('message')}")
+        if frontend and frontend.get('status') == 'error':
+            warnings.append(f"Фронтенд не собран: {frontend.get('message')}")
+        if warnings:
+            result['warnings'] = warnings
         if deps and deps.get('status') == 'skipped':
             result['php_dependencies'] = deps.get('reason', '')
+        if frontend and frontend.get('status') == 'skipped':
+            result['frontend'] = frontend.get('reason', '')
 
         return result
 
@@ -2873,6 +3055,98 @@ def _ensure_php_dependencies(code_dir: Path, server_path: Path = None, logger=No
 
     if logger:
         logger.info('composer install OK in %s', code_dir)
+
+    return {'status': 'ok', 'output': output[-500:]}
+
+
+def _npm_cmd():
+    """Команда запуска npm: на Windows npm — это npm.cmd, а subprocess
+    без shell его не запускает (CreateProcess не ищет по PATHEXT)."""
+    exe = shutil.which('npm')
+    if not exe:
+        return None
+    if exe.lower().endswith(('.cmd', '.bat')):
+        return ['cmd', '/c', exe]
+    return [exe]
+
+
+def _ensure_frontend_dependencies(code_dir: Path, logger=None, timeout=1800):
+    """Собрать фронтенд: npm ci (или install) + npm run build.
+
+    Без собранного public/build/manifest.json Laravel с @vite в blade
+    отдаёт 500 на каждой странице, поэтому на чистой установке шаг
+    обязателен — иначе сервер формально установлен, но нерабочий.
+    Логика зеркальна фазе npm из ServerstrategyModule (обновление
+    clientv2), но без проверки «менялся ли package.json»: на установке
+    репозиторий всегда свежий.
+
+    Работает на хосте, а не в контейнере: так быстрее, и node_modules
+    сразу виден в примонтированном src/.
+
+    Возвращает dict: {'status': 'ok'|'skipped'|'error', ...}
+    """
+    import subprocess
+
+    code_dir = Path(code_dir)
+
+    if not (code_dir / 'package.json').exists():
+        return {'status': 'skipped', 'reason': 'нет package.json'}
+
+    npm = _npm_cmd()
+    if not npm:
+        return {'status': 'error',
+                'message': 'npm не найден на хосте — собрать фронтенд невозможно'}
+
+    # ci требует package-lock.json и даёт чистое дерево; без lock —
+    # обычный install (иначе установка падает на репозиториях без lock).
+    lock_exists = (code_dir / 'package-lock.json').exists()
+    install_cmd = npm + (['ci'] if lock_exists else ['install']) \
+                       + ['--no-audit', '--no-fund']
+
+    if logger:
+        logger.info('frontend deps in %s: %s', code_dir, ' '.join(install_cmd[1:3]))
+
+    try:
+        proc = subprocess.run(install_cmd, cwd=str(code_dir),
+                              **_subprocess_kwargs(timeout))
+    except subprocess.TimeoutExpired:
+        return {'status': 'error', 'message': f'npm не уложился в {timeout} с'}
+    except Exception as e:
+        return {'status': 'error', 'message': f'npm install: {str(e)}'}
+
+    output = ((proc.stdout or '') + (proc.stderr or '')).strip()
+
+    if proc.returncode != 0:
+        if logger:
+            logger.warning('npm install failed in %s (rc=%s)', code_dir, proc.returncode)
+        return {'status': 'error',
+                'returncode': proc.returncode,
+                'message': f'npm install завершился с кодом {proc.returncode}',
+                'output': output[-2000:]}
+
+    if logger:
+        logger.info('npm install OK, building assets in %s', code_dir)
+
+    try:
+        proc = subprocess.run(npm + ['run', 'build'], cwd=str(code_dir),
+                              **_subprocess_kwargs(timeout))
+    except subprocess.TimeoutExpired:
+        return {'status': 'error', 'message': f'npm run build не уложился в {timeout} с'}
+    except Exception as e:
+        return {'status': 'error', 'message': f'npm run build: {str(e)}'}
+
+    output = ((proc.stdout or '') + (proc.stderr or '')).strip()
+
+    if proc.returncode != 0:
+        if logger:
+            logger.warning('npm run build failed in %s (rc=%s)', code_dir, proc.returncode)
+        return {'status': 'error',
+                'returncode': proc.returncode,
+                'message': f'npm run build завершился с кодом {proc.returncode}',
+                'output': output[-2000:]}
+
+    if logger:
+        logger.info('frontend build OK in %s', code_dir)
 
     return {'status': 'ok', 'output': output[-500:]}
 
