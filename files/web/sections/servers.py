@@ -2046,6 +2046,17 @@ def _apply_instance_env(docker_path: Path, server_path: Path, project_name: str,
     ensure_secret('REVERB_APP_SECRET', 48)
     ensure_secret('OAUTH_SECRET', 48)
 
+    # APP_KEY Laravel — ключ шифрования сессий и cookie. На свежей
+    # установке src/.env нет (compose передаёт настройки через
+    # environment), поэтому artisan key:generate не срабатывает и
+    # приложение падает с MissingAppKeyException. Генерируем ключ
+    # здесь, в docker/.env, откуда compose прокидывает его в контейнер.
+    if not values.get('APP_KEY'):
+        import base64 as _b64
+        put('APP_KEY', 'base64:' + _b64.b64encode(_secrets.token_bytes(32)).decode())
+    else:
+        applied.setdefault('APP_KEY', values['APP_KEY'])
+
     if not values.get('OAUTH_CLIENT_ID'):
         # id клиента выдаёт myidon.site; пока пусто, но ключ должен существовать,
         # иначе подстановка в compose убирает всю строку
