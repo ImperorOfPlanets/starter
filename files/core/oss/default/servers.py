@@ -75,7 +75,7 @@ class ServersModule(BaseModule):
             return result
 
         docker_dir = p / 'docker'
-        code_dir = p / 'src'
+        code_dir = p / 'src' if (p / 'src').is_dir() else p / 'code'
 
         result["has_docker"] = docker_dir.exists() and docker_dir.is_dir()
         result["has_code"] = code_dir.exists() and code_dir.is_dir()
@@ -117,7 +117,9 @@ class ServersModule(BaseModule):
             "name": name or scan["name"],
             "path": resolved,
             "docker_path": str(Path(resolved) / 'docker'),
-            "code_path": str(Path(resolved) / 'src'),
+            "code_path": str(Path(resolved) / 'src'
+                             if (Path(resolved) / 'src').is_dir()
+                             else Path(resolved) / 'code'),
             "has_docker": scan["has_docker"],
             "has_code": scan["has_code"],
             "docker_compose": scan["docker_compose"],
@@ -158,7 +160,9 @@ class ServersModule(BaseModule):
         from pathlib import Path as P
         server_root = P(server['path'])
         docker_path = P(server.get('docker_path') or str(server_root / 'docker'))
-        code_path = P(server.get('code_path') or str(server_root / 'src'))
+        code_path = P(server.get('code_path') or
+                      str(server_root / 'src' if (server_root / 'src').is_dir()
+                          else server_root / 'code'))
 
         set_global('project_path', server_root)
         set_global('docker_path', docker_path)

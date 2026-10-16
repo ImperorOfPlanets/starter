@@ -1015,7 +1015,7 @@ def install_module(data, session_obj):
         }
 
     host = Path(host_path)
-    code_dir = host / 'src'
+    code_dir = host / 'src' if (host / 'src').is_dir() else host / 'code'
     if not (code_dir / 'composer.json').exists():
         return {'status': 'error', 'message': f'В {host} нет src/composer.json'}
 
@@ -1228,7 +1228,8 @@ def install_server(data, session_obj):
 
     server_path = Path(install_path)
     docker_path = server_path / 'docker'
-    code_path = server_path / 'src'
+    code_path = server_path / 'src' if (server_path / 'src').is_dir() \
+        else server_path / 'code'
 
     # =================== ПРОВЕРКА УСТАНОВКИ ЧЕРЕЗ MYIDON.SITE =================
     oauth_token = session_obj.get('oauth_token')
@@ -1992,7 +1993,8 @@ def _apply_instance_env(docker_path: Path, server_path: Path, project_name: str,
         values[key] = str(value)
         applied[key] = str(value)
 
-    code_dir = server_path / 'src'
+    code_dir = server_path / 'src' if (server_path / 'src').is_dir() \
+        else server_path / 'code'
     docker_dir = server_path / 'docker'
 
     # --- пути: в шаблоне могут быть как ${PATH_APP_*}, так и готовые пути
@@ -2730,7 +2732,8 @@ def server_repo_info(data, session_obj):
     import subprocess
 
     server_path = Path(server_id)
-    code_path = server_path / 'src'
+    code_path = server_path / 'src' if (server_path / 'src').is_dir() \
+        else server_path / 'code'
     if not (code_path / '.git').exists() and (server_path / '.git').exists():
         code_path = server_path
 
@@ -3400,7 +3403,7 @@ def update_module(data, session_obj):
                 'message': 'Укажите host_path — клиент, в котором установлен модуль'}
 
     host = Path(host_path)
-    code_dir = host / 'src'
+    code_dir = host / 'src' if (host / 'src').is_dir() else host / 'code'
     vendor_dir = code_dir / 'vendor' / package.replace('/', os.sep)
 
     if not vendor_dir.exists():
@@ -3585,7 +3588,8 @@ def server_git_log(data, session_obj):
     import subprocess
 
     server_path = Path(server_id)
-    code_path = server_path / 'src'
+    code_path = server_path / 'src' if (server_path / 'src').is_dir() \
+        else server_path / 'code'
     if not (code_path / '.git').exists() and (server_path / '.git').exists():
         code_path = server_path
 

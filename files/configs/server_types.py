@@ -436,8 +436,8 @@ SERVER_TYPES = {
         'used_by': [],
         'depends_on': [],
         'references': [
-            {'path': '../cr-system/code/data', 'description': '755 клинических рекомендаций Минздрава РФ (только чтение)'},
-            {'path': '../OKPDTR-SYNC/code/data', 'description': 'Справочник ОКПДТР — обновление раз в месяц, опционально'},
+            {'path': '../cr-system/src/data', 'description': '755 клинических рекомендаций Минздрава РФ (только чтение)'},
+            {'path': '../OKPDTR-SYNC/src/data', 'description': 'Справочник ОКПДТР — обновление раз в месяц, опционально'},
         ],
     },
     'okpdtr-sync': {

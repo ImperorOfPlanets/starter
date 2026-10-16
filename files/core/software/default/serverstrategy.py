@@ -116,15 +116,17 @@ def _compose_env_for(docker_path):
 
 
 def git_root(server_path):
-    """Где лежит .git: src/ (Laravel-раскладка) или корень проекта.
+    """Где лежит .git: src/ (единая архитектура), code/ (Laravel) или корень.
 
     Единая архитектура: .git в корне проекта, приложение в src/.
-    У php-проектов может быть git внутри src/ — обновление работает
-    с обоими вариантами.
+    Laravel-проекты (CLIENTv2, client, browser) пока не мигрированы —
+    у них git и код внутри code/. Обновление работает со всеми тремя.
     """
     server_path = Path(server_path)
     if (server_path / 'src' / '.git').exists():
         return server_path / 'src'
+    if (server_path / 'code' / '.git').exists():
+        return server_path / 'code'
     if (server_path / '.git').exists():
         return server_path
     return server_path / 'src'
@@ -491,7 +493,9 @@ class ServerstrategyModule:
         изменёнными файлами и списком файлов для бэкапа.
         """
         server_path = Path(server_path)
-        code_path = server_path / 'src'
+        # код приложения: src/ (единая архитектура) или code/ (Laravel, не мигрирован)
+        code_path = server_path / 'src' if (server_path / 'src').is_dir() \
+            else server_path / 'code'
         git_path = git_root(server_path)
         plan = ServerstrategyModule.get_update_plan(server_type, type_info)
 
@@ -716,7 +720,8 @@ class ServerstrategyModule:
     def run_dependencies(server_path, preflight: dict, plan: dict) -> dict:
         """Зависимости и сборка фронта — по стратегии и по факту изменения файлов."""
         server_path = Path(server_path)
-        code_path = server_path / 'src'
+        code_path = server_path / 'src' if (server_path / 'src').is_dir() \
+            else server_path / 'code'
         det = preflight.get('detected') or {}
         deps = plan.get('deps') or {}
         strategy = plan['strategy']
@@ -800,12 +805,15 @@ class ServerstrategyModule:
         а новые переменные не попадали в docker/.env.
         """
         server_path = Path(server_path)
+        # код приложения: src/ (единая архитектура) или code/ (Laravel, не мигрирован)
+        code_path = server_path / 'src' if (server_path / 'src').is_dir() \
+            else server_path / 'code'
         docker_path = server_path / 'docker'
         dock = plan.get('docker') or {}
         out = {}
 
         if dock.get('merge_env_example', True):
-            out['env'] = merge_env_example(server_path / 'src', docker_path)
+            out['env'] = merge_env_example(code_path, docker_path)
 
         if dock.get('regenerate_compose', True):
             env_vars = read_env(docker_path / '.env')
@@ -815,10 +823,10 @@ class ServerstrategyModule:
             prefix = preflight.get('docker_network_prefix')
             if prefix:
                 env_vars['DOCKER_NETWORK_PREFIX'] = prefix
-            env_vars['PATH_APP_CODE'] = str(server_path / 'src')
+            env_vars['PATH_APP_CODE'] = str(code_path)
             env_vars['PATH_APP_DOCKER'] = str(docker_path)
             env_vars['PATH_APP_DOCKER_LOGS'] = str(docker_path / 'logs')
-            env_vars['PATH_APP_PROJECT'] = str(server_path / 'src')
+            env_vars['PATH_APP_PROJECT'] = str(code_path)
 
             set_env_keys(docker_path / '.env',
                          {k: env_vars[k] for k in
@@ -846,7 +854,8 @@ class ServerstrategyModule:
         Схема БД после обновления может разъехаться с кодом.
         """
         mode = plan.get('migrate', 'auto')
-        code_path = Path(server_path) / 'src'
+        code_path = Path(server_path) / 'src' if (Path(server_path) / 'src').is_dir() \
+            else Path(server_path) / 'code'
         has_artisan = (code_path / 'artisan').exists()
 
         if mode == False or mode is False:
@@ -949,7 +958,8 @@ class ServerstrategyModule:
     def rollback(server_path, backup_info: dict, plan: dict) -> dict:
         """Возврат к сохранённому состоянию."""
         server_path = Path(server_path)
-        code_path = server_path / 'src'
+        code_path = server_path / 'src' if (server_path / 'src').is_dir() \
+            else server_path / 'code'
         out = {'restored': [], 'ok': False}
 
         prev = backup_info.get('local_commit')
