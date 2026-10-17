@@ -302,6 +302,7 @@ SERVER_TYPES = {
         'can_have_multiple': True,
         'default_folder': 'yolo',
         'update': UPDATE_PYTHON,
+        'repo_root': True,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/yolo.git',
             'branch': 'master'
@@ -682,6 +683,33 @@ SERVER_TYPES = {
         'update': UPDATE_COMPOSER_MODULE,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/client-pages.git',
+            'branch': 'master'
+        }
+    },
+    'iskra': {
+        'name': 'Искра (AI-медицинский секретарь)',
+        'name_en': 'Iskra (AI medical secretary)',
+        'name_cn': 'Искра (AI医疗秘书)',
+        'description': 'Клинические рекомендации + AI-агенты. Docker-модуль: сервис в compose хоста + nginx-блок',
+        'description_en': 'Clinical recommendations + AI agents (docker module)',
+        'description_cn': '临床指南 + AI 代理（docker 模块）',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': None,
+        'order': 305,
+        'can_have_multiple': False,
+        'default_folder': 'iscra',
+        'is_module': True,
+        # docker-модуль: composer-часть не нужна, ставится как сервис в хост
+        'module': {
+            'kind': 'docker',
+        },
+        'module_path': 'C:/repos/iscra-on-clientv2',
+        'update': UPDATE_COMPOSER_MODULE,
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/iscra-on-clientv2.git',
             'branch': 'master'
         }
     },

@@ -999,7 +999,25 @@ def _load_env_simple(env_file: Path) -> Dict[str, str]:
     return result
 
 
-def _install_docker_module(server_type: str, type_info: dict, host_path: str) -> dict:
+def _module_services_fragment(mod_text: str) -> str:
+    """Определения сервисов из compose-файла модуля (без корневого services:).
+
+    Модульный файл - самостоятельный compose (со своим services:). В хост его
+    нельзя дописывать целиком - будет дубль ключа YAML. Вырезаем только
+    содержимое корневой секции services.
+    """
+    out, in_services = [], False
+    for line in mod_text.splitlines():
+        if not in_services:
+            if line.strip() == 'services:':
+                in_services = True
+            continue
+        out.append(line)
+    return '\n'.join(out).rstrip() + '\n'
+
+
+def _install_docker_module(server_type: str, type_info: dict, host_path: str,
+                           oauth_token: str = None, application_id=None) -> dict:
     """Docker-модуль: единый конвейер для любых серверов-хостов.
 
     1) копируем пакет модуля в <host>/docker/modules/<key>/
@@ -1028,6 +1046,15 @@ def _install_docker_module(server_type: str, type_info: dict, host_path: str) ->
                     ignore=shutil.ignore_patterns('.env', 'docker-compose.yml',
                                                   '__pycache__', 'modules'))
 
+    # compose-файл модуля: в git пакета он не хранится (источник - .example).
+    # Перезаписываем всегда: в хосте может лежать устаревшая копия.
+    if (mod_dir / 'docker-compose.example').exists():
+        shutil.copy2(mod_dir / 'docker-compose.example', mod_dir / 'docker-compose.yml')
+
+    # скелет каталогов кода и данных модуля
+    (mod_dir / 'src').mkdir(parents=True, exist_ok=True)
+    (mod_dir / 'data' / 'cr').mkdir(parents=True, exist_ok=True)
+
     # env: дописываем недостающие ключи в .env хоста
     env_example = mod_dir / '.env.example'
     env_file = docker_dir / '.env'
@@ -1050,6 +1077,8 @@ def _install_docker_module(server_type: str, type_info: dict, host_path: str) ->
             shutil.copy2(tpl, tpl_dst / tpl.name)
 
     # сервисы модуля -> в текущий docker-compose.yml хоста
+    # (вырезаем только определения сервисов: корневой services: в модульном
+    #  файле нельзя дописывать в HOST-файл - будет дубль ключа YAML)
     compose = docker_dir / 'docker-compose.yml'
     mod_compose = mod_dir / 'docker-compose.yml'
     if compose.exists() and mod_compose.exists():
@@ -1057,7 +1086,7 @@ def _install_docker_module(server_type: str, type_info: dict, host_path: str) ->
         marker = f'### MODULE {key} ###'
         if marker not in text:
             env_vars = _load_env_simple(env_file)
-            block = mod_compose.read_text(encoding='utf-8')
+            block = _module_services_fragment(mod_compose.read_text(encoding='utf-8'))
             for k, v in env_vars.items():
                 if v:
                     block = re.sub(r'\$\{' + re.escape(k) + r'(:-[^}]*)?\}',
@@ -1082,6 +1111,20 @@ def _install_docker_module(server_type: str, type_info: dict, host_path: str) ->
             registry.add_module_install(server_type, str(host), f'module:{key}')
         except Exception as e:
             logger.warning('registry module install failed: %s', e)
+
+    # фиксация установки модуля на myidon.site (цепочка: клиент -> модуль)
+    if up_ok and oauth_token and application_id:
+        try:
+            from files.core.software.default.installation_lock import InstallationLockModule
+            InstallationLockModule.record_installation(
+                oauth_token=oauth_token,
+                server_type=server_type,
+                server_path=str(host),
+                application_id=int(application_id),
+                additional_data={'module': True, 'kind': 'docker'},
+            )
+        except Exception as e:
+            logger.warning('installation record failed: %s', e)
 
     return {
         'status': 'success' if up_ok else 'error',
@@ -1108,9 +1151,35 @@ def install_module(data, session_obj):
 
     type_info = merged_types[server_type]
 
+    # ==== ПРОВЕРКА УСТАНОВКИ МОДУЛЯ ЧЕРЕЗ MYIDON.SITE ====
+    # Сперва улетает fingerprint клиента (hardware + уникальная комбинация)
+    # и activation key; продолжаем установку только после ответа сайта.
+    oauth_token = session_obj.get('oauth_token')
+    application_id = data.get('application_id')
+    if oauth_token and application_id:
+        from files.core.software.default.installation_lock import InstallationLockModule
+        check_result = InstallationLockModule.check_installation(
+            oauth_token=oauth_token,
+            server_type=server_type,
+            server_path=host_path,
+            application_id=int(application_id),
+        )
+        if not check_result.get('allowed', False):
+            reason = check_result.get('reason', 'unknown')
+            if reason != 'first_installation':
+                return {
+                    'status': 'error',
+                    'message': f'Установка модуля заблокирована: {reason}',
+                    'code': 'INSTALLATION_LOCKED',
+                    'existing': check_result.get('existing', {}),
+                }
+    # ==== КОНЕЦ ПРОВЕРКИ ====
+
     # ---- docker-модуль (сервис в compose хоста) ----
     if (type_info.get('module') or {}).get('kind') == 'docker':
-        return _install_docker_module(server_type, type_info, host_path)
+        return _install_docker_module(server_type, type_info, host_path,
+                                      oauth_token=oauth_token,
+                                      application_id=application_id)
 
     package = type_info.get('composer_package')
     module_path = type_info.get('module_path')
@@ -1248,6 +1317,20 @@ def install_module(data, session_obj):
             'host': str(host),
             'output': migrate_error,
         }
+
+    # фиксация установки модуля на myidon.site (цепочка: клиент -> модуль)
+    if oauth_token and application_id:
+        try:
+            from files.core.software.default.installation_lock import InstallationLockModule
+            InstallationLockModule.record_installation(
+                oauth_token=oauth_token,
+                server_type=server_type,
+                server_path=host_path,
+                application_id=int(application_id),
+                additional_data={'module': True, 'package': package},
+            )
+        except Exception as e:
+            logger.warning(f'installation record failed: {e}')
 
     return {
         'status': 'success',
@@ -1591,7 +1674,12 @@ def install_server(data, session_obj):
         subnet_octet = 0
         if not type_info.get('is_reverse_proxy', False):
             from files.core.oss.default.registry import RegistryModule
-            used_octets = RegistryModule.get_used_octets(str(server_path))
+            used_octets = set(RegistryModule.get_used_octets(str(server_path)))
+            # Реестр не знает о сетях, созданных вне его (чужие тесты,
+            # ручные compose-up): такие сети живут в docker, но записи
+            # в реестре уже нет. Без этого учёта выделялся занятый
+            # префикс и docker отвечал «Pool overlaps».
+            used_octets |= _docker_network_octets(logger)
             for octet in range(1, 255):
                 if octet not in used_octets:
                     subnet_octet = octet
@@ -1744,7 +1832,13 @@ def install_server(data, session_obj):
             if env_path.exists():
                 env_content = env_path.read_text(encoding='utf-8')
                 if network_prefix:
-                    env_content = re.sub(r'^DOCKER_NETWORK_PREFIX=.*$', f'DOCKER_NETWORK_PREFIX={network_prefix}', env_content, flags=re.MULTILINE)
+                    if re.search(r'^DOCKER_NETWORK_PREFIX=', env_content, flags=re.MULTILINE):
+                        env_content = re.sub(r'^DOCKER_NETWORK_PREFIX=.*$', f'DOCKER_NETWORK_PREFIX={network_prefix}', env_content, flags=re.MULTILINE)
+                    else:
+                        # Строки нет в .env.example репозитория — добавляем:
+                        # без неё ${DOCKER_NETWORK_PREFIX} в compose остаётся
+                        # пустым и docker создаёт сеть с битым префиксом.
+                        env_content = env_content.rstrip('\n') + f'\nDOCKER_NETWORK_PREFIX={network_prefix}\n'
                 env_content = re.sub(r'^PROJECTNAME=.*$', f'PROJECTNAME={project_name}', env_content, flags=re.MULTILINE)
                 env_path.write_text(env_content, encoding='utf-8')
 
@@ -2454,6 +2548,96 @@ def save_server_config(data, session_obj):
     return jsonify({'status': 'error', 'message': 'Нет данных для сохранения'})
 
 
+def _image_stale_reason(docker_path, images_json):
+    """Причина, по которой существующие образы считать устаревшими.
+
+    compose без --build подхватывает уже собранный образ, даже если
+    Dockerfile или entrypoint после сборки изменились (git pull,
+    переустановка). В итоге в контейнер попадает старый слой: нет
+    entrypoint — не создаётся .env, artisan падает без APP_KEY, сайт
+    отдаёт 500. Сверяем mtime исходников сборки с датой самого нового
+    образа и возвращаем причину ('' — если всё актуально).
+
+    Сравниваются только файлы, попадающие в build context, — иначе
+    правка .env или логов вела бы к бессмысленной пересборке.
+    """
+    import json as _json
+    import datetime as _dt
+
+    try:
+        images = _json.loads(images_json)
+    except Exception:
+        return ''
+
+    if not isinstance(images, list) or not images:
+        return ''
+
+    # Самая свежая сборка среди образов compose-проекта.
+    newest = None
+    for img in images:
+        created = (img or {}).get('Created', '')
+        if not created:
+            continue
+        try:
+            # Docker отдаёт ISO8601 в UTC, иногда с наносекундами.
+            ts = _dt.datetime.fromisoformat(created.replace('Z', '+00:00'))
+        except Exception:
+            continue
+        if newest is None or ts > newest:
+            newest = ts
+
+    if newest is None:
+        return ''
+
+    # Стучимся в UTC: fromisoformat вернул aware-объект.
+    newest = newest.astimezone(_dt.timezone.utc)
+
+    docker_path = Path(docker_path)
+
+    # 1. Dockerfile + всё, что в нём копируется (dockerfiles/).
+    # 2. Каталог сборки целиком, но только метаданные файлов: build
+    #    context — '.', и Docker кеширует слои по содержимому.
+    candidates = [docker_path / 'dockerfiles']
+    dockerfile = docker_path / 'dockerfiles' / 'Dockerfile'
+    if dockerfile.exists():
+        candidates.append(dockerfile.parent)
+
+    newest_src = None
+    for cand in candidates:
+        try:
+            if cand.is_file():
+                mt = _dt.datetime.fromtimestamp(cand.stat().st_mtime,
+                                                _dt.timezone.utc)
+                paths = [cand]
+            else:
+                paths = [p for p in cand.rglob('*') if p.is_file()]
+                mt = None
+        except OSError:
+            continue
+
+        for p in paths:
+            try:
+                pmt = _dt.datetime.fromtimestamp(p.stat().st_mtime,
+                                                 _dt.timezone.utc)
+            except OSError:
+                continue
+            if mt is None or pmt > mt:
+                mt = pmt
+        if mt is not None and (newest_src is None or mt > newest_src):
+            newest_src = mt
+
+    if newest_src is None:
+        return ''
+
+    # Небольшой допуск: копирование файлов при клонировании может
+    # незначительно опережать сборку.
+    if newest_src > newest + _dt.timedelta(minutes=2):
+        minutes = int((newest_src - newest).total_seconds() // 60)
+        return f'исходники новее образа на {minutes} мин'
+
+    return ''
+
+
 def start_server(data, session_obj):
     """Запустить сервер через Docker Compose с предварительными проверками"""
     import subprocess
@@ -2576,11 +2760,23 @@ def start_server(data, session_obj):
         try:
             kw = _subprocess_kwargs(60)
             r = subprocess.run(_compose_cmd(server_path, 'images', '--format', 'json'), cwd=docker_path, env=_compose_env(docker_path), capture_output=True, text=True, timeout=60, encoding='utf-8', errors='replace')
-            if r.returncode == 0 and r.stdout.strip():
+
+            # Образ может существовать, но быть старше исходников сборки:
+            # после git pull / переустановки Dockerfile и entrypoint меняются,
+            # а compose просто подхватывает прежний образ. Тогда в контейнер
+            # не попадают ни entrypoint, ни новые слои — Laravel стартует
+            # с устаревшим окружением. Поэтому сверяем mtime исходников
+            # с датой самого нового образа.
+            stale_reason = _image_stale_reason(docker_path, r.stdout) \
+                if (r.returncode == 0 and r.stdout.strip()) else 'образов нет'
+
+            if r.returncode == 0 and r.stdout.strip() and not stale_reason:
                 checks.append({'step': 'images', 'status': 'ok', 'message': 'Images are available'})
             else:
                 # Need to build
-                checks.append({'step': 'images', 'status': 'info', 'message': 'Building images...'})
+                msg = 'Building images...' if not stale_reason \
+                    else f'Образ устарел ({stale_reason}) — пересобираю'
+                checks.append({'step': 'images', 'status': 'info', 'message': msg})
                 build_kw = _subprocess_kwargs(600)
                 build_r = subprocess.run(_compose_cmd(server_path, 'build'), cwd=docker_path, env=_compose_env(docker_path), **build_kw)
                 if build_r.returncode == 0:
@@ -3151,6 +3347,38 @@ def _ensure_frontend_dependencies(code_dir: Path, logger=None, timeout=1800):
     return {'status': 'ok', 'output': output[-500:]}
 
 
+def _docker_network_octets(logger=None):
+    """Множество вторых октетов 172.X, занятых существующими docker-сетями.
+
+    Реестр хранит только те серверы, что установил этот стартер. Сети,
+    созданные вручную или оставшиеся от чужих установок (реестр очищен,
+    а сети живы), он не видит — тогда выделение подсети может отдать
+    занятый префикс и docker упадёт с «Pool overlaps».
+    """
+    import subprocess
+    octets = set()
+    try:
+        r = subprocess.run(['docker', 'network', 'ls', '-q'],
+                           **_subprocess_kwargs(30))
+        ids = (r.stdout or '').split()
+        if not ids:
+            return octets
+        r = subprocess.run(['docker', 'network', 'inspect', *ids],
+                           capture_output=True, text=True, timeout=60,
+                           encoding='utf-8', errors='replace')
+        import json as _json
+        for net in _json.loads(r.stdout or '[]'):
+            for cfg in (net.get('IPAM', {}).get('Config') or []):
+                subnet = cfg.get('Subnet') or ''
+                m = re.match(r'^172\.(\d+)\.', subnet)
+                if m:
+                    octets.add(int(m.group(1)))
+    except Exception as e:
+        if logger:
+            logger.warning("Could not inspect docker networks: %s", e)
+    return octets
+
+
 def _server_port(server_path, fallback=0):
     """Порт, на котором сервер реально отвечает.
 
@@ -3549,7 +3777,11 @@ def update_server(data, session_obj):
         return {'status': 'error',
                 'message': f'Тип {server_type!r} не найден в SERVER_TYPES — обновление невозможно'}
 
-    plan = ServerstrategyModule.get_update_plan(server_type, type_info)
+    # code_path нужен resolve_strategy: по composer.json отличаем Laravel/PHP
+    # от Python, иначе streams уходил в python_docker и обновление шло без
+    # composer/npm/миграций.
+    plan = ServerstrategyModule.get_update_plan(server_type, type_info,
+                                                code_path=server_path / 'src')
     if not plan.get('enabled', True):
         return {'status': 'error',
                 'message': f'Обновление для типа {server_type} отключено в конфигурации'}

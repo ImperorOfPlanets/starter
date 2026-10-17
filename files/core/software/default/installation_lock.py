@@ -16,6 +16,37 @@ from files.core.utils.globalVars_utils import get_global
 logger = LogManager.get_logger('installation_lock')
 
 
+def _client_fingerprint(server_path) -> str:
+    """Fingerprint КЛИЕНТА (hardware + уникальная комбинация клиента).
+
+    Создаёт <host>/docker/.client_id при первом вызове. Salt переживает
+    смену железа: myidon.site видит смену hardware fingerprint и может
+    перепривязать клиента по activation key.
+    """
+    try:
+        from files.core.utils.client_identity import get_client_fingerprint
+        return get_client_fingerprint(server_path)
+    except Exception as e:
+        logger.warning('client identity unavailable, fallback to machine fp: %s', e)
+        return InstallationLockModule.get_device_fingerprint()
+
+
+def _activation_key(server_path) -> Optional[str]:
+    try:
+        from files.core.utils.client_identity import get_activation_key
+        return get_activation_key(server_path)
+    except Exception:
+        return None
+
+
+def _store_activation_key(server_path, key: str) -> None:
+    try:
+        from files.core.utils.client_identity import set_activation_key
+        set_activation_key(server_path, key)
+    except Exception as e:
+        logger.warning('activation key not stored: %s', e)
+
+
 class InstallationLockModule(BaseModule):
     """Фиксация установок серверов/клиентов через API myidon.site"""
     
@@ -34,6 +65,7 @@ class InstallationLockModule(BaseModule):
     ) -> Dict:
         """
         Проверить можно ли устанавливать/переустанавливать сервер.
+        Шлёт аппаратный и клиентский fingerprint + activation key.
         """
         import requests
         
@@ -50,6 +82,9 @@ class InstallationLockModule(BaseModule):
                     'server_path': server_path,
                     'application_id': application_id,
                     'device_fingerprint': InstallationLockModule.get_device_fingerprint(),
+                    'client_fingerprint': _client_fingerprint(server_path),
+                    'activation_key': _activation_key(server_path),
+                    'hostname': socket.gethostname(),
                 },
                 timeout=10
             )
@@ -57,6 +92,9 @@ class InstallationLockModule(BaseModule):
             if response.status_code == 200:
                 result = response.json()
                 logger.info(f"Installation check: {result.get('reason')}")
+                key = result.get('activation_key')
+                if key:
+                    _store_activation_key(server_path, key)
                 return result
             else:
                 logger.error(f"Installation check failed: {response.status_code}")
@@ -85,6 +123,8 @@ class InstallationLockModule(BaseModule):
                 'server_path': server_path,
                 'application_id': application_id,
                 'device_fingerprint': InstallationLockModule.get_device_fingerprint(),
+                'client_fingerprint': _client_fingerprint(server_path),
+                'activation_key': _activation_key(server_path),
                 'hostname': socket.gethostname(),
             }
             

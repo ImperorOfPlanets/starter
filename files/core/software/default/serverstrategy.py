@@ -216,7 +216,21 @@ def merge_env_example(code_path, docker_path):
     if not example_src or not example_src.exists():
         return {'ok': False, 'reason': '.env.example не найден в репозитории', 'added': []}
 
-    shutil.copy2(example_src, docker_path / '.env.example')
+    # При корневой раскладке (repo_root: docker/ лежит в самом репозитории)
+    # источник и назначение совпадают — docker/.env.example. shutil.copy2
+    # на самого себя на Windows падает с WinError 32 («файл занят другим
+    # процессом»), и обновление умирало сразу после git pull. Тот же случай
+    # уже защищён в install_server — здесь protection отсутствовал.
+    dst_example = docker_path / '.env.example'
+    try:
+        same_file = example_src.resolve() == dst_example.resolve()
+    except OSError:
+        # resolve() может упасть на недоступном пути — тогда сравниваем
+        # как строки: лучше пропустить копирование, чем упасть.
+        same_file = str(example_src) == str(dst_example)
+
+    if not same_file:
+        shutil.copy2(example_src, dst_example)
 
     env_path = docker_path / '.env'
     existing = set(read_env(env_path).keys())
@@ -238,12 +252,74 @@ def merge_env_example(code_path, docker_path):
     }
 
 
+def _apply_env(content: str, env_vars: dict) -> str:
+    """Текстовая подстановка ${VAR} и ${VAR:-default} (как в install_server)."""
+    for key, value in (env_vars or {}).items():
+        pattern = r'\$\{' + re.escape(key) + r'(:-[^}]*)?\}'
+        if value:
+            content = re.sub(pattern, lambda m, v=value: v, content)
+        else:
+            content = re.sub(pattern, '', content)
+    return content
+
+
+def _module_services_fragment(mod_text: str) -> str:
+    """Определения сервисов из compose-файла модуля (без корневого services:).
+
+    Модульный файл - самостоятельный compose (со своим services:). В хост его
+    нельзя дописывать целиком - будет дубль ключа YAML. Вырезаем только
+    содержимое корневой секции services (service-блоки с их отступом).
+    """
+    lines = mod_text.splitlines()
+    out, in_services = [], False
+    for line in lines:
+        stripped = line.strip()
+        if not in_services:
+            if stripped == 'services:':
+                in_services = True
+            continue
+        # комментарии-разделители вроде '### START X ###' оставляем как есть
+        out.append(line)
+    return '\n'.join(out).rstrip() + '\n'
+
+
+def _module_compose_blocks(server_path, env_vars: dict) -> str:
+    """Сервисы docker-модулей, установленных в этот проект.
+
+    Модуль кладёт свой compose-файл в <host>/docker/modules/<key>/docker-compose.yml.
+    Блок дописывается в конец сгенерированного compose с той же подстановкой
+    ${VAR}, что и у основного файла. Без модулей возвращает пустую строку.
+    """
+    try:
+        from files.core.oss.default.registry import RegistryModule
+        modules = RegistryModule.get_module_installs()
+    except Exception:
+        return ''
+
+    host = Path(server_path).resolve()
+    blocks = []
+    for m in modules:
+        try:
+            if Path(m.get('host_path') or '').resolve() != host:
+                continue
+        except Exception:
+            continue
+        key = m.get('module_key') or ''
+        mod_file = host / 'docker' / 'modules' / key / 'docker-compose.yml'
+        if not key or not mod_file.exists():
+            continue
+        block = _module_services_fragment(mod_file.read_text(encoding='utf-8'))
+        blocks.append(f'\n### MODULE {key} ###\n' + _apply_env(block, env_vars))
+    return ''.join(blocks)
+
+
 def render_compose(server_path, env_vars: dict):
     """Копирует docker-compose.example -> docker-compose.yml с подстановкой.
 
     Логика идентична install_server (шаги 12-17), вынесена для переиспользования.
     Поддерживает синтаксис ${VAR} и ${VAR:-default}; пустое значение удаляет
-    подстановку целиком.
+    подстановку целиком. Сервисы установленных docker-модулей подмешиваются
+    в конец (см. _module_compose_blocks).
     """
     server_path = Path(server_path)
     docker_path = server_path / 'docker'
@@ -251,13 +327,12 @@ def render_compose(server_path, env_vars: dict):
     if not compose_example:
         return {'ok': False, 'reason': 'docker-compose.example не найден в репозитории'}
 
-    content = compose_example.read_text(encoding='utf-8')
-    for key, value in (env_vars or {}).items():
-        pattern = r'\$\{' + re.escape(key) + r'(:-[^}]*)?\}'
-        if value:
-            content = re.sub(pattern, lambda m, v=value: v, content)
-        else:
-            content = re.sub(pattern, '', content)
+    content = _apply_env(compose_example.read_text(encoding='utf-8'), env_vars)
+
+    try:
+        content += _module_compose_blocks(server_path, env_vars)
+    except Exception as e:
+        logger.warning('module compose merge failed: %s', e)
 
     docker_path.mkdir(parents=True, exist_ok=True)
     (docker_path / 'docker-compose.yml').write_text(content, encoding='utf-8')
@@ -418,10 +493,19 @@ class ServerstrategyModule:
     # ==================== РАЗРЕШЕНИЕ ====================
 
     @staticmethod
-    def resolve_strategy(server_type: str, type_info: dict = None) -> str:
+    def resolve_strategy(server_type: str, type_info: dict = None,
+                         code_path: Path = None) -> str:
         """Какая стратегия установки/обновления у типа сервера.
 
         Порядок: явный 'strategy' -> is_module -> is_client -> эвристика.
+
+        code_path — каталог кода (server_path/src или server_path). Передаётся,
+        чтобы отличить Laravel/PHP от Python по факту, а не по имени типа:
+        раньше проверялось только наличие 'client' в URL репозитория, и
+        Laravel-проекты вроде streams (репозиторий sfera-strimer.git)
+        определялись как python_docker. Итог — при обновлении пропускались
+        composer install, npm build и artisan migrate: фазы жёстко проверяют
+        STRATEGY_PHP, поэтому сайт обновлялся без зависимостей и миграций.
         """
         info = type_info or {}
         explicit = (info.get('update') or {}).get('strategy') or info.get('strategy')
@@ -440,16 +524,29 @@ class ServerstrategyModule:
         if 'client' in str(repo.get('url', '')):
             return ServerstrategyModule.STRATEGY_PHP
 
+        # Фактический детект по файлам: Laravel/PHP-проект опознаётся по
+        # composer.json (а artisan — по признаку Laravel). Без этого шага
+        # любые не-клиентские PHP-серверы уходили в python_docker.
+        if code_path:
+            code_path = Path(code_path)
+            try:
+                if (code_path / 'composer.json').exists():
+                    return ServerstrategyModule.STRATEGY_PHP
+            except OSError:
+                pass
+
         return ServerstrategyModule.STRATEGY_PYTHON
 
     @staticmethod
-    def get_update_plan(server_type: str, type_info: dict = None) -> dict:
+    def get_update_plan(server_type: str, type_info: dict = None,
+                        code_path: Path = None) -> dict:
         """Итоговый план обновления: DEFAULT_UPDATE + секция update типа."""
         info = type_info or {}
         plan = ServerstrategyModule._deep_merge(
             ServerstrategyModule.DEFAULT_UPDATE, info.get('update') or {}
         )
-        plan['strategy'] = ServerstrategyModule.resolve_strategy(server_type, info)
+        plan['strategy'] = ServerstrategyModule.resolve_strategy(
+            server_type, info, code_path=code_path)
         return plan
 
     @staticmethod
@@ -901,7 +998,13 @@ class ServerstrategyModule:
     @staticmethod
     def verify(server_path, port: int = 0, server_type: str = '',
                plan: dict = None) -> dict:
-        """Контейнеры running? Порт отвечает? Если нет — сигнал на откат."""
+        """Контейнеры running? Сервер отвечает? Если нет — сигнал на откат.
+
+        HTTP проверяется по портам, которые Docker реально опубликовал
+        (_published_ports), а не по PORT_SSL из .env: иначе обновление
+        любого типа с другим способом публикации (streams, wake_word)
+        откатывалось бы на исправном сервере.
+        """
         hc = (plan or {}).get('health_check') or {}
         if not hc.get('enabled', True):
             return {'ok': True, 'skipped': 'health-check отключён в конфиге типа'}
@@ -914,20 +1017,81 @@ class ServerstrategyModule:
 
         result = {'ok': status == 'running', 'container_status': status}
 
-        if port:
+        # Порты к проверке: сначала фактические публикации Docker, затем
+        # переданный порт как запасной вариант.
+        candidates = ServerstrategyModule._published_ports(server_path)
+        if port and int(port) not in candidates:
+            candidates.append(int(port))
+
+        if candidates:
             retries = int(hc.get('retries', 10))
             interval = int(hc.get('interval', 5))
+            path = hc.get('path', '/')
+            deadline = time.time() + max(1, retries) * max(1, interval)
             up = False
-            for _ in range(retries):
-                if ServerstrategyModule._probe_port(port, hc.get('path', '/')):
-                    up = True
+            probed = []
+            while time.time() < deadline:
+                for p in candidates:
+                    if ServerstrategyModule._probe_port(p, path):
+                        result['http_port'] = p
+                        up = True
+                        break
+                if up:
                     break
+                probed = list(candidates)
                 time.sleep(interval)
             result['http'] = up
+            result['probed_ports'] = probed
             if not up:
                 result['ok'] = False
 
         return result
+
+    @staticmethod
+    def _published_ports(server_path) -> list:
+        """Какие порты контейнеры проекта реально опубликовали на хосте.
+
+        У каждого типа свой способ публикации HTTP: streams — PORT_STREAMS
+        (8080), wake_word — жёсткий 8010, клиенты — PORT_SSL. Раньше verify
+        лез в PORT_SSL из docker/.env, и для большинства типов пробовал
+        закрытый порт — обновление откатывалось, хотя сервер работал.
+        Docker отдаёт фактическую публикацию, поэтому эта проверка работает
+        для любого типа без правок под каждый проект.
+        """
+        import json as _json
+
+        try:
+            project = compose_project_name(server_path, '')
+            r = subprocess.run(
+                ['docker', 'ps', '--filter',
+                 f'label=com.docker.compose.project={project}',
+                 '--format', '{{.ID}}'],
+                capture_output=True, text=True, timeout=30,
+                encoding='utf-8', errors='replace')
+            if r.returncode != 0 or not r.stdout.strip():
+                return []
+
+            ports = set()
+            for cid in r.stdout.split():
+                insp = subprocess.run(
+                    ['docker', 'inspect', '--format',
+                     '{{json .NetworkSettings.Ports}}', cid],
+                    capture_output=True, text=True, timeout=30,
+                    encoding='utf-8', errors='replace')
+                if insp.returncode != 0:
+                    continue
+                try:
+                    mapping = _json.loads(insp.stdout.strip() or '{}')
+                except Exception:
+                    continue
+                for bindings in (mapping or {}).values():
+                    for b in (bindings or []):
+                        hp = b.get('HostPort')
+                        if hp and str(hp).isdigit() and int(hp) > 0:
+                            ports.add(int(hp))
+            return sorted(ports)
+        except Exception:
+            return []
 
     @staticmethod
     def _probe_port(port: int, path: str = '/') -> bool:
