@@ -166,9 +166,7 @@ class UpdateCheckerModule(BaseModule):
                 project_type=server_type,
                 repo_url=repo.get('url', ''),
                 branch=repo.get('branch', 'main'),
-                project_path=str(Path(project_path) / 'src'
-                                 if (Path(project_path) / 'src').is_dir()
-                                 else Path(project_path) / 'code')
+                project_path=str(Path(project_path) / 'src')
             )
             result['name'] = server_info.get('name', server_type)
             result['description'] = server_info.get('description', '')

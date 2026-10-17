@@ -113,8 +113,7 @@ class ServertypeModule(BaseModule):
             return {}
         
         return {
-            'code': script_path / 'src' if (script_path / 'src').is_dir()
-                    else script_path / 'code',
+            'code': script_path / 'src',
             'docker': script_path / 'docker',
             'type': server_type
         }
