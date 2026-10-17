@@ -437,8 +437,8 @@ SERVER_TYPES = {
         'used_by': [],
         'depends_on': [],
         'references': [
-            {'path': '../cr-system/code/data', 'description': '755 клинических рекомендаций Минздрава РФ (только чтение)'},
-            {'path': '../OKPDTR-SYNC/code/data', 'description': 'Справочник ОКПДТР — обновление раз в месяц, опционально'},
+            {'path': '../cr-system/src/data', 'description': '755 клинических рекомендаций Минздрава РФ (только чтение)'},
+            {'path': '../OKPDTR-SYNC/src/data', 'description': 'Справочник ОКПДТР — обновление раз в месяц, опционально'},
         ],
     },
     'okpdtr-sync': {
@@ -755,6 +755,30 @@ SERVER_TYPES = {
         'update': UPDATE_COMPOSER_MODULE,
         'repository': {
             'url': 'https://gitflic.ru/project/imperor/client-roles.git',
+            'branch': 'master'
+        }
+    },
+    'client-iskra': {
+        'name': 'ИСКРА (клинические рекомендации)',
+        'name_en': 'ISKRA (clinical recommendations)',
+        'name_cn': 'ИСКРА（临床指南）',
+        'description': 'Модуль клиента — AI-медицинский секретарь: гейт интентов, поиск по 755 КР Минздрава, композитор на LLM, чат и админка',
+        'description_en': 'Client module — AI medical secretary: intent gate, search over 755 Minzdrav clinical recommendations, LLM composer',
+        'description_cn': '客户端模块 — AI医疗秘书：意图门控、755份卫生部临床指南检索、LLM合成器',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': None,
+        'order': 700,
+        'can_have_multiple': False,
+        'default_folder': 'client-iskra',
+        'is_module': True,
+        'composer_package': 'imperor/iskra',
+        'module_path': 'C:/control/ISKRA',
+        'update': UPDATE_COMPOSER_MODULE,
+        'repository': {
+            'url': 'https://gitflic.ru/project/imperor/client-iskra.git',
             'branch': 'master'
         }
     }

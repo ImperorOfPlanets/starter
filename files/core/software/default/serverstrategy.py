@@ -116,11 +116,10 @@ def _compose_env_for(docker_path):
 
 
 def git_root(server_path):
-    """Где лежит .git: src/ (Laravel-раскладка) или корень проекта.
+    """Где лежит .git: src/ (единая архитектура), code/ (Laravel) или корень.
 
     Единая архитектура: .git в корне проекта, приложение в src/.
-    У php-проектов может быть git внутри src/ — обновление работает
-    с обоими вариантами.
+    Все проекты мигрированы: git в корне, приложение в src/.
     """
     server_path = Path(server_path)
     if (server_path / 'src' / '.git').exists():
@@ -703,7 +702,7 @@ class ServerstrategyModule:
             'requirements_changed': _in_changed(changed, 'requirements.txt'),
             'artisan': (code_path / 'artisan').exists(),
             'dockerfile_changed': any(
-                f.lower().startswith(('dockerfile', 'code/docker/', 'src/docker/', 'docker/'))
+                f.lower().startswith(('dockerfile', 'src/docker/', 'docker/'))
                 for f in changed
             ),
             'compose_example_changed': any(
@@ -897,12 +896,13 @@ class ServerstrategyModule:
         а новые переменные не попадали в docker/.env.
         """
         server_path = Path(server_path)
+        code_path = server_path / 'src'
         docker_path = server_path / 'docker'
         dock = plan.get('docker') or {}
         out = {}
 
         if dock.get('merge_env_example', True):
-            out['env'] = merge_env_example(server_path / 'src', docker_path)
+            out['env'] = merge_env_example(code_path, docker_path)
 
         if dock.get('regenerate_compose', True):
             env_vars = read_env(docker_path / '.env')
@@ -912,10 +912,10 @@ class ServerstrategyModule:
             prefix = preflight.get('docker_network_prefix')
             if prefix:
                 env_vars['DOCKER_NETWORK_PREFIX'] = prefix
-            env_vars['PATH_APP_CODE'] = str(server_path / 'src')
+            env_vars['PATH_APP_CODE'] = str(code_path)
             env_vars['PATH_APP_DOCKER'] = str(docker_path)
             env_vars['PATH_APP_DOCKER_LOGS'] = str(docker_path / 'logs')
-            env_vars['PATH_APP_PROJECT'] = str(server_path / 'src')
+            env_vars['PATH_APP_PROJECT'] = str(code_path)
 
             set_env_keys(docker_path / '.env',
                          {k: env_vars[k] for k in

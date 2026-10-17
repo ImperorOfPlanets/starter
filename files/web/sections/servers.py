@@ -1692,7 +1692,7 @@ def install_server(data, session_obj):
         project_name = _compose_project_name(server_path, server_type)
 
         # docker-compose.example ДОЛЖЕН быть в репозитории
-        # Ищем в разных местах: src/docker/, src/, code/docker/, code/, docker/
+        # Ищем в разных местах: src/docker/, src/, docker/
         compose_example = None
         for candidate in [
             server_path / 'src' / 'docker' / 'docker-compose.example',
