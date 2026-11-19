@@ -3089,7 +3089,7 @@ def scan_path(data, session_obj):
 
 
 def register_existing_server(data, session_obj):
-    """Регистрирует уже развёрнутый на диске сервер (например, /var/www/myidon) в реестр Стартера"""
+    """Регистрирует уже развёрнутый на диске сервер с полной автонастройкой окружения"""
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
@@ -3106,6 +3106,7 @@ def register_existing_server(data, session_obj):
         return jsonify({'status': 'error', 'message': f'Папка не найдена: {raw_path}'})
 
     resolved_path = str(server_path.resolve())
+    server_path = Path(resolved_path)
     docker_path = server_path / 'docker'
     code_path = server_path / 'src'
 
@@ -3114,28 +3115,6 @@ def register_existing_server(data, session_obj):
     if not (has_docker or has_code):
         return jsonify({'status': 'error', 'message': 'В папке нет ни docker/, ни src/'})
 
-    # Определяем тип сервера (если не передан — пробуем угадать из docker/.env или имени папки)
-    env_vars = _read_server_env(resolved_path) if has_docker else {}
-    if not server_type:
-        server_type = env_vars.get('SERVER_TYPE') or server_path.name.lower()
-
-    # Читаем порт и подсеть из docker/.env (если есть)
-    port = _server_port(resolved_path, int(env_vars.get('SERVER_PORT') or 80))
-    subnet_octet = 0
-    net_prefix = env_vars.get('DOCKER_NETWORK_PREFIX', '')
-    m = re.match(r'^172\.(\d+)', net_prefix)
-    if m:
-        subnet_octet = int(m.group(1))
-
-    # Генерируем fingerprint в docker/.env (если файл существует)
-    fingerprint = ''
-    if has_docker and (docker_path / '.env').exists():
-        try:
-            fingerprint = _ensure_fingerprint(docker_path, logger=logger)
-        except Exception as e:
-            logger.warning(f"Fingerprint skipped for {resolved_path}: {e}")
-
-    # Регистрируем в реестре Стартера
     registry = get('registry')
     if not registry:
         return jsonify({'status': 'error', 'message': 'Registry module not found'})
@@ -3145,6 +3124,96 @@ def register_existing_server(data, session_obj):
         if _paths_equal(p.get('path'), resolved_path):
             return jsonify({'status': 'error', 'message': f'Сервер {resolved_path} уже добавлен в реестр'})
 
+    # 1. Определяем тип сервера и имя проекта
+    env_vars = _read_server_env(resolved_path) if has_docker else {}
+    if not server_type:
+        server_type = env_vars.get('SERVER_TYPE') or server_path.name.lower()
+
+    merged_types = _get_merged_server_types(session_obj)
+    type_info = merged_types.get(server_type) or {'name': server_name or server_path.name, 'default_port': 8000}
+    project_name = _compose_project_name(server_path, server_type)
+
+    # 2. Выделяем свободный октет подсети (если не задан в .env)
+    subnet_octet = 0
+    net_prefix = env_vars.get('DOCKER_NETWORK_PREFIX', '')
+    m = re.match(r'^172\.(\d+)', net_prefix)
+    if m and int(m.group(1)) > 0:
+        subnet_octet = int(m.group(1))
+    else:
+        from files.core.oss.default.registry import RegistryModule
+        used_octets = set(RegistryModule.get_used_octets(resolved_path)) | _docker_network_octets(logger)
+        for octet in range(10, 251):
+            if octet not in used_octets:
+                subnet_octet = octet
+                break
+
+    # 3. Автонастройка docker/.env и docker-compose.yml (если .env ещё не создан)
+    instance_env = {}
+    fingerprint = ''
+    if has_docker:
+        env_file = docker_path / '.env'
+        env_example = docker_path / '.env.example'
+        compose_example = docker_path / 'docker-compose.example'
+        compose_file = docker_path / 'docker-compose.yml'
+
+        if not env_file.exists():
+            if env_example.exists():
+                shutil.copy2(env_example, env_file)
+            else:
+                gen = _generate_env_example(server_type, type_info, server_name or server_path.name,
+                                            subnet_octet, type_info.get('default_port', 8000), resolved_path)
+                env_file.write_text(gen, encoding='utf-8')
+
+            reserved_ports = _collect_reserved_ports()
+            instance_env = _apply_instance_env(
+                docker_path, server_path, project_name,
+                reserved_ports=reserved_ports, logger=logger
+            )
+
+        # Проставляем DOCKER_NETWORK_PREFIX и PROJECTNAME в .env
+        network_prefix = f"172.{subnet_octet}" if subnet_octet > 0 else ""
+        env_content = env_file.read_text(encoding='utf-8')
+        if network_prefix:
+            if re.search(r'^DOCKER_NETWORK_PREFIX=', env_content, flags=re.MULTILINE):
+                env_content = re.sub(r'^DOCKER_NETWORK_PREFIX=.*$', f'DOCKER_NETWORK_PREFIX={network_prefix}', env_content, flags=re.MULTILINE)
+            else:
+                env_content = env_content.rstrip('\n') + f'\nDOCKER_NETWORK_PREFIX={network_prefix}\n'
+        if re.search(r'^PROJECTNAME=', env_content, flags=re.MULTILINE):
+            env_content = re.sub(r'^PROJECTNAME=.*$', f'PROJECTNAME={project_name}', env_content, flags=re.MULTILINE)
+        else:
+            env_content = env_content.rstrip('\n') + f'\nPROJECTNAME={project_name}\n'
+        env_file.write_text(env_content, encoding='utf-8')
+
+        # Генерируем docker-compose.yml из шаблона, если его ещё нет
+        if not compose_file.exists() and compose_example.exists():
+            shutil.copy2(compose_example, compose_file)
+            cur_vars = _read_server_env(resolved_path)
+            c_text = compose_file.read_text(encoding='utf-8')
+            for k, v in cur_vars.items():
+                if v:
+                    c_text = re.sub(r'\$\{' + re.escape(k) + r'(:-[^}]*)?\}', lambda _, val=v: val, c_text)
+            compose_file.write_text(c_text, encoding='utf-8')
+
+        try:
+            fingerprint = _ensure_fingerprint(docker_path, logger=logger)
+        except Exception as e:
+            logger.warning(f"Fingerprint skipped for {resolved_path}: {e}")
+
+    # 4. Ставим PHP и фронтенд зависимости, если их нет в src/
+    warnings = []
+    if has_code:
+        if (code_path / 'composer.json').exists() and not (code_path / 'vendor' / 'autoload.php').exists():
+            deps = _ensure_php_dependencies(code_path, server_path, logger=logger)
+            if deps.get('status') == 'error':
+                warnings.append(f"Composer: {deps.get('message')}")
+        if (code_path / 'package.json').exists() and not (code_path / 'public' / 'build').exists():
+            fe = _ensure_frontend_dependencies(code_path, logger=logger)
+            if fe.get('status') == 'error':
+                warnings.append(f"Frontend: {fe.get('message')}")
+
+    port = int(instance_env.get('PORT_SSL') or instance_env.get('PORT') or _server_port(resolved_path, type_info.get('default_port', 8000)))
+
+    # 5. Сохраняем в реестр Стартера
     registry.register_initializing(resolved_path)
     reg = registry.load_registry()
     for p in reg.get('projects', []):
@@ -3162,10 +3231,11 @@ def register_existing_server(data, session_obj):
     registry.save_registry(reg)
 
     _monitor_refresh_path(resolved_path)
-    logger.info(f"Existing server registered: {server_type} at {resolved_path}")
+    logger.info(f"Existing server configured & registered: {server_type} at {resolved_path} (port={port}, subnet={subnet_octet})")
     return jsonify({
         'status': 'success',
-        'message': f'Сервер {server_name or server_path.name} ({resolved_path}) добавлен в реестр',
+        'message': f'Сервер {server_name or server_path.name} настроен и добавлен в реестр (порт {port})',
+        'warnings': warnings,
         'server': {
             'path': resolved_path,
             'type': server_type,
@@ -3173,7 +3243,6 @@ def register_existing_server(data, session_obj):
             'subnet_octet': subnet_octet,
         }
     })
-
 
 def server_details(data, session_obj):
     user = session_obj.get('user') or session_obj.get('user_info')
