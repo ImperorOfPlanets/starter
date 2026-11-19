@@ -72,7 +72,14 @@ def change_password(data, session):
     if not admin_module:
         return jsonify({"status": "error", "message": "Admin module not found"})
 
-    if not admin_module.verify_credentials(user['login'], current_password):
+    users_mod = get('users')
+    valid_curr = False
+    if users_mod:
+        users_mod.set_globals()
+        valid_curr = bool(users_mod.authenticate(user['login'], current_password))
+    if not valid_curr:
+        valid_curr = admin_module.verify_credentials(user['login'], current_password)
+    if not valid_curr:
         return jsonify({"status": "error", "message": "Неверный текущий пароль"})
 
     env_path = get_global('starter_env_path')
@@ -81,6 +88,7 @@ def change_password(data, session):
 
     import hashlib
     new_hash = hashlib.sha256(new_password.encode()).hexdigest()
+    if users_mod and user.get('id'): users_mod.update_user(user['id'], {'password': new_password})
 
     with open(env_path, 'r', encoding='utf-8') as f:
         lines = f.readlines()

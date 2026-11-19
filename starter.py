@@ -844,6 +844,17 @@ def main():
 
 
 if __name__ == '__main__':
+    if '--reset-password' in sys.argv:
+        idx = sys.argv.index('--reset-password')
+        new_pw = sys.argv[idx + 1] if idx + 1 < len(sys.argv) and not sys.argv[idx + 1].startswith('-') else None
+        from pathlib import Path as _P
+        from files.core.utils.globalVars_utils import set_global as _sg
+        from files.core.oss.default.admin import AdminModule as _Adm
+        _base = _P(__file__).resolve().parent
+        _sg('starter_path', _base)
+        _sg('starter_env_path', _base / '.env')
+        _Adm.reset_admin_password(new_password=new_pw)
+        sys.exit(0)
     import traceback as _tb
     def _crash_handler(exc_type, exc_value, exc_tb):
         try:
