@@ -232,6 +232,30 @@ SERVER_TYPES = {
             'branch': 'master'
         }
     },
+    'vision': {
+        'name': 'Распознавание изображений',
+        'name_en': 'Image Recognition',
+        'name_cn': '图像识别',
+        'description': 'Распознавание изображений: классификация, детекция объектов и OCR локально + описание через vision-LLM (OpenAI/Gemini/Ollama)',
+        'description_en': 'Image recognition: classification, object detection and OCR locally + description via vision-LLM (OpenAI/Gemini/Ollama)',
+        'description_cn': '图像识别：本地分类、目标检测、OCR + 通过视觉大模型描述（OpenAI/Gemini/Ollama）',
+        'requires_reverse_proxy': False,
+        'requires_auth': False,
+        'is_reverse_proxy': False,
+        'has_web_interface': True,
+        'default_port': 5004,
+        'order': 21,
+        'can_have_multiple': True,
+        'default_folder': 'vision',
+        'update': UPDATE_PYTHON,
+        'repo_root': True,
+        'repository': {
+            # Локальный репозиторий разработки. После публикации на gitflic
+            # заменить на https://gitflic.ru/project/imperor/vision.git
+            'url': 'C:/repos/vision',
+            'branch': 'master'
+        }
+    },
     'browser': {
         'name': 'Автоматизация браузера',
         'name_en': 'Browser Automation',

@@ -85,7 +85,6 @@ for cmd in python3.12 python3.11 python3.10 python3.9 python3.8 python3; do
 
         if [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 8 ]; }; then
             if "$cmd" --version >/dev/null 2>&1 && "$cmd" -c "import venv" >/dev/null 2>&1; then
-                # Проверяем реальное создание venv с pip
                 _test_dir=$(mktemp -d)
                 if "$cmd" -m venv "$_test_dir" 2>/dev/null && [ -f "$_test_dir/bin/pip" ]; then
                     info "  Найден подходящий: $cmd (версия $ver, путь: $py_path)"
@@ -110,7 +109,6 @@ if [ -z "$available_pythons" ]; then
     exit 1
 fi
 
-# Выбор максимальной версии
 best_version=""
 best_path=""
 while IFS=: read -r ver path; do
@@ -176,11 +174,9 @@ get_repos_from_api() {
     if [ -z "$response" ]; then
         return 1
     fi
-    # Парсим URL из JSON
     echo "$response" | grep -o '"url":"[^"]*"' | cut -d'"' -f4
 }
 
-# Пробуем API, потом fallback
 REPO_URLS=""
 api_urls=$(get_repos_from_api)
 if [ -n "$api_urls" ]; then
@@ -215,7 +211,9 @@ if [ ! -f "$STARTER_DIR/starter.py" ]; then
             info "✓ Скачано"
             break
         fi
-    done <<< "$REPO_URLS"
+    done <<EOF
+$REPO_URLS
+EOF
 
     if [ "$DOWNLOADED" -eq 0 ]; then
         info "ОШИБКА: Не удалось скачать Starter ни из одного репозитория!"
