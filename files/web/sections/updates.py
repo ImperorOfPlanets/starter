@@ -620,3 +620,19 @@ def check_single_project(data, session):
     except Exception as e:
         logger.error(f"Error checking project: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
+
+# Алиасы для вызова из роутера по имени action без суффикса _route
+check_starter_updates = check_starter_updates_route
+update_starter = update_starter_route
+get_starter_history = get_starter_history_route
+get_update_log = get_update_log_route
+download_update_log = download_update_log_route
+get_repositories = get_repositories_route
+switch_repository = switch_repository_route
+get_update_settings = get_update_settings_route
+update_settings = update_settings_route
+check_all = check_all_route
+get_server_updates_status = get_server_updates_status_route
+update_server = update_server_route
+check_server_updates = check_server_updates_route
+get_server_update_history = get_server_update_history_route
