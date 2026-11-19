@@ -24,7 +24,7 @@ def t(key: str, **kwargs) -> str:
 # ФУНКЦИИ ДЛЯ СТАРТЕРА
 # =============================================================================
 
-def get_starter_update_status():
+def get_starter_update_status(*args, **kwargs):
     """Получает статус обновлений стартера"""
     config = UpdatesModule.get_updates_config()
     last_update = UpdatesModule.get_last_update_time('starter', config)
@@ -57,7 +57,7 @@ def get_starter_update_status():
     return status_info
 
 
-def check_starter_updates():
+def check_starter_updates(*args, **kwargs):
     """Проверяет обновления стартера"""
     config = UpdatesModule.get_updates_config()
     last_update = UpdatesModule.get_last_update_time('starter', config)
@@ -70,7 +70,7 @@ def check_starter_updates():
     }
 
 
-def update_starter():
+def update_starter(*args, **kwargs):
     """Обновляет стартер"""
     if not STARTER_REPOSITORIES:
         return {'status': 'error', 'message': 'No repositories configured'}
@@ -108,18 +108,18 @@ def update_starter():
     return UpdatesModule.update_project('starter', starter_config)
 
 
-def get_starter_history():
+def get_starter_history(*args, **kwargs):
     """Получает историю обновлений стартера"""
     history = UpdatesModule.get_update_history('starter')
     return history.get('history', [])
 
 
-def get_starter_repositories():
+def get_starter_repositories(*args, **kwargs):
     """Получает список репозиториев стартера"""
     return STARTER_REPOSITORIES
 
 
-def get_starter_current_repository():
+def get_starter_current_repository(*args, **kwargs):
     """Получает текущий репозиторий стартера"""
     return STARTER_REPOSITORIES[0] if STARTER_REPOSITORIES else {}
 
@@ -130,7 +130,7 @@ def switch_starter_repository(repo_name):
     return True
 
 
-def get_starter_settings():
+def get_starter_settings(*args, **kwargs):
     """Получает настройки обновлений"""
     return UPDATE_CHECK_CONFIG.copy()
 
@@ -155,7 +155,7 @@ def update_starter_settings(settings):
 # обёртки, чтобы старые вызовы из UI продолжили работать.
 # =============================================================================
 
-def get_server_updates_status():
+def get_server_updates_status(*args, **kwargs):
     """Статус обновлений по всем УСТАНОВЛЕННЫМ серверам (из реестра)."""
     from files.core.oss.default.update_checker import UpdateCheckerModule
 
@@ -264,7 +264,7 @@ def download_update_log(update_id):
     return log_file
 
 
-def check_all_updates():
+def check_all_updates(*args, **kwargs):
     """Проверяет обновления для всех компонентов.
 
     Серверы — только установленные (из реестра), реальным git.
