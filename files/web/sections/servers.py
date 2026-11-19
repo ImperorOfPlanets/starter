@@ -3191,7 +3191,7 @@ def register_existing_server(data, session_obj):
             c_text = compose_file.read_text(encoding='utf-8')
             for k, v in cur_vars.items():
                 if v:
-                    c_text = re.sub(r'\$\{' + re.escape(k) + r'(:-[^}]*)?\}', lambda _, val=v: val, c_text)
+                    c_text = c_text.replace('${' + k + '}', v)
             compose_file.write_text(c_text, encoding='utf-8')
 
         try:
