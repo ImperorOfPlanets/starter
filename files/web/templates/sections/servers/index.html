@@ -1260,3 +1260,110 @@ function installModuleInto(hostPath) {
         });
 }
 </script>
+
+
+<!-- Модальное окно добавления существующего сервера -->
+<div class="modal fade" id="registerExistingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-folder-plus me-2"></i>Добавить существующий сервер</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Путь к папке проекта на сервере</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="existingServerPath" placeholder="/var/www/myidon">
+                        <button class="btn btn-outline-secondary" type="button" onclick="scanExistingServerPath()">Проверить</button>
+                    </div>
+                    <div class="form-text">Укажите корневую папку, где лежат <code>docker/</code> и/или <code>src/</code></div>
+                </div>
+                <div id="existingScanResult" class="mb-3 small"></div>
+                <div class="mb-3">
+                    <label class="form-label">Тип сервера</label>
+                    <select class="form-select" id="existingServerType">
+                        <option value="">Определить автоматически (из docker/.env)</option>
+                        {% for key, info in server_types %}
+                        <option value="{{ key }}">{{ info.name }} ({{ key }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Отображаемое имя (необязательно)</label>
+                    <input type="text" class="form-control" id="existingServerName" placeholder="Например: myidon">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="submitRegisterExistingServer()">Добавить в реестр</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function scanExistingServerPath() {
+    const path = document.getElementById('existingServerPath').value.trim();
+    const box = document.getElementById('existingScanResult');
+    if (!path) {
+        box.innerHTML = '<span class="text-danger">Введите путь к папке</span>';
+        return;
+    }
+    box.innerHTML = '<span class="text-muted">Проверка папки...</span>';
+    try {
+        const resp = await fetch('/api/section/servers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'scan_path', path })
+        });
+        const data = await resp.json();
+        if (data.status === 'success' && data.scan) {
+            const s = data.scan;
+            if (s.valid) {
+                box.innerHTML = `<div class="alert alert-success py-2 mb-0">
+                    Папка найдена: <strong>${s.name}</strong><br>
+                    docker/: ${s.has_docker ? '✅' : '❌'} | src/: ${s.has_code ? '✅' : '❌'}
+                </div>`;
+                if (!document.getElementById('existingServerName').value) {
+                    document.getElementById('existingServerName').value = s.name;
+                }
+            } else {
+                box.innerHTML = '<div class="alert alert-warning py-2 mb-0">В папке не найдены ни <code>docker/</code>, ни <code>src/</code></div>';
+            }
+        } else {
+            box.innerHTML = `<span class="text-danger">${data.message || 'Ошибка проверки'}</span>`;
+        }
+    } catch (e) {
+        box.innerHTML = `<span class="text-danger">Ошибка запроса: ${e.message}</span>`;
+    }
+}
+
+async function submitRegisterExistingServer() {
+    const path = document.getElementById('existingServerPath').value.trim();
+    const server_type = document.getElementById('existingServerType').value.trim();
+    const name = document.getElementById('existingServerName').value.trim();
+    const box = document.getElementById('existingScanResult');
+
+    if (!path) {
+        box.innerHTML = '<span class="text-danger">Укажите путь к папке</span>';
+        return;
+    }
+
+    try {
+        const resp = await fetch('/api/section/servers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'register_existing_server', path, server_type, name })
+        });
+        const data = await resp.json();
+        if (data.status === 'success') {
+            location.reload();
+        } else {
+            box.innerHTML = `<div class="alert alert-danger py-2 mb-0">${data.message || 'Ошибка добавления'}</div>`;
+        }
+    } catch (e) {
+        box.innerHTML = `<div class="alert alert-danger py-2 mb-0">${e.message}</div>`;
+    }
+}
+</script>

@@ -3088,6 +3088,93 @@ def scan_path(data, session_obj):
     return jsonify({'status': 'success', 'scan': scan})
 
 
+def register_existing_server(data, session_obj):
+    """Регистрирует уже развёрнутый на диске сервер (например, /var/www/myidon) в реестр Стартера"""
+    user = session_obj.get('user') or session_obj.get('user_info')
+    if not user:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    raw_path = (data.get('path') or '').strip()
+    server_type = (data.get('server_type') or '').strip()
+    server_name = (data.get('name') or '').strip()
+
+    if not raw_path:
+        return jsonify({'status': 'error', 'message': 'Укажите путь к папке сервера'})
+
+    server_path = Path(raw_path)
+    if not server_path.exists() or not server_path.is_dir():
+        return jsonify({'status': 'error', 'message': f'Папка не найдена: {raw_path}'})
+
+    resolved_path = str(server_path.resolve())
+    docker_path = server_path / 'docker'
+    code_path = server_path / 'src'
+
+    has_docker = docker_path.is_dir()
+    has_code = code_path.is_dir()
+    if not (has_docker or has_code):
+        return jsonify({'status': 'error', 'message': 'В папке нет ни docker/, ни src/'})
+
+    # Определяем тип сервера (если не передан — пробуем угадать из docker/.env или имени папки)
+    env_vars = _read_server_env(resolved_path) if has_docker else {}
+    if not server_type:
+        server_type = env_vars.get('SERVER_TYPE') or server_path.name.lower()
+
+    # Читаем порт и подсеть из docker/.env (если есть)
+    port = _server_port(resolved_path, int(env_vars.get('SERVER_PORT') or 80))
+    subnet_octet = 0
+    net_prefix = env_vars.get('DOCKER_NETWORK_PREFIX', '')
+    m = re.match(r'^172\.(\d+)', net_prefix)
+    if m:
+        subnet_octet = int(m.group(1))
+
+    # Генерируем fingerprint в docker/.env (если файл существует)
+    fingerprint = ''
+    if has_docker and (docker_path / '.env').exists():
+        try:
+            fingerprint = _ensure_fingerprint(docker_path, logger=logger)
+        except Exception as e:
+            logger.warning(f"Fingerprint skipped for {resolved_path}: {e}")
+
+    # Регистрируем в реестре Стартера
+    registry = get('registry')
+    if not registry:
+        return jsonify({'status': 'error', 'message': 'Registry module not found'})
+
+    reg = registry.load_registry()
+    for p in reg.get('projects', []):
+        if _paths_equal(p.get('path'), resolved_path):
+            return jsonify({'status': 'error', 'message': f'Сервер {resolved_path} уже добавлен в реестр'})
+
+    registry.register_initializing(resolved_path)
+    reg = registry.load_registry()
+    for p in reg.get('projects', []):
+        if _paths_equal(p.get('path'), resolved_path):
+            p['project_type'] = server_type
+            p['name'] = server_name or server_path.name
+            p['port'] = port
+            p['subnet_octet'] = subnet_octet
+            p['docker_network_prefix'] = f"172.{subnet_octet}" if subnet_octet > 0 else ""
+            p['installed_by_starter'] = True
+            p['imported_existing'] = True
+            if fingerprint:
+                p['fingerprint'] = fingerprint
+            break
+    registry.save_registry(reg)
+
+    _monitor_refresh_path(resolved_path)
+    logger.info(f"Existing server registered: {server_type} at {resolved_path}")
+    return jsonify({
+        'status': 'success',
+        'message': f'Сервер {server_name or server_path.name} ({resolved_path}) добавлен в реестр',
+        'server': {
+            'path': resolved_path,
+            'type': server_type,
+            'port': port,
+            'subnet_octet': subnet_octet,
+        }
+    })
+
+
 def server_details(data, session_obj):
     user = session_obj.get('user') or session_obj.get('user_info')
     if not user:
