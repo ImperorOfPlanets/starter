@@ -66,26 +66,35 @@ def login(data, session_obj):
         return {'status': 'error', 'message': t('missing_credentials'), 'auth_form': True}
 
     admin_module = get('admin')
-    if not admin_module:
-        return {'status': 'error', 'message': t('auth_not_configured'), 'auth_form': True}
+    users_module = get('users')
+    auth_user = None
 
-    if not admin_module.verify_credentials(username, password):
+    if users_module:
+        users_module.set_globals()
+        if not users_module.get_all() and admin_module and admin_module.verify_credentials(username, password):
+            users_module.ensure_admin(username, password)
+        auth_user = users_module.authenticate(username, password)
+
+    if not auth_user and admin_module and admin_module.verify_credentials(username, password):
+        auth_user = {'id': 'admin', 'login': username, 'role': 'admin', 'servers': ['*']}
+
+    if not auth_user:
         _record_failure(ip)
         logger.warning(f"Failed login for {username} from {ip}")
         return {'status': 'error', 'message': t('invalid_credentials'), 'auth_form': True}
 
     _clear_failures(ip)
     session_obj['logged_in'] = True
-    session_obj['username'] = username
-    session_obj['is_admin'] = True
+    session_obj['username'] = auth_user['login']
+    session_obj['is_admin'] = (auth_user.get('role') == 'admin')
     session_obj['user'] = {
-        'id': 'admin',
-        'login': username,
-        'role': 'admin',
-        'servers': ['*']
+        'id': auth_user.get('id', 'admin'),
+        'login': auth_user['login'],
+        'role': auth_user.get('role', 'user'),
+        'servers': auth_user.get('servers', [])
     }
     session_obj.permanent = True
-    logger.info(f"User {username} logged in via .env")
+    logger.info(f"User {auth_user['login']} logged in (role={auth_user.get('role', 'user')})")
     return {'status': 'success', 'redirect': url_for('routes.index')}
 
 
