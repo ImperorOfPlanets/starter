@@ -1315,10 +1315,10 @@ async function scanExistingServerPath() {
     }
     box.innerHTML = '<span class="text-muted">Проверка папки...</span>';
     try {
-        const resp = await fetch('/api/section/servers', {
+        const resp = await fetch('/', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'scan_path', path })
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: new URLSearchParams({ section: 'servers', action: 'scan_path', path: path })
         });
         const data = await resp.json();
         if (data.status === 'success' && data.scan) {
@@ -1354,10 +1354,16 @@ async function submitRegisterExistingServer() {
     }
 
     try {
-        const resp = await fetch('/api/section/servers', {
+        const resp = await fetch('/', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'register_existing_server', path, server_type, name })
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: new URLSearchParams({
+                section: 'servers',
+                action: 'register_existing_server',
+                path: path,
+                server_type: server_type,
+                name: name
+            })
         });
         const data = await resp.json();
         if (data.status === 'success') {
