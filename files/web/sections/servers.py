@@ -31,6 +31,39 @@ def _subprocess_kwargs(timeout=10):
         kwargs['startupinfo'] = si
     return kwargs
 
+
+def _run_setup_script(server_path, mode='prepare', logger=None, timeout=1800):
+    """Вызвать repo-local docker/setup.sh — установка/запуск живут в репозитории.
+
+    Режимы: prepare (.env, certs, compose.yml), assets (composer+Vite в
+    php-контейнере), full (prepare + build + up + assets).
+    """
+    import subprocess
+    candidates = [
+        Path(server_path) / 'docker' / 'setup.sh',
+        Path(server_path) / 'src' / 'docker' / 'setup.sh',
+    ]
+    script = next((p for p in candidates if p.exists()), None)
+    if script is None:
+        return {'status': 'skipped', 'reason': 'docker/setup.sh not found'}
+    try:
+        proc = subprocess.run(
+            ['bash', str(script), mode],
+            cwd=str(script.parent),
+            **_subprocess_kwargs(timeout),
+        )
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
+    output = ((proc.stdout or '') + (proc.stderr or '')).strip()
+    if proc.returncode != 0:
+        if logger:
+            logger.warning('setup.sh %s failed (rc=%s): %s', mode, proc.returncode, output[-1000:])
+        return {'status': 'error', 'returncode': proc.returncode, 'output': output[-3000:]}
+    if logger:
+        logger.info('setup.sh %s OK in %s', mode, server_path)
+    return {'status': 'ok', 'output': output[-1000:]}
+
+
 this_section_in_control_panel = True
 section_icon = "bi-hdd-rack"
 section_name = "Servers"
@@ -1649,22 +1682,23 @@ def install_server(data, session_obj):
                     'message': 'Репозиторий не настроен для этого сервера'
                 }
 
-        # Зависимости PHP. Без них контейнеры стартуют, но artisan
-        # падает на отсутствии vendor/autoload.php, поэтому ставим
-        # сразу после клонирования. Composer работает на хосте.
+        # Зависимости PHP и фронтенд ставятся repo-local docker/setup.sh
+        # внутри php-контейнера. Хост-вариант нужен только для старых
+        # репозиториев, в которых нет setup.sh.
+        setup_available = any(
+            (Path(server_path) / rel).exists()
+            for rel in ('docker/setup.sh', 'src/docker/setup.sh')
+        )
+
         deps = None
-        if (code_path / 'composer.json').exists():
+        if (code_path / 'composer.json').exists() and not setup_available:
             deps = _ensure_php_dependencies(code_path, server_path, logger=logger)
             if deps.get('status') == 'error':
-                # не молчим: сервер без зависимостей не рабочий
                 logger.warning('PHP dependencies not installed for %s: %s',
                                server_path, deps.get('message'))
 
-        # Фронтенд. Без собранного манифеста Vite Laravel отдаёт 500
-        # на каждой странице с @vite, поэтому шаг идёт сразу за composer
-        # и тоже работает на хосте.
         frontend = None
-        if (code_path / 'package.json').exists():
+        if (code_path / 'package.json').exists() and not setup_available:
             frontend = _ensure_frontend_dependencies(code_path, logger=logger)
             if frontend.get('status') == 'error':
                 logger.warning('Frontend not built for %s: %s',
@@ -1847,6 +1881,16 @@ def install_server(data, session_obj):
             #    (пересоздаётся только code/), поэтому клиент сохраняет свой
             #    идентификатор. Дублируется в реестр ниже.
             fingerprint = _ensure_fingerprint(docker_path, logger=logger)
+
+            # 8. Полная сам-установка из репозитория: certs, compose,
+            #    сборка образов, запуск, composer-зависимости и Vite-assets
+            #    внутри php-контейнера. Без внешнего npm/composer на хосте.
+            setup_result = _run_setup_script(server_path, 'full', logger=logger,
+                                             timeout=1800)
+            if setup_result.get('status') == 'error':
+                logger.warning('setup.sh full failed for %s: %s',
+                               server_path, setup_result.get('message')
+                               or setup_result.get('output', '')[-500:])
         else:
             return {
                 'status': 'error',
@@ -2698,6 +2742,10 @@ def start_server(data, session_obj):
             with open(compose_file, 'w', encoding='utf-8') as f:
                 f.write(content)
 
+    # Repo-local подготовка: .env/домен, self-signed сертификат и
+    # docker-compose.yml создаются скриптом из репозитория, а не руками.
+    _run_setup_script(server_path, 'prepare', logger=logger, timeout=300)
+
     if not os.path.exists(compose_file):
         return jsonify({'status': 'error', 'message': 'docker-compose.yml not found'})
 
@@ -2813,6 +2861,16 @@ def start_server(data, session_obj):
             registry.save_registry(reg_data)
             checks.append({'step': 'start', 'status': 'ok', 'message': 'Server started'})
 
+            # Зависимости и Vite-assets ставим в php-контейнере через
+            # repo-local setup.sh (на хосте npm/composer могут отсутствовать).
+            assets = _run_setup_script(server_path, 'assets', logger=logger, timeout=900)
+            checks.append({
+                'step': 'assets',
+                'status': 'ok' if assets.get('status') != 'error' else 'warn',
+                'message': ('Laravel/Frontend готовы' if assets.get('status') != 'error'
+                            else f"setup.sh assets: {assets.get('message') or 'ошибка'}"),
+            })
+
             # Первый запуск: контейнеры поднялись, но Laravel ещё не
             # инициализирован (APP_KEY пуст, миграции не выполнялись),
             # поэтому сайт отдаёт 502. Делаем это только для PHP-серверов
@@ -2849,6 +2907,8 @@ def start_server(data, session_obj):
             'message': 'compose не уложился в отведённое время; '
                        'состояние контейнеров: docker compose ps',
         })
+
+        _run_setup_script(server_path, 'assets', logger=logger, timeout=900)
 
         provision = None
         try:
