@@ -411,14 +411,15 @@ class ServerMonitorModule(BaseModule):
             logger.error(f"server_monitor: refresh_path({path}) failed: {e}")
 
     # ===== Фоновый цикл =====
-    # Периодический опрос выполняет планировщик (задача
-    # server_status_refresh в files/tasks/custom/). Здесь только
-    # разовые вызовы: refresh_all / refresh_path.
+    # Периодический опрос выполняет планировщик: встроенная задача
+    # server_status_refresh (BUILTIN_TASKS в scheduler.py, расписание
+    # в files/tasks.json). Здесь только разовые вызовы: refresh_all /
+    # refresh_path.
 
     @staticmethod
     def start_background_monitor():
         logger.info("server_monitor: периодический опрос выполняет планировщик "
-                    "(задача server_status_refresh)")
+                    "(встроенная задача server_status_refresh)")
 
     @staticmethod
     def stop_background_monitor():

@@ -213,20 +213,37 @@ def _check_server_status(server_path, project_type):
     except Exception:
         pass
 
-    # Фолбэк — проверяем по имени контейнера
-    container_name = project_type.replace('_', '-')
+    # Фолбэк — один docker ps по compose-метке проекта и именам
+    # php-<project>. Раньше был docker inspect <project_type>: у
+    # compose-проектов контейнера с таким именем нет (есть php-streams и
+    # т.п.), и каждая проверка засоряла лог ошибками
+    # «Error getting container status».
+    project = _compose_project_name(Path(server_path), project_type or '')
+    names = {project, f'php-{project}'}
+    if project_type:
+        names.add(project_type.replace('_', '-'))
     try:
-        status_info = docker_mod.get_container_status(container_name)
-        if status_info:
-            state = status_info.get('State', {})
-            if state.get('Running', False):
+        import subprocess
+        result = subprocess.run(
+            ['docker', 'ps', '-a', '--format',
+             '{{.Names}}\t{{.State}}\t{{.Label "com.docker.compose.project"}}'],
+            **_subprocess_kwargs(15)
+        )
+        states = []
+        for line in (result.stdout or '').splitlines():
+            parts = line.split('\t')
+            if len(parts) < 2:
+                continue
+            name, state = parts[0], parts[1]
+            label = parts[2] if len(parts) > 2 else ''
+            if label == project or name in names:
+                states.append(state)
+        if states:
+            if any(s == 'running' for s in states):
                 return 'running'
-            elif state.get('Status') == 'created':
-                return 'stopped'
-            elif state.get('Status') == 'restarting':
+            if any(s == 'restarting' for s in states):
                 return 'restarting'
-            else:
-                return 'stopped'
+            return 'stopped'
     except Exception:
         pass
 
@@ -1851,13 +1868,12 @@ def install_server(data, session_obj):
                 for k, v in storage_applied.items():
                     env_vars[k] = str(v)
 
-            # Подставляем все переменные из .env (включая ${VAR:-default} синтаксис)
-            for key, value in env_vars.items():
-                pattern = r'\$\{' + re.escape(key) + r'(:-[^}]*)?\}'
-                if value:
-                    content = re.sub(pattern, lambda m, v=value: v, content)
-                else:
-                    content = re.sub(pattern, '', content)
+            # Подставляем переменные из .env. ${VAR:-default} не запекается:
+            # compose интерполирует его из docker/.env при каждом запуске
+            # (см. serverstrategy._apply_env) — смена значения в .env сразу
+            # видна без ре-рендера compose-файла.
+            from files.core.software.default.serverstrategy import _apply_env
+            content = _apply_env(content, env_vars)
 
             compose_path.write_text(content, encoding='utf-8')
             logger.info(f"Copied docker-compose.example from {compose_example}")
@@ -2529,8 +2545,26 @@ WECOM_ENCODING_AES_KEY=your_encoding_aes_key
 
 
 def _get_server_env_path(server_path):
-    """Возвращает путь к .env файлу сервера"""
-    return Path(server_path) / 'docker' / '.env'
+    """Возвращает путь к .env файлу сервера.
+
+    Путь обязан быть абсолютным и не выводить за корень сервера:
+    относительный ('var/www/streams' после merge_slashes-редиректа)
+    резолвился бы от CWD стартера, и PUT тихо создавал бы мусорные
+    каталоги внутри его рабочей папки.
+    """
+    raw = str(server_path or '').strip()
+    if not raw:
+        raise ValueError('server_id required')
+    p = Path(raw)
+    if not p.is_absolute():
+        raise ValueError(
+            f'Путь сервера должен быть абсолютным, получено: {raw!r}. '
+            'Используйте полный путь (D:\\apps\\... или /var/www/...)')
+    root = p.resolve()
+    env_path = root / 'docker' / '.env'
+    if root not in env_path.parents:
+        raise ValueError(f'Путь .env вне корня сервера: {env_path}')
+    return env_path
 
 
 def _read_server_env(server_path):
@@ -2549,11 +2583,47 @@ def _read_server_env(server_path):
 
 
 def _write_server_env(server_path, env_vars):
-    """Записывает env переменные сервера"""
+    """Записывает env переменные сервера и пересобирает docker-compose.yml.
+
+    Без ре-рендера изменения .env не применялись: compose-файл собирался
+    из шаблона один раз и оставался со старыми значениями.
+    """
     env_path = _get_server_env_path(server_path)
+    if not env_path.parent.is_dir():
+        raise ValueError(f'Каталог docker/ сервера не найден: {env_path.parent}')
     with open(env_path, 'w', encoding='utf-8') as f:
         for key, value in env_vars.items():
             f.write(f"{key}={value}\n")
+    _rerender_compose(server_path, env_vars)
+
+
+def _rerender_compose(server_path, env_vars):
+    """Пересобирает docker-compose.yml из docker-compose.example.
+
+    ${VAR:-default} в шаблоне не запекается литералом (см.
+    serverstrategy._apply_env) — compose интерполирует такие переменные из
+    docker/.env при каждом запуске, поэтому смена значения в .env не
+    требует ни ре-рендера, ни правки compose-файла.
+    """
+    try:
+        from files.core.software.default.serverstrategy import render_compose
+
+        server_path = Path(server_path)
+        docker_path = server_path / 'docker'
+        merged = dict(env_vars or {})
+        merged.setdefault('PROJECTNAME', _compose_project_name(server_path, ''))
+        code_path = server_path / 'src'
+        merged.setdefault('PATH_APP_CODE', str(code_path))
+        merged.setdefault('PATH_APP_DOCKER', str(docker_path))
+        merged.setdefault('PATH_APP_DOCKER_LOGS', str(docker_path / 'logs'))
+        merged.setdefault('PATH_APP_PROJECT', str(code_path))
+        result = render_compose(server_path, merged)
+        if result.get('ok'):
+            logger.info('docker-compose.yml re-rendered for %s', server_path)
+        return result
+    except Exception as e:
+        logger.warning('compose re-render failed for %s: %s', server_path, e)
+        return {'ok': False, 'reason': str(e)}
 
 
 def get_server_config(data, session_obj):
@@ -2566,7 +2636,10 @@ def get_server_config(data, session_obj):
     if not server_path:
         return jsonify({'status': 'error', 'message': 'Server ID required'})
 
-    env_vars = _read_server_env(server_path)
+    try:
+        env_vars = _read_server_env(server_path)
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)})
     return jsonify({'status': 'success', 'env': env_vars})
 
 
@@ -2587,7 +2660,10 @@ def save_server_config(data, session_obj):
             env_vars[key] = value
 
     if env_vars:
-        _write_server_env(server_path, env_vars)
+        try:
+            _write_server_env(server_path, env_vars)
+        except ValueError as e:
+            return jsonify({'status': 'error', 'message': str(e)})
         return jsonify({'status': 'success', 'message': 'Конфигурация сохранена'})
     return jsonify({'status': 'error', 'message': 'Нет данных для сохранения'})
 
@@ -3422,8 +3498,9 @@ def _ensure_php_dependencies(code_dir: Path, server_path: Path = None, logger=No
 
     composer = _composer_cmd()
     if not composer:
-        return {'status': 'error',
-                'message': 'composer не найден (PATH или composer.phar в проекте)'}
+        # Фолбэк: composer есть в php-контейнере, даже если на хосте его нет
+        return _ensure_php_dependencies_in_container(
+            code_dir, server_path, logger=logger, timeout=timeout, autoload=autoload)
 
     args = composer + ['install', '--no-interaction', '--prefer-dist',
                        '--optimize-autoloader']
@@ -3471,15 +3548,118 @@ def _ensure_php_dependencies(code_dir: Path, server_path: Path = None, logger=No
     return {'status': 'ok', 'output': output[-500:]}
 
 
+def _ensure_php_dependencies_in_container(code_dir: Path, server_path: Path = None,
+                                         logger=None, timeout=1800, autoload=None):
+    """composer install внутри php-<project> — когда composer на хосте не установлен.
+
+    Рабочая папка контейнера — корень кода (как у artisan в фазе migrate),
+    поэтому vendor/ появляется сразу в примонтированном code/.
+    """
+    import subprocess
+
+    code_dir = Path(code_dir)
+    root = Path(server_path) if server_path else code_dir.parent
+    container = f'php-{_compose_project_name(root, "")}'
+
+    args = ['docker', 'exec',
+            # нейтральное окружение для post-скриптов — см. хост-вариант
+            '-e', 'CACHE_STORE=array', '-e', 'SESSION_DRIVER=array',
+            '-e', 'QUEUE_CONNECTION=sync', '-e', 'BROADCAST_CONNECTION=log',
+            '-e', 'DB_CONNECTION=sqlite',
+            container, 'composer', 'install', '--no-interaction',
+            '--prefer-dist', '--optimize-autoloader']
+
+    if logger:
+        logger.info('composer install via %s (composer на хосте не найден)', container)
+
+    try:
+        proc = subprocess.run(args, **_subprocess_kwargs(timeout))
+    except subprocess.TimeoutExpired:
+        return {'status': 'error',
+                'message': f'composer install в {container} не уложился в {timeout} с'}
+    except Exception as e:
+        return {'status': 'error', 'message': f'composer install ({container}): {str(e)}'}
+
+    output = ((proc.stdout or '') + (proc.stderr or '')).strip()
+
+    if proc.returncode != 0 or (autoload and not autoload.exists()):
+        if logger:
+            logger.warning('composer install in %s failed (rc=%s)', container, proc.returncode)
+        return {'status': 'error',
+                'returncode': proc.returncode,
+                'message': f'composer install в {container}: код {proc.returncode} '
+                           f'(контейнер запущен? в нём есть composer?)',
+                'output': output[-2000:]}
+
+    if logger:
+        logger.info('composer install OK via %s', container)
+    return {'status': 'ok', 'container': container, 'output': output[-500:]}
+
+
 def _npm_cmd():
     """Команда запуска npm: на Windows npm — это npm.cmd, а subprocess
     без shell его не запускает (CreateProcess не ищет по PATHEXT)."""
     exe = shutil.which('npm')
     if not exe:
         return None
-    if exe.lower().endswith(('.cmd', '.bat')):
-        return ['cmd', '/c', exe]
-    return [exe]
+    return _npm_cmd_for(exe)
+
+
+def _npm_cmd_for(exe):
+    if str(exe).lower().endswith(('.cmd', '.bat')):
+        return ['cmd', '/c', str(exe)]
+    return [str(exe)]
+
+
+# vite/rolldown в клиентах требуют Node >= 20: системный Node 18 валит
+# npm run build с невнятным «rc=1».
+_NODE_MIN_MAJOR = 20
+
+
+def _node_major(node_exe):
+    """Мажорная версия node (int) или None, если определить не удалось."""
+    import subprocess
+    try:
+        r = subprocess.run([str(node_exe), '--version'], **_subprocess_kwargs(10))
+        return int((r.stdout or '').strip().lstrip('vV').split('.')[0])
+    except Exception:
+        return None
+
+
+def _frontend_toolchain():
+    """(npm_cmd, node_exe, node_major) — лучший доступный npm+node.
+
+    Если в PATH стоит старый node, но рядом (например /usr/local/bin после
+    установки Node 22) есть более новый — берём его npm.
+    """
+    candidates = []
+
+    path_npm = shutil.which('npm')
+    if path_npm:
+        node = (shutil.which('node', path=str(Path(path_npm).parent))
+                or shutil.which('node'))
+        candidates.append((path_npm, node))
+
+    if os.name != 'nt':
+        for d in ('/usr/local/bin', '/opt/node/bin'):
+            npm = os.path.join(d, 'npm')
+            node = os.path.join(d, 'node')
+            if os.path.exists(npm) and os.path.exists(node):
+                candidates.append((npm, node))
+
+    seen = set()
+    fallback = None
+    for npm, node in candidates:
+        if npm in seen:
+            continue
+        seen.add(npm)
+        major = _node_major(node) if node else None
+        cand = (_npm_cmd_for(npm), node, major)
+        if major is not None and major >= _NODE_MIN_MAJOR:
+            return cand
+        if fallback is None:
+            fallback = cand
+    return fallback or (None, None, None)
 
 
 def _ensure_frontend_dependencies(code_dir: Path, logger=None, timeout=1800):
@@ -3504,10 +3684,23 @@ def _ensure_frontend_dependencies(code_dir: Path, logger=None, timeout=1800):
     if not (code_dir / 'package.json').exists():
         return {'status': 'skipped', 'reason': 'нет package.json'}
 
-    npm = _npm_cmd()
+    npm, node_exe, node_major = _frontend_toolchain()
     if not npm:
         return {'status': 'error',
                 'message': 'npm не найден на хосте — собрать фронтенд невозможно'}
+
+    if node_major is not None and node_major < _NODE_MIN_MAJOR:
+        msg = (f'Node {node_major} ({node_exe}) слишком старый: сборка '
+               f'vite/rolldown требует Node {_NODE_MIN_MAJOR}+. Поставьте '
+               f'Node {_NODE_MIN_MAJOR}+ (например в /usr/local) и повторите — '
+               f'или используйте repo-local docker/setup.sh (сборка в контейнере)')
+        if logger:
+            logger.warning('%s', msg)
+        return {'status': 'error', 'message': msg}
+
+    if logger:
+        logger.info('frontend toolchain: npm=%s node=%s (v%s)',
+                    npm[0], node_exe, node_major)
 
     # ci требует package-lock.json и даёт чистое дерево; без lock —
     # обычный install (иначе установка падает на репозиториях без lock).

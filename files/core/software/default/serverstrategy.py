@@ -252,9 +252,16 @@ def merge_env_example(code_path, docker_path):
 
 
 def _apply_env(content: str, env_vars: dict) -> str:
-    """Текстовая подстановка ${VAR} и ${VAR:-default} (как в install_server)."""
+    """Текстовая подстановка ${VAR} (как в install_server).
+
+    ${VAR:-default} НЕ запекается литералом: compose интерполирует такие
+    переменные из docker/.env при каждом запуске, поэтому смена значения
+    в .env не требует ре-рендера compose-файла (а ре-рендер после правки
+    конфига делает _write_server_env). Пустое значение ${VAR} без дефолта
+    по-прежнему удаляет подстановку целиком.
+    """
     for key, value in (env_vars or {}).items():
-        pattern = r'\$\{' + re.escape(key) + r'(:-[^}]*)?\}'
+        pattern = r'\$\{' + re.escape(key) + r'\}'
         if value:
             content = re.sub(pattern, lambda m, v=value: v, content)
         else:

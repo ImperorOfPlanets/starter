@@ -18,6 +18,7 @@ from functools import wraps
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request, current_app
+from werkzeug.routing import BaseConverter
 
 from files.core.utils.globalVars_utils import get_global
 from files.core.utils.loader_utils import get
@@ -26,6 +27,99 @@ from files.core.utils.log_utils import LogManager
 logger = LogManager.get_logger('api')
 
 api = Blueprint('api', __name__, url_prefix='/api/v1')
+
+
+# ======================== SERVER_ID В URL ========================
+#
+# server_id — это реальный путь сервера (D:\apps\... или /var/www/...).
+# Стандартный <path:...> не принимает ведущий слэш, поэтому Linux-путь в
+# URL (/servers//var/www/streams/config) ломался merge_slashes-редиректом
+# 308 с потерей ведущего '/', а относительный 'var/www/streams' тихо
+# резолвился от CWD стартера. Кастомный конвертер матчится до редиректа
+# и сохраняет путь как есть. %2F-кодирование не нужно.
+
+class _ServerIdConverter(BaseConverter):
+    """server_id в URL, включая ведущий слэш (/var/www/streams)."""
+    regex = '.*?'
+    part_isolating = False
+
+
+@api.record_once
+def _register_server_id_converter(state):
+    state.app.url_map.converters.setdefault('sid', _ServerIdConverter)
+
+
+def _resolve_server_id(path_value=None) -> str:
+    """server_id из пути URL, query (?server_id=) или JSON/form тела запроса.
+
+    Три источника делают API одинаково рабочим для D:\\apps\\... и
+    /var/www/... у любых клиентов (кто-то нормализует '//' в URL).
+    Путь обязан быть абсолютным: относительный резолвился бы от CWD
+    стартера и PUT тихо создавал бы мусорные каталоги в его папке.
+    """
+    sid = (path_value or '').strip()
+    if not sid:
+        sid = (request.args.get('server_id') or request.args.get('path') or '').strip()
+    if not sid:
+        payload = request.get_json(force=True, silent=True) or {}
+        if not isinstance(payload, dict):
+            payload = {}
+        sid = (str(payload.get('server_id') or '') or str(payload.get('path') or '')).strip()
+
+    if not sid:
+        raise ValueError(
+            'server_id required: укажите его в URL (/servers/<server_id>/config), '
+            'query (?server_id=...) или теле запроса {"server_id": ...}')
+
+    if not Path(sid).is_absolute():
+        raise ValueError(
+            f'server_id должен быть абсолютным путём, получено {sid!r}. '
+            'Linux-путь в URL: /api/v1/servers//var/www/... '
+            'или query/тело: ?server_id=/var/www/...')
+    return sid
+
+
+def _bad_request(e) -> tuple:
+    return jsonify({'success': False, 'error': str(e)}), 400
+
+
+# ======================== СВЕЖЕСТЬ КЕША СТАТУСОВ ========================
+
+def _cache_max_age() -> float:
+    """Порог «протухшего» кеша статусов: status_interval × запас (3)."""
+    interval = 30
+    try:
+        from files.core.oss.default.server_monitor import ServerMonitorModule
+        interval = int(ServerMonitorModule.get_settings().get('status_interval', 30))
+    except Exception:
+        pass
+    return max(60.0, interval * 3.0)
+
+
+def _cache_stale(cache_info) -> bool:
+    """Кеш статусов старше порога (или без отметки времени) — считаем протухшим."""
+    import time
+    updated_at = (cache_info or {}).get('updated_at')
+    try:
+        return (time.time() - float(updated_at)) > _cache_max_age()
+    except (TypeError, ValueError):
+        return True
+
+
+def _await_cache_refresh(prev_updated_at, timeout: float = 10.0):
+    """Ограниченное ожидание фонового обновления кеша (не держим API вечно)."""
+    import time
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        time.sleep(1.0)
+        try:
+            from files.core.oss.default.server_monitor import ServerMonitorModule
+            info = ServerMonitorModule.get_status()
+            if info.get('updated_at') and info.get('updated_at') != prev_updated_at:
+                return info
+        except Exception:
+            break
+    return None
 
 # ======================== API KEY ========================
 
@@ -83,12 +177,22 @@ def list_servers():
         # Быстрый путь: кеш монитора
         cached = None
         cache_info = None
+        stale = False
         try:
             from files.core.oss.default.server_monitor import ServerMonitorModule
             cached = ServerMonitorModule.get_cached_servers()
             cache_info = ServerMonitorModule.get_status()
             if cached is None:
                 ServerMonitorModule.refresh_all(background=True)
+            elif _cache_stale(cache_info):
+                # устаревший кеш тоже триггерит обновление (раньше только
+                # cached is None — строки могли вечно остаться протухшими)
+                stale = True
+                prev_updated = cache_info.get('updated_at')
+                ServerMonitorModule.refresh_all(background=True)
+                cache_info = _await_cache_refresh(prev_updated) or cache_info
+                cached = ServerMonitorModule.get_cached_servers() or cached
+                stale = _cache_stale(cache_info)
         except Exception as e:
             logger.warning(f"server_monitor недоступен для API: {e}")
 
@@ -102,7 +206,8 @@ def list_servers():
                     'description': type_info.get('description', ''),
                 })
             return jsonify({'success': True, 'servers': servers, 'count': len(servers),
-                            'cache': {'updated_at': cache_info.get('updated_at') if cache_info else None}})
+                            'cache': {'updated_at': cache_info.get('updated_at') if cache_info else None,
+                                      'stale': stale}})
 
         # Фолбэк: синхронная проверка
         from files.web.sections.servers import _check_server_status, _project_files_exist
@@ -220,11 +325,16 @@ def install_server():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@api.route('/servers/<path:server_id>/start', methods=['POST'])
+@api.route('/servers/<sid:server_id>/start', methods=['POST'])
+@api.route('/servers/start', methods=['POST'])
 @require_api_key
-def start_server(server_id):
-    """Запустить сервер"""
+def start_server(server_id=None):
+    """Запустить сервер.
+
+    server_id — из пути URL, query (?server_id=) или JSON-тела.
+    """
     try:
+        server_id = _resolve_server_id(server_id)
         from files.web.sections.servers import start_server as do_start
 
         result = do_start({'server_id': server_id}, API_SESSION)
@@ -235,16 +345,20 @@ def start_server(server_id):
 
         return result
 
+    except ValueError as e:
+        return _bad_request(e)
     except Exception as e:
         logger.error(f"API start_server error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@api.route('/servers/<path:server_id>/stop', methods=['POST'])
+@api.route('/servers/<sid:server_id>/stop', methods=['POST'])
+@api.route('/servers/stop', methods=['POST'])
 @require_api_key
-def stop_server(server_id):
+def stop_server(server_id=None):
     """Остановить сервер"""
     try:
+        server_id = _resolve_server_id(server_id)
         from files.web.sections.servers import stop_server as do_stop
 
         result = do_stop({'server_id': server_id}, API_SESSION)
@@ -255,16 +369,20 @@ def stop_server(server_id):
 
         return result
 
+    except ValueError as e:
+        return _bad_request(e)
     except Exception as e:
         logger.error(f"API stop_server error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@api.route('/servers/<path:server_id>/remove', methods=['DELETE'])
+@api.route('/servers/<sid:server_id>/remove', methods=['DELETE'])
+@api.route('/servers/remove', methods=['DELETE'])
 @require_api_key
-def remove_server(server_id):
+def remove_server(server_id=None):
     """Удалить сервер"""
     try:
+        server_id = _resolve_server_id(server_id)
         from files.web.sections.servers import remove_server as do_remove
 
         result = do_remove({'server_id': server_id}, API_SESSION)
@@ -275,24 +393,29 @@ def remove_server(server_id):
 
         return result
 
+    except ValueError as e:
+        return _bad_request(e)
     except Exception as e:
         logger.error(f"API remove_server error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@api.route('/servers/<path:server_id>/update', methods=['POST'])
+@api.route('/servers/<sid:server_id>/update', methods=['POST'])
+@api.route('/servers/update', methods=['POST'])
 @require_api_key
-def update_server(server_id):
+def update_server(server_id=None):
     """Обновить сервер по стратегии его типа из SERVER_TYPES.
 
     Фазы: preflight -> backup -> pull -> deps -> docker-конфиг -> migrate
           -> restart -> verify, с откатом при провале проверки.
 
     Тело запроса (JSON или form):
-        dry_run       1 — только проверка, ничего не применяется
+        server_id   путь сервера (если не задан в URL)
+        dry_run     1 — только проверка, ничего не применяется
         project_type  подсказка, если записи нет в реестре
     """
     try:
+        server_id = _resolve_server_id(server_id)
         from files.web.sections.servers import update_server as do_update
 
         payload = request.get_json(force=True, silent=True) or {}
@@ -309,37 +432,47 @@ def update_server(server_id):
         status = 200 if result.get('status') == 'success' else 400
         return jsonify(result), status
 
+    except ValueError as e:
+        return _bad_request(e)
     except Exception as e:
         logger.error(f"API update_server error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@api.route('/servers/<path:server_id>/update/plan', methods=['GET'])
+@api.route('/servers/<sid:server_id>/update/plan', methods=['GET'])
+@api.route('/servers/update/plan', methods=['GET'])
 @require_api_key
-def update_server_plan(server_id):
+def update_server_plan(server_id=None):
     """План обновления: какая стратегия и какие фазы выполнятся."""
     try:
+        server_id = _resolve_server_id(server_id)
         from files.web.sections.servers import update_plan
 
         result = update_plan({'server_id': server_id}, API_SESSION)
         status = 200 if result.get('status') == 'success' else 400
         return jsonify(result), status
 
+    except ValueError as e:
+        return _bad_request(e)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@api.route('/servers/<path:server_id>/update/preflight', methods=['GET'])
+@api.route('/servers/<sid:server_id>/update/preflight', methods=['GET'])
+@api.route('/servers/update/preflight', methods=['GET'])
 @require_api_key
-def update_server_preflight(server_id):
+def update_server_preflight(server_id=None):
     """Фаза 0 без изменений: коммиты, ветка, грязное дерево, что приедет."""
     try:
+        server_id = _resolve_server_id(server_id)
         from files.web.sections.servers import update_preflight
 
         result = update_preflight({'server_id': server_id}, API_SESSION)
         status = 200 if result.get('status') == 'success' else 400
         return jsonify(result), status
 
+    except ValueError as e:
+        return _bad_request(e)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -368,11 +501,13 @@ def update_all_clients():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@api.route('/servers/<path:server_id>', methods=['GET'])
+@api.route('/servers/<sid:server_id>', methods=['GET'])
+@api.route('/servers/details', methods=['GET'])
 @require_api_key
-def server_details(server_id):
+def server_details(server_id=None):
     """Получить детали сервера"""
     try:
+        server_id = _resolve_server_id(server_id)
         from files.web.sections.servers import _get_user_servers, _check_server_status
         from files.configs.server_types import SERVER_TYPES
 
@@ -419,28 +554,36 @@ def server_details(server_id):
             }
         })
 
+    except ValueError as e:
+        return _bad_request(e)
     except Exception as e:
         logger.error(f"API server_details error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@api.route('/servers/<path:server_id>/config', methods=['GET'])
+@api.route('/servers/<sid:server_id>/config', methods=['GET'])
+@api.route('/servers/config', methods=['GET'])
 @require_api_key
-def get_server_config(server_id):
+def get_server_config(server_id=None):
     """Получить конфигурацию сервера (env)"""
     try:
+        server_id = _resolve_server_id(server_id)
         from files.web.sections.servers import _read_server_env
         env = _read_server_env(server_id)
         return jsonify({'success': True, 'env': env})
+    except ValueError as e:
+        return _bad_request(e)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@api.route('/servers/<path:server_id>/config', methods=['PUT'])
+@api.route('/servers/<sid:server_id>/config', methods=['PUT'])
+@api.route('/servers/config', methods=['PUT'])
 @require_api_key
-def save_server_config(server_id):
+def save_server_config(server_id=None):
     """Сохранить конфигурацию сервера"""
     try:
+        server_id = _resolve_server_id(server_id)
         from files.web.sections.servers import _write_server_env
         data = request.get_json(force=True, silent=True) or {}
         env_vars = data.get('env', {})
@@ -450,6 +593,8 @@ def save_server_config(server_id):
             return jsonify({'success': True, 'message': 'Config saved'})
         else:
             return jsonify({'success': False, 'error': 'No env data'}), 400
+    except ValueError as e:
+        return _bad_request(e)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

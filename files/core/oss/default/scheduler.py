@@ -86,6 +86,22 @@ BUILTIN_TASKS = {
         'params': {},
         'category': 'monitoring',
         'events': ['on_schedule']
+    },
+    'server_status_refresh': {
+        'name': 'server_status_refresh',
+        'description': {'ru': 'Обновление статусов серверов',
+                        'en': 'Refresh server statuses',
+                        'cn': '刷新服务器状态'},
+        'module': None,
+        'func': '_run_server_status_refresh',
+        'default_enabled': True,
+        'default_schedule': 'every_30sec',
+        'params': {},
+        'category': 'monitoring',
+        # лёгкая задача в потоке: без спавна процесса, кеш в SQLite
+        # обновляется напрямую (см. _launch_task)
+        'in_process': True,
+        'events': ['on_schedule']
     }
 }
 
@@ -108,6 +124,12 @@ class SchedulerModule(BaseModule):
             config_path = os.path.join(tasks_dir, 'tasks.json')
             if not os.path.exists(config_path):
                 SchedulerModule._create_default_config(config_path)
+            else:
+                # Задачи, добавленные в BUILTIN_TASKS после создания файла
+                # (например server_status_refresh), без мержа не появлялись:
+                # tasks.json создаётся один раз, и кеш статусов серверов
+                # не обновлялся никогда.
+                SchedulerModule._merge_missing_defaults(config_path)
 
     @staticmethod
     def get_active_sessions() -> list:
@@ -172,6 +194,58 @@ class SchedulerModule(BaseModule):
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
         logger.info(f"Created default tasks config: {config_path}")
+
+    @staticmethod
+    def _task_defaults(name: str, task_def: dict) -> dict:
+        """Запись задачи в tasks.json из описания BUILTIN_TASKS."""
+        return {
+            'name': name,
+            'enabled': task_def['default_enabled'],
+            'schedule': task_def['default_schedule'],
+            'module': task_def['module'],
+            'func': task_def['func'],
+            'params': task_def['params'],
+            'category': task_def['category'],
+            'description': task_def['description'],
+            'last_run': None,
+            'last_status': None,
+            'last_duration': None,
+            'run_count': 0,
+            'events': task_def.get('events', [])
+        }
+
+    @staticmethod
+    def _merge_missing_defaults(config_path: str):
+        """Доставляет новые встроенные задачи в существующий tasks.json.
+
+        tasks.json создаётся один раз, и задачи, добавленные в BUILTIN_TASKS
+        позже, без мержа никогда не появлялись (создание шло только при
+        первом создании файла). Существующие записи и их настройки не
+        трогаются — доставляются только отсутствующие.
+        """
+        try:
+            with open(config_path, 'r', encoding='utf-8-sig') as f:
+                config = json.load(f)
+        except Exception as e:
+            logger.warning(f"scheduler: tasks.json не прочитан для мержа: {e}")
+            return
+
+        tasks = config.setdefault('tasks', [])
+        have = {t.get('name') for t in tasks if isinstance(t, dict)}
+        added = []
+        for name, task_def in BUILTIN_TASKS.items():
+            if name in have:
+                continue
+            tasks.append(SchedulerModule._task_defaults(name, task_def))
+            added.append(name)
+
+        if added:
+            try:
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config, f, indent=2, ensure_ascii=False)
+                logger.info(f"scheduler: в tasks.json доставлены задачи: {', '.join(added)}")
+            except Exception as e:
+                logger.warning(f"scheduler: не удалось сохранить tasks.json: {e}")
 
     @staticmethod
     def _get_config_path() -> str:
@@ -482,6 +556,8 @@ class SchedulerModule(BaseModule):
                 result = SchedulerModule._run_check_ports(params or {})
             elif task_name == 'check_docker':
                 result = SchedulerModule._run_check_docker(params or {})
+            elif task_name == 'server_status_refresh':
+                result = SchedulerModule._run_server_status_refresh(params or {})
             else:
                 # Custom task — try to load via module loader
                 result = SchedulerModule._run_custom_task(task_name, params or {})
@@ -645,6 +721,25 @@ class SchedulerModule(BaseModule):
             installed = get('docker', 'check_docker_installed')
             compose = get('docker', 'check_docker_compose_installed')
             return {'status': 'success', 'docker': installed, 'compose': compose}
+        except Exception as e:
+            return {'status': 'error', 'message': str(e)}
+
+    @staticmethod
+    def _run_server_status_refresh(params: dict) -> dict:
+        """Обновить кеш статусов серверов (server_monitor, SQLite).
+
+        Без этой задачи files/server_status.db не обновлялся никогда:
+        streams показывал not_deployed при живых контейнерах, а статусы
+        висели неделями. Расписание — server_status_refresh в tasks.json
+        (интервал status_interval из настроек монитора).
+        """
+        try:
+            from files.core.oss.default.server_monitor import ServerMonitorModule
+            ServerMonitorModule.refresh_all(background=False)
+            info = ServerMonitorModule.get_status()
+            return {'status': 'success',
+                    'servers': info.get('servers_count', 0),
+                    'updated_at': info.get('updated_at')}
         except Exception as e:
             return {'status': 'error', 'message': str(e)}
 
